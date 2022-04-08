@@ -290,14 +290,11 @@ impl<'a> BarManager<'a> {
             content_ind,
         );
         let new_content = state.bar_geometry.status.get_content_as_str();
-        // Could skip this entirely and just get width on init but that would mess with monospaced fonts
-        let new_content_width = if new_width {
-            self.font_manager
-                .get_width_and_height(&new_content, &self.fonts.status_section)?
-                .0 as i16
-        } else {
-            content_slice_width
-        };
+        // Could just copy over the changed section but copying a pixmap is already efficient.
+        let new_content_width = self
+            .font_manager
+            .get_width_and_height(&new_content, &self.fonts.status_section)?
+            .0 as i16;
         self.call_wrapper
             .fill_rectangle(
                 state.status_pixmap,

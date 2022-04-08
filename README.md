@@ -51,7 +51,7 @@ see the [min building dockerfile](minimal-build.dockerfile).
 Lld is not a strict requirement but if not using lld either edit or remove the line `"-C", "link-arg=-fuse-ld=lld",` from
 [config.toml](.cargo/config.toml)  
 To run the same test as the ci locally libssl and perl is also required, 
-[see the ci dockerfile](Dockerfile).
+[see the ci dockerfile](.github/Dockerfile).
 
 
 The project is tested on x86_64-unknown-linux-gnu but "should" run on any *nix system. 

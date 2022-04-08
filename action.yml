@@ -1,11 +1,5 @@
-name: 'check'
-description: 'Run some check in a prepared rust image'
-inputs:
-  cmd:
-    description: 'Cmd to pass to rust container'
-    required: true
+name: 'Run check script'
+description: 'Runs the full check script'
 runs:
   using: 'docker'
-  image: 'Dockerfile'
-  args:
-    - ${{ inputs.cmd }}
+  image: '.github/Dockerfile'
