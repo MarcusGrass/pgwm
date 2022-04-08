@@ -1,0 +1,23 @@
+[package]
+name = "pgwm"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+config-file = ["pgwm-core/config-file"]
+default = ["xinerama", "status-bar", "config-file"]
+debug = ["pgwm-core/debug"]
+xinerama = ["x11rb/xinerama"]
+status-bar = ["pgwm-core/status-bar"]
+
+[dependencies]
+heapless = "0.7.10"
+pgwm-core = { path = "../pgwm-core" }
+nix = { version = "0.22.3" }
+thiserror = "1.0.30"
+x11rb = { version = "0.9.0", default-features = false, features = ["cursor"]}
+x11 = { version = "2.19.1", default-features = false, features = ["xft"] }

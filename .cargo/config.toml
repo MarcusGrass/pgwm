@@ -1,0 +1,16 @@
+[build]
+rustflags = [
+    "-C", "link-arg=-fuse-ld=lld",
+    "-C", "link-arg=-lX11",
+    # "-C", "link-arg=-Wl,--no-rosegment", # For flamegraph compilation
+]
+
+[profile.release]
+overflow-checks = true # I prefer panics over wraps
+
+[profile.optimized]
+codegen-units = 1 # Better optimization
+debug = false # Inherits from release so should actually do nothing but whatever
+inherits = "release"
+lto = true # link time optimization
+strip = true # smaller binary

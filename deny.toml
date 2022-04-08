@@ -1,0 +1,47 @@
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "x86_64-unknown-linux-musl" },
+    { triple = "aarch64-apple-darwin" },
+    { triple = "x86_64-apple-darwin" },
+]
+
+[advisories]
+vulnerability = "deny"
+unmaintained = "deny"
+unsound = "deny"
+yanked = "deny"
+notice = "deny"
+ignore = [
+    "RUSTSEC-2021-0127", # Criterion dev-dependency
+    "RUSTSEC-2022-0013", # -||-
+]
+
+[bans]
+multiple-versions = "deny"
+deny = [
+]
+
+skip = [
+    # Criterion pulls in csv which pulls in an old itoa, only for dev-deps anyway
+    { name = "itoa", version = "=0.4.8"}
+]
+
+[sources]
+allow-git = [
+    "https://github.com/MarcusGrass/heapless"
+]
+
+[licenses]
+unlicensed = "deny"
+allow-osi-fsf-free = "neither"
+confidence-threshold = 1.0
+# I'd like to know if they pop into my dependency graph
+copyleft = "deny"
+allow = [
+    "Apache-2.0",
+    "MIT",
+]
+exceptions = [
+    { name = "pgwm", allow = ["GPL-3.0"] },
+    { name = "pgwm-core", allow = ["GPL-3.0"] },
+]

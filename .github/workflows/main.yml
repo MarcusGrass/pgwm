@@ -1,0 +1,30 @@
+name: "Check commit"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout"
+      - uses: actions/checkout@v3
+      - name: "Lint all permutations"
+      - uses: ./
+        with:
+          cmd: cargo hack clippy --feature-powerset -- -D warnings
+      - name: "Check dependencies"
+      - uses: ./
+        with:
+          cmd: cargo deny --all-features --frozen --locked check
+      - name: "Run tests for all permutations of core"
+      - uses: ./
+        with:
+          cmd: cargo hack test -p pgwm-core --feature-powerset
+      - name: "Test full project with default features"
+      - uses: ./
+        with:
+          cmd: cargo test

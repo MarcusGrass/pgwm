@@ -1,0 +1,48 @@
+# EWMH supported
+- [x] _NET_SUPPORTED set to all ewmh atoms
+- [x] _NET_CLIENT_LIST kept updated when new clients are added or removed
+- [x] _NET_NUMBER_OF_DESKTOPS set on start to 0
+- [x] _NET_DESKTOP_GEOMETRY, no large desktops, set to screen geometry
+- [x] _NET_DESKTOP_VIEWPORT, no large desktops, set to (0, 0) for each desktop
+- [x] _NET_CURRENT_DESKTOP, always 0, single desktop
+- [x] _NET_DESKTOP_NAMES, set to wm name
+- [x] _NET_ACTIVE_WINDOW, kept updated to focused window
+- [x] _NET_WORKAREA, set to screen geometry minus static bar height
+- [x] _NET_SUPPORTING_WM_CHECK set on start
+- [x] _NET_VIRTUAL_ROOTS, disregarded, no virtual roots
+- [x] _NET_DESKTOP_LAYOUT, not set by WM, irrelevant because wm handles placement and reconfigures
+- [x] _NET_SHOWING_DESKTOP, showing desktop only is not implemented, this is theoretically supported but unused
+# EWMH window properties
+- [x] _NET_WM_NAME WM will display this as a window name if set.
+- [x] _NET_WM_VISIBLE_NAME, disregarded in favor of _NET_WM_NAME
+- [x] _NET_WM_DESKTOP Never changed from 0
+- [x] _NET_WM_WINDOW_TYPE respects _NET_WM_WINDOW_TYPE_NORMAL and _NET_WM_WINDOW_TYPE_DIALOG to determine transients/popups
+- [x] _NET_WM_STATE tries go gain users attention on _NET_WM_STATE_DEMANDS_ATTENTION, 
+- [x] _NET_WM_STATE_FULLSCREEN draws/undraws fullscreen, 
+- [x] _NET_WM_STATE_MODAL treats as transient and floats on parent
+- [x] _NET_WM_ALLOWED_ACTIONS, disregarded
+- [x] _NET_WM_STRUT & _NET_WM_STRUT_PARTIAL disregarded, wm controls placement
+- [x] _NET_WM_ICON_NAME, disregarded, wm doesn't display icons
+- [x] _NET_WM_VISIBLE_ICON_NAME same as above
+- [x] _NET_WM_ICON_GEOMETRY, same as above
+- [x] _NET_WM_ICON same as above
+- [x] _NET_WM_HANDLED_ICONS same as above
+- [x] _NET_WM_PID disregarded, no kill implemented, maybe in the future
+- [x] _NET_WM_USER_TIME disregarded, no inactive timers
+- [x] _NET_FRAME_EXTENTS honored, will update on frame updates
+- [x] _NET_WM_OPAQUE_REGION, disregarded,
+- [x] _NET_WM_BYPASS_COMPOSITOR, disregarded
+# EWMH messages
+- [x] _NET_WM_STATE, see above
+- [x] _NET_ACTIVE_WINDOW, will try to draw the users attention to the desktop and window wanting attention
+- [x] _NET_SHOWING_DESKTOP disregarded as of now
+- [x] _NET_CLOSE_WINDOW will request window close on target
+- [x] _NET_WM_MOVERESIZE disregarded, wm handles placement
+- [x] _NET_MOVERESIZE_WINDOW same as above
+- [x] _NET_REQUEST_FRAME_EXTENTS gives back extents
+- [x] _NET_RESTACK_WINDOW, disregarded
+- [x] _NET_CURRENT_DESKTOP, disregarded, only one desktop
+- [x] _NET_NUMBER_OF_DESKTOPS, disregarded, statically set
+- [x] _NET_DESKTOP_GEOMETRY, disregarded, geometry is fixed to screen geometry
+- [x] _NET_DESKTOP_VIEWPORT, disregarded, viewport is fixed
+
