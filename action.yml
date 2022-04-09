@@ -1,5 +1,0 @@
-name: 'Run check script'
-description: 'Runs the full check script'
-runs:
-  using: 'docker'
-  image: '.github/Dockerfile'

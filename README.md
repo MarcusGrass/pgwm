@@ -49,11 +49,11 @@ Although I have not noticed any such behaviour.
 
 # How to build
 To build locally libx11-dev, libxft-dev, platform build essentials, and lld is required
-see the [min building dockerfile](minimal-build.dockerfile).  
+see the [min building dockerfile](.docker/minimal-build.dockerfile).  
 Lld is not a strict requirement but if not using lld either edit or remove the line `"-C", "link-arg=-fuse-ld=lld",` from
 [config.toml](.cargo/config.toml)  
 To run the same test as the ci locally libssl and perl is also required, 
-[see the ci dockerfile](.github/Dockerfile).
+[see the ci dockerfile](.docker/full-checks.dockerfile).
 
 
 The project is tested on x86_64-unknown-linux-gnu but "should" run on any *nix system. 

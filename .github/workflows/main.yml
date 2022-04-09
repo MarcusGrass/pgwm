@@ -12,11 +12,11 @@ jobs:
     container: marcusgrass/pgwm-check:latest
     steps:
       - uses: actions/checkout@v3
-      - name: Run clippy on all permutations
+      - name: Run clippy on all feature permutations
         run: cargo hack clippy --feature-powerset -- -D warnings
       - name: Run cargo deny
         run: cargo deny --all-features --frozen --locked check
-      - name: Run test on core
+      - name: Run tests on core with all feature permutations
         run: cargo hack test -p pgwm-core --feature-powerset
-      - name: Run test on project default features
+      - name: Run tests on project with default features
         run: cargo test

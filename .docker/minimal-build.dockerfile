@@ -1,6 +1,6 @@
 FROM debian:bullseye-slim
 WORKDIR /pgwm
-COPY . /pgwm
+COPY .. /pgwm
 RUN apt-get update -y && apt-get install --no-install-recommends -y \
         build-essential \
         ca-certificates \
