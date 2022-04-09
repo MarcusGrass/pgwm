@@ -4,7 +4,7 @@
 The WM is to my understanding compliant with the [wm-spec](https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html).
 The specification is fairly difficult to understand (for me) and for a tiling window manager some sometimes liberal
 interpretations has to be made. If something seems implemented wrongly, and it isn't covered by
-an explanation in [EWMH.md](EWMH.md), please create an issue if you have the time.
+an explanation in [EWMH.md](docs/EWMH.md), please create an issue if you have the time.
 Big shout out to [x11rb](https://github.com/psychon/x11rb) which has great safe x11 bindings!
 
 # Why
@@ -14,8 +14,48 @@ I decided to build a WM that does exactly what I want it to do. I considered hac
 `C` and decided against it, opting to write it in Rust instead. 
 
 # Primary goals
-A WM that is fast, has low resource-usage, is feature complete according to my needs, 
-doesn't contain nasty bugs or QoL-detriments, and is ewmh-compliant.  
+A WM that is fast, has low resource-usage, is feature complete according to my needs,
+doesn't contain nasty bugs or QoL-detriments, and is ewmh-compliant.
+
+# Implemented features
+- Crashes on errors (yes this is a feature)
+- It can tile windows in a left-leader or center-leader pattern
+- It can display windows tabbed with the window title on top
+- Windows are configured into workspaces
+- Workspaces can be moved between monitors
+- Workspace-layouts can be cycled (left-leader -> center-leader -> tabbed)
+- Windows within workspaces can have their order rearranged
+- Windows can be moved between workspaces
+- When a window is moved from a workspace it ends up at the first tab-order
+- Windows can be manually floated
+- Floating windows can be dragged
+- Windows can be manually un-floated
+- It hosts a bar at the top of each monitor
+- Sections of the bar can have their on-click behaviour customized
+- The bar can be hidden
+- The displays workspace information, window title name, status-checks, and shortcuts
+- Windows can be resized
+- Visible cursor without window supplying it
+- Most of the window-manipulation that the WM does can be configured
+- Keys (or clickable sections of the bar) can be configured to run arbitrary processes (some custom bash for example)
+- Windows can be mapped to workspaces by their `WM_CLASS` property
+
+# Comparison to other WMs
+I'm only comparing other WMs which I have used extensively hopefully I can extend this to include more than 2 other WMs.
+
+## DWM
+The closest WM in terms of feature-parity would be DWM, although this WM tries to do a bit more by default than DWM does.
+A major difference between this WM and DWM is that instead of using tags with
+different tags per monitor this WM operates closer to DWM's [single tagset patch](https://dwm.suckless.org/patches/single_tagset/).
+
+## Xmonad
+The beauty of xmonad and using haskel for a configurable WM is that through a functional language Xmonad provides
+an absurd level of customizability, this lends itself well to contributors creating additions through xmonad-contrib.
+This WM does not aim to match that level of customizability but instead tries to be minimal and reasonably configurable,
+while also being distributable and configurable through a binary rather than compiled-configuration.
+
+# Usage
+Some getting-started information is described [here](docs/USAGE.md).
 
 # Resources
 The WM, according to `smem` on glibc, has a PSS of around 5Mb Memory usage and no known memory leaks,
