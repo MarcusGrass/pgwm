@@ -5,15 +5,17 @@ The WM is to my understanding compliant with the [wm-spec](https://specification
 The specification is fairly difficult to understand (for me) and for a tiling window manager some sometimes liberal
 interpretations has to be made. If something seems implemented wrongly, and it isn't covered by
 an explanation in [EWMH.md](EWMH.md), please create an issue if you have the time.
-Big shout out to [x11rb](https://github.com/psychon/x11rb) which has great safe 11 bindings!
+Big shout out to [x11rb](https://github.com/psychon/x11rb) which has great safe x11 bindings!
 
 # Why
-I love to build my old tools, so after a few years of running up against bugs that bothered my workflow and features that I wanted but were missing in other tiling WMs
+I love to build my old tools, so after a few years of running up against bugs that bothered my workflow 
+and features that I wanted but were missing in other tiling WMs
 I decided to build a WM that does exactly what I want it to do. I considered hacking dwm, but I'm not that hot with 
-`C` and decided against it, opting to rewrite it in Rust instead. 
+`C` and decided against it, opting to write it in Rust instead. 
 
 # Primary goals
-A WM that is fast, has low resource-usage, is feature complete according to my needs, doesn't contain nasty bugs or QoL-detriments, and is ewmh-compliant.  
+A WM that is fast, has low resource-usage, is feature complete according to my needs, 
+doesn't contain nasty bugs or QoL-detriments, and is ewmh-compliant.  
 
 # Resources
 The WM, according to `smem` on glibc, has a PSS of around 5Mb Memory usage and no known memory leaks,
@@ -87,12 +89,12 @@ or
 `cargo build --profile=optimized --no-default-features`
 
 ### Example of some additional features
-`cargo build --release --no-default-features --features xinerama,status-bar`
-or
+`cargo build --release --no-default-features --features xinerama,status-bar`  
+or  
 `cargo build --profile=optimized --no-default-features --features xinerama,status-bar`
 
 ## Directly installing
-Installing the binary to $HOME/.cargo/bin  
+Installing the binary to `$HOME/.cargo/bin`  
 `cargo install --profile=optimized --path pgwm`  
 Remember to add cargo bin to path if you haven't already  
 `PATH="$HOME/.cargo/bin:$PATH"`
