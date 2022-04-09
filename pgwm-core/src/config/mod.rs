@@ -719,7 +719,7 @@ fn init_status_checks(
 ) -> heapless::CopyVec<crate::status::checker::Check, STATUS_BAR_UNIQUE_CHECK_LIMIT> {
     use crate::status::checker::{Check, CheckType, CpuFormat, DateFormat, MemFormat, NetFormat};
     let mut checks = heapless::CopyVec::new();
-    /*
+    /* Commented out because I'm usually not using a computer with batteries and configure those with config files
     let mut battery_threshholds = heapless::CopyVec::new();
     // BatFormat takes a threshold and an associated icon which is displayed when below that threshold.
     crate::push_heapless!(
@@ -755,7 +755,6 @@ fn init_status_checks(
         }
     )
     .unwrap();
-
      */
 
     // The CpuFormat takes an amount of decimals to use when displaying load

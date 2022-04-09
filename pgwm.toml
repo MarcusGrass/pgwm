@@ -52,8 +52,8 @@ center_leader = 2.0
 # the modifier at index 0, the top-right window will increase in height while its below neighbour will be displaced.
 # With only two windows, the modifier on index 1 does not change any window's claim on the monitor real estate, as
 # that window will then tile vertically while already taking up maximum height.
-# CONSTRAINTS: All above 0.0, no longer than number of workspaces - 1
-vertically_tiled = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# CONSTRAINTS: All above 0.0, no longer than `WS_WINDOW_LIMIT` - 1
+vertically_tiled = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
 # Colors, RGBA color values
 # CONSTRAINTS: All RGBA values has unsigned byte sizing
@@ -161,21 +161,22 @@ name = "\uf02c"
 
 [bar]
 [[bar.shortcuts]]
-name = "\uf02b"
+name = "\uf304"
 [[bar.shortcuts]]
-name = "\uf02b"
+name = "\uf502"
 # Status bar checks
 # Ordering will determine the order that the checks are displayed
 # Constraints, The icon + content can at most be `STATUS_BAR_CHECK_CONTENT_LIMIT`, probably fine just keep it short
-[[bar.status_checks]]
-interval = 1000
-check_type = { kind = "Battery", args = [
-    {above = 90, icon = "\uf240 "}, # Adding one space because this icon just doesn't fit right
-    {above = 75, icon = "\uf241 "},
-    {above = 50, icon = "\uf242 "},
-    {above = 25, icon = "\uf243 "},
-    {above = 0, icon = "\uf244 "},
-]}
+# Commented out to avoid weirdness if not using batteries
+# [[bar.status_checks]]
+# interval = 1000
+# check_type = { kind = "Battery", args = [
+    # {above = 90, icon = "\uf240 "}, # Adding one space because this icon just doesn't fit right
+    # {above = 75, icon = "\uf241 "},
+    # {above = 50, icon = "\uf242 "},
+    # {above = 25, icon = "\uf243 "},
+    # {above = 0, icon = "\uf244 "},
+# ]}
 [[bar.status_checks]]
 interval = 1000
 check_type = { kind = "Cpu", args = { icon = "\uf2db", decimals = 1 }}

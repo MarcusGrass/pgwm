@@ -161,14 +161,7 @@ mod tests {
     fn example_cfg_is_same_as_default() {
         let cfg = read_cfg_from_root();
         let default = Cfg::default();
-        assert_eq!(default.sizing, cfg.sizing);
-        assert_eq!(default.colors, cfg.colors);
-        assert_eq!(default.mouse_mappings, cfg.mouse_mappings);
-        #[cfg(feature = "status-bar")]
-        assert_eq!(default.key_mappings, cfg.key_mappings);
-        assert_eq!(default.char_remap, cfg.char_remap);
-        assert_eq!(default.fonts, cfg.fonts);
-        assert_eq!(default.workspaces, cfg.workspaces);
+        assert_eq!(cfg, default);
     }
 
     fn read_cfg_from_root() -> Cfg {
