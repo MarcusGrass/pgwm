@@ -8,9 +8,10 @@ on:
 
 jobs:
   build:
+    runs-on: ubuntu-latest
     container: marcusgrass/pgwm-check:latest
     steps:
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
       - name: Run check script
         run: cargo test
 
