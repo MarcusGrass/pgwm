@@ -1,14 +1,11 @@
 use crate::error::Error;
 use bstr::ByteSlice;
-use std::os::unix::fs::FileExt;
 
 const NET_STAT: &str = "/proc/net/netstat";
 
 pub fn read_net_stats() -> Result<Data, Error> {
-    let mut buf = [0; 1024];
-    let f = std::fs::File::open(NET_STAT)?;
-    f.read_exact_at(&mut buf, 2048)?;
-    parse_raw(&buf)
+    let content = std::fs::read(NET_STAT)?;
+    parse_raw(&content)
 }
 
 pub fn parse_raw(raw_data: &[u8]) -> Result<Data, Error> {

@@ -1,6 +1,5 @@
 use crate::error::Error;
 use bstr::ByteSlice;
-use std::io::Read;
 
 const MEM_LOAD: &str = "/proc/meminfo";
 
@@ -12,10 +11,8 @@ pub struct Data {
 }
 
 pub fn read_mem_info() -> Result<Data, Error> {
-    let mut mem_info = [0; 512];
-    let mut f = std::fs::File::open(MEM_LOAD)?;
-    f.read_exact(&mut mem_info)?;
-    parse_raw(&mem_info)
+    let content = std::fs::read(MEM_LOAD)?;
+    parse_raw(&content)
 }
 
 pub fn parse_raw(mem_info: &[u8]) -> Result<Data, Error> {

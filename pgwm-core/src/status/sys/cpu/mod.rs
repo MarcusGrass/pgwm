@@ -1,6 +1,5 @@
 use crate::error::Error;
 use bstr::ByteSlice;
-use std::io::Read;
 
 const LOAD_FILE: &str = "/proc/stat";
 
@@ -11,10 +10,8 @@ pub struct Load {
 }
 
 pub fn read_cpu_load() -> Result<Load, Error> {
-    let mut slice = [0; 128];
-    let mut file = std::fs::File::open(LOAD_FILE)?;
-    file.read_exact(&mut slice)?;
-    parse_raw(&slice)
+    let content = std::fs::read(LOAD_FILE)?;
+    parse_raw(&content)
 }
 
 pub fn parse_raw(content: &[u8]) -> Result<Load, Error> {
