@@ -57,29 +57,17 @@ while also being distributable and configurable through a binary rather than com
 # Usage
 Some getting-started information is described [here](docs/USAGE.md).
 
-# Resources
-The WM, according to `smem` on glibc, has a PSS of around 5Mb Memory usage and no known memory leaks,
-a memory leak would likely result in a crash rather than a slow increase over time since most if not all dynamic 
-datastructures are on the stack.  
-CPU-wise it has a fairly low usage, with idle usage that depends completely on whether you use the status bar, what update frequency you're 
-running it on, and which checks you're using. Running the full checks on a 1 second interval as I am doing currently draws very little cpu.
-
-Some update-intensive operations will cause cpu-spikes, such as dragging a floating window. For each motion-event coming from x11 
-the WM reconfigures the window. The same thing will occur if resizing tiled windows, each resize will cause a reconfiguration
-of windows in that tile-set.  
-
-Some programs like Jetbrains IDEs update the WM name on every keystroke, depending on 
-typing speed this may result in a lot of events and workspace bar redraws. However, that operation is so CPU-efficient that it isn't worth
-making an effort to reduce workspace bar redraws on name-changes by caching or otherwise.
-
-Some examples to get a feel for the resource usage (the WM runs single threaded):  
-At idle with no status bar I get a 0% single-core CPU usage, with status bar it spikes about once a second to 0.6%.  
-An extremely violent window drag results in an at most 10% single-core CPU usage.  
-Furious typing into a Jetbrains IDE gets at most 1.3% single-core CPU usage.
-
-All this being said, it's measured for the running WM binary, all operations on the x11-server will cause some overhead there,
-this WM binary could be perfectly efficient but slamming the x11 server with requests that it has problems processing. 
-Although I have not noticed any such behaviour.
+# Future plans
+As far as features go the plan is not to add complicated features, but simple flexible things. The WM is now 
+according to my needs feature complete. However, I most likely don't know what I'm missing, if there's a feature 
+that you'd like to see I'd love to hear about it and will consider adding it, but I am fairly conservative when it 
+comes to adding features that I wouldn't use, the best place for those would be a fork.
+When it comes to ergonomics and documentation I'm very open to add things. One big thing is the configuration,
+it's a simplest possible mapping, almost 1 to 1 to internal datastructures which makes it cumbersome.
+Instead of configuring a status check in one place, and then a mouse-mapping on click for it in another 
+something more reasonable might be to configure a status check and in the same place some on-click action, things like that.
+I've been hesitant about working too much on configuration ergonomics since I don't know if there is any demand for that, 
+if there is, please let me know by creating an issue.
 
 # How it looks
 ### Default config, tabbed on the left, left-leader-layout on the right.
@@ -192,6 +180,30 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 export AWT_TOOLKIT=MToolkit
 wmname compiz # or wmname LG3D
 ```
+
+# Resources
+The WM, according to `smem` on glibc, has a PSS of around 5Mb Memory usage and no known memory leaks,
+a memory leak would likely result in a crash rather than a slow increase over time since most if not all dynamic
+datastructures are on the stack.  
+CPU-wise it has a fairly low usage, with idle usage that depends completely on whether you use the status bar, what update frequency you're
+running it on, and which checks you're using. Running the full checks on a 1 second interval as I am doing currently draws very little cpu.
+
+Some update-intensive operations will cause cpu-spikes, such as dragging a floating window. For each motion-event coming from x11
+the WM reconfigures the window. The same thing will occur if resizing tiled windows, each resize will cause a reconfiguration
+of windows in that tile-set.
+
+Some programs like Jetbrains IDEs update the WM name on every keystroke, depending on
+typing speed this may result in a lot of events and workspace bar redraws. However, that operation is so CPU-efficient that it isn't worth
+making an effort to reduce workspace bar redraws on name-changes by caching or otherwise.
+
+Some examples to get a feel for the resource usage (the WM runs single threaded):  
+At idle with no status bar I get a 0% single-core CPU usage, with status bar it spikes about once a second to 0.6%.  
+An extremely violent window drag results in an at most 10% single-core CPU usage.  
+Furious typing into a Jetbrains IDE gets at most 1.3% single-core CPU usage.
+
+All this being said, it's measured for the running WM binary, all operations on the x11-server will cause some overhead there,
+this WM binary could be perfectly efficient but slamming the x11 server with requests that it has problems processing.
+Although I have not noticed any such behaviour.
 
 # Licensing
 This project is licensed under [GPL v3](LICENSE).
