@@ -1,5 +1,7 @@
 # Getting started
 A work in progress document to make usage of the WM clearer.
+To make a clean install look like the default configuration examples 
+Jetbrains Mono Nerd Font, Font Awesome Brands 6, and Font Awesome Free Solid 6 needs to be installed.
 
 ## Enter the WM
 On startup, the WM will show an empty background and a bar on top.  
