@@ -398,7 +398,7 @@ key = 0x0063 # c
 on_click = { action = "Close" }
 [[key-mapping]]
 mods = ["M4", "Shift"]
-key = 0x0071 # <Return/enter>
+key = 0x0071 # q
 # Gracefully exits the WM
 on_click = { action = "Quit" }
 [[key-mapping]]
