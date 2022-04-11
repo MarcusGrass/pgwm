@@ -95,19 +95,27 @@ impl Workspaces {
                     match ws.draw_mode {
                         Mode::Tiled(Layout::LeftLeader) => {
                             if index == 0 {
-                                ws.tiling_modifiers.left_leader += resize;
+                                ws.tiling_modifiers.left_leader =
+                                    resize_safe(ws.tiling_modifiers.left_leader, resize);
                                 Ok(true)
                             } else {
-                                ws.tiling_modifiers.vertically_tiled[index] += resize;
+                                ws.tiling_modifiers.vertically_tiled[index - 1] = resize_safe(
+                                    ws.tiling_modifiers.vertically_tiled[index - 1],
+                                    resize,
+                                );
                                 Ok(true)
                             }
                         }
                         Mode::Tiled(Layout::CenterLeader) => {
                             if index == 0 {
-                                ws.tiling_modifiers.center_leader += resize;
+                                ws.tiling_modifiers.center_leader =
+                                    resize_safe(ws.tiling_modifiers.center_leader, resize);
                                 Ok(true)
                             } else {
-                                ws.tiling_modifiers.vertically_tiled[index] += resize;
+                                ws.tiling_modifiers.vertically_tiled[index - 1] = resize_safe(
+                                    ws.tiling_modifiers.vertically_tiled[index - 1],
+                                    resize,
+                                );
                                 Ok(true)
                             }
                         }
@@ -632,6 +640,15 @@ impl Workspace {
     }
 }
 
+fn resize_safe(old: f32, diff: f32) -> f32 {
+    let new = old + diff;
+    if new <= 0.0 {
+        old
+    } else {
+        new
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Child {
     pub managed: ManagedWindow,
@@ -877,13 +894,43 @@ mod tests {
         assert!(workspaces.update_size_modifier(0, 0.1).unwrap());
         assert_eq!(
             base + 0.1,
-            workspaces.get_ws(0).tiling_modifiers.vertically_tiled[1]
+            workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0]
         );
         assert_ne!(workspaces, empty_workspaces());
         workspaces.clear_size_modifiers(0);
         workspaces.delete_child_from_ws(0);
         workspaces.delete_child_from_ws(1);
         assert_eq!(workspaces, empty_workspaces());
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn wont_allow_resizing_past_zero() {
+        let mut workspaces = empty_workspaces();
+
+        workspaces.clear_size_modifiers(0);
+        assert_eq!(workspaces, empty_workspaces());
+        assert!(!workspaces.update_size_modifier(1, 0.1).unwrap());
+        workspaces
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .unwrap();
+        workspaces
+            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, false)
+            .unwrap();
+        let base = workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0];
+        assert!(workspaces.update_size_modifier(0, 0.1).unwrap());
+        assert_eq!(
+            base + 0.1,
+            workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0]
+        );
+        let base = workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0];
+        // Would go past 0
+        assert!(workspaces.update_size_modifier(0, -10.0).unwrap());
+        // No change
+        assert_eq!(
+            base,
+            workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0]
+        );
     }
 
     #[test]

@@ -85,9 +85,9 @@ impl Layout {
                     > = heapless::CopyVec::new();
                     for i in 1..num_windows {
                         if i % 2 == 0 {
-                            push_heapless!(left_aligned_modifiers, size_modifiers[i])?;
+                            push_heapless!(left_aligned_modifiers, size_modifiers[i - 1])?;
                         } else {
-                            push_heapless!(right_aligned_modifiers, size_modifiers[i])?;
+                            push_heapless!(right_aligned_modifiers, size_modifiers[i - 1])?;
                         }
                     }
                     let left_vertical_offset_and_lengths = calculate_offset_and_lengths(
@@ -186,7 +186,7 @@ fn calculate_normal_dimensions(
         let mut right_side_win_modifiers: heapless::CopyVec<f32, WS_WINDOW_LIMIT> =
             heapless::CopyVec::new();
         for i in 1..num_windows {
-            push_heapless!(right_side_win_modifiers, size_modifiers[i])?;
+            push_heapless!(right_side_win_modifiers, size_modifiers[i - 1])?;
         }
         let vertical_offset_and_lengths = calculate_offset_and_lengths(
             monitor_height,
