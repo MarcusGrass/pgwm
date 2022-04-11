@@ -5,3 +5,4 @@
 perf.*
 flamegraph.*
 stack.txt
+Makefile

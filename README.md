@@ -106,29 +106,66 @@ that being said we're talking about 190 to 150 nanoseconds for calculating tilin
 being performed, most latency is from x11 redrawing windows.  
 The project can also be compiled with debug output, the binary will then output various debug info to stderr.
 
-### With default features
+### Using make
+There's a [configure script](configure) for convenience, although it's basically just
+a silly posix-shell script that generates a Makefile.
+
+If no binary directory is supplied, the script will try to install to `$HOME/.local/bin`, 
+if the environment variable `$HOME` is not set and no binary directory is supplied the script will fail.  
+if your path variable doesn't include that directory you can export that for example in your `~/.bashrc` 
+with: `export PATH=$HOME/.local/bin:$PATH`, if you want the wm to be launchable by just `pgwm`.  
+
+If no configuration directory is supplied, the script will try to install configuration to `$XDG_CONFIG_HOME/pgwm`, 
+if the environment variable `$XDG_CONFIG_HOME` is not set, it will check if the environment variable `$HOME` is set and 
+try to install configuration in `$HOME/.config/pgwm`. If neither `$XDG_CONFIG_HOME` nor `$HOME` is set, and no 
+configuration directory was supplied, the script will fail.
+
+  
+Build default:  
+```shell
+./configure
+make
+make install
+# Cleans up build directory
+make clean
+```
+Use `./configure --help` to see options, by default uninstall does not remove the configuration file, the full lifecycle from nothing
+to a clean uninstall would be
+```shell
+./configure
+make
+make install
+make clean
+# Uninstall and remove config
+make uninstall CLEAN_CONFIG=1
+```
+
+### Manual build
+How to build as a regular Rust project.
+
+#### With default features
 `cargo build --release`
 or
 `cargo build --profile=optimized`
 
-### With no default features
+#### With no default features
 `cargo build --release --no-default-features`
 or
 `cargo build --profile=optimized --no-default-features`
 
-### Example of some additional features
+#### Example of some additional features
 `cargo build --release --no-default-features --features xinerama,status-bar`  
 or  
 `cargo build --profile=optimized --no-default-features --features xinerama,status-bar`
 
-## Directly installing
-Installing the binary to `$HOME/.cargo/bin`  
+#### Using cargo install
+Installs the binary to `$HOME/.cargo/bin`  
 `cargo install --profile=optimized --path pgwm`  
 Remember to add cargo bin to path if you haven't already  
 `PATH="$HOME/.cargo/bin:$PATH"`
 
-## Edit .xinitrc or other file specifying WM entrypoint
-If built with `cago build` The binary ends up in target/release/pgwm or target/optimized/pgwm
+### Edit .xinitrc or other file specifying WM entrypoint
+If built with `cargo build` The binary ends up in target/release/pgwm or target/optimized/pgwm
 Replace the (probably) last line of .xinitrc with
 `exec $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary, or just `pgwm` if using `cargo install`.   
 

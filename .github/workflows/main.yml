@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - make_file
   pull_request: {}
 
 jobs:
@@ -20,3 +21,5 @@ jobs:
         run: cargo hack test -p pgwm-core --feature-powerset
       - name: Run tests on project with default features
         run: cargo test
+      - name: Run makefile tests
+        run: ./check_make.sh
