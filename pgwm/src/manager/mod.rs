@@ -20,7 +20,9 @@ use pgwm_core::geometry::draw::Mode;
 use pgwm_core::geometry::layout::Layout;
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::push_heapless;
-use pgwm_core::state::workspace::{ArrangeKind, DeleteResult, ManagedWindow, Workspaces};
+use pgwm_core::state::workspace::{
+    ArrangeKind, DeleteResult, FocusStyle, ManagedWindow, Workspaces,
+};
 use pgwm_core::state::{DragPosition, State, WinMarkedForDeath};
 use x11rb::cookie::Cookie;
 use x11rb::properties::WmHintsCookie;
@@ -307,9 +309,9 @@ impl<'a> Manager<'a> {
                             self.remove_win_from_state_then_redraw_if_tiled(target_window, state)?
                         {
                             self.call_wrapper.unmap_window(target_window, state)?;
-                            removed_mw.internal_focus_handling
+                            removed_mw.focus_style
                         } else {
-                            false
+                            FocusStyle::Pull
                         };
                         state.workspaces.add_child_to_ws(
                             target_window,
@@ -483,11 +485,18 @@ impl<'a> Manager<'a> {
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Managing tiled {win} attached to {attached_to:?}");
-        let internal_focus_handling = hints_cookie
-            .reply()
-            .ok()
-            .and_then(|h| h.input)
-            .unwrap_or(false);
+        let hints = hints_cookie.reply();
+        let focus_style = if let Ok(hints) = hints {
+            if hints.input.filter(|b| *b).is_some() {
+                FocusStyle::Push {
+                    group_leader: hints.window_group,
+                }
+            } else {
+                FocusStyle::Pull
+            }
+        } else {
+            FocusStyle::Pull
+        };
         if let Some(attached_to) = attached_to {
             // Should probably look into this more, happens with gpg pop-up auth.
             // It sends duplicate map-requests on the same sequence and uses WindowTypeNormal when
@@ -496,25 +505,19 @@ impl<'a> Manager<'a> {
                 attached_to,
                 win,
                 ArrangeKind::NoFloat,
-                internal_focus_handling,
+                focus_style,
             )? {
                 pgwm_core::debug!(
                     "Parent {attached_to} for window {win} not managed, will promote"
                 );
-                state.workspaces.add_child_to_ws(
-                    win,
-                    ws_ind,
-                    ArrangeKind::NoFloat,
-                    internal_focus_handling,
-                )?;
+                state
+                    .workspaces
+                    .add_child_to_ws(win, ws_ind, ArrangeKind::NoFloat, focus_style)?;
             }
         } else {
-            state.workspaces.add_child_to_ws(
-                win,
-                ws_ind,
-                ArrangeKind::NoFloat,
-                internal_focus_handling,
-            )?;
+            state
+                .workspaces
+                .add_child_to_ws(win, ws_ind, ArrangeKind::NoFloat, focus_style)?;
         }
         if let Some(mon_ind) = draw_on_mon {
             self.drawer.draw_on(mon_ind, true, state)?;
@@ -560,12 +563,17 @@ impl<'a> Manager<'a> {
         } else {
             attached_to
         };
-
-        let refocus_parent = hints_cookie
-            .reply()
-            .ok()
-            .and_then(|h| h.input)
-            .unwrap_or(false);
+        let focus_style = if let Ok(hints) = hints_cookie.reply() {
+            if hints.input.filter(|b| *b).is_some() {
+                FocusStyle::Push {
+                    group_leader: hints.window_group,
+                }
+            } else {
+                FocusStyle::Pull
+            }
+        } else {
+            FocusStyle::Pull
+        };
         if let Some(attached_to) = attached_to {
             let parent_dimensions = self.call_wrapper.get_dimensions(attached_to)?;
             pgwm_core::debug!("Found attached {} to parent {}", win, attached_to);
@@ -602,7 +610,7 @@ impl<'a> Manager<'a> {
                 attached_to,
                 win,
                 ArrangeKind::FloatingInactive(rel_x, rel_y),
-                refocus_parent,
+                focus_style,
             )?;
         } else {
             let (rel_x, rel_y) = calculate_relative_placement(
@@ -614,7 +622,7 @@ impl<'a> Manager<'a> {
                 win,
                 ws_ind,
                 ArrangeKind::FloatingInactive(rel_x, rel_y),
-                refocus_parent,
+                focus_style,
             )?;
         }
         self.call_wrapper
@@ -797,9 +805,9 @@ impl<'a> Manager<'a> {
         if let Some((win, _drag)) = state.drag_window.take() {
             let win_dims = self.call_wrapper.get_dimensions(win)?;
             pgwm_core::debug!("Got button release and removed drag window {win}");
-            let internally_managed_focus = self
+            let focus_style = self
                 .remove_win_from_state_then_redraw_if_tiled(win, state)?
-                .map_or(false, |mw| mw.internal_focus_handling);
+                .map_or(FocusStyle::Pull, |mw| mw.focus_style);
             let (x, y) = (event.root_x, event.root_y);
             let mon = state.find_monitor_at((x, y)).unwrap_or(0);
             let mon = &state.monitors[mon];
@@ -814,7 +822,7 @@ impl<'a> Manager<'a> {
                 win,
                 new_ws,
                 ArrangeKind::FloatingInactive(x, y),
-                internally_managed_focus,
+                focus_style,
             )?;
             self.conditional_ungrab_pointer(state)?;
         }
@@ -1014,10 +1022,6 @@ impl<'a> Manager<'a> {
             } else {
                 pgwm_core::debug!("Client requested focus {win:?} denied because it's not managed");
             }
-        } else {
-            self.call_wrapper
-                .take_focus(state.screen.root, win, false)?;
-            pgwm_core::debug!("Client requested focus {win:?} sending even though already focused");
         }
         Ok(())
     }
@@ -1074,7 +1078,7 @@ impl<'a> Manager<'a> {
             )?;
         }
         self.call_wrapper
-            .take_focus(state.screen.root, state.screen.root, false)?;
+            .take_focus(state.screen.root, state.screen.root, FocusStyle::Pull)?;
         self.conditional_grab_pointer(state)?;
         pgwm_core::debug!("Focused root on mon = {}", mon_ind);
         Ok(())
@@ -1125,7 +1129,7 @@ impl<'a> Manager<'a> {
             mw
         } else {
             // Dummy unused NoFloat
-            ManagedWindow::new(win, ArrangeKind::NoFloat, false)
+            ManagedWindow::new(win, ArrangeKind::NoFloat, FocusStyle::Pull)
         };
         self.make_window_not_urgent(win, state)?;
         self.highlight_border(win, state)?; // Highlighting the base window even if a top level transient is focused
@@ -1149,11 +1153,8 @@ impl<'a> Manager<'a> {
             .replace(main_focus_target);
 
         state.input_focus.replace(win);
-        self.call_wrapper.take_focus(
-            state.screen.root,
-            win,
-            main_focus_target.internal_focus_handling,
-        )?;
+        self.call_wrapper
+            .take_focus(state.screen.root, win, main_focus_target.focus_style)?;
         self.capture_pointer_if_outside_window(main_focus_target, pointer_pos.reply()?, state)?;
 
         pgwm_core::debug!("Focused {main_focus_target:?} on mon {mon_ind}");
@@ -1205,8 +1206,8 @@ impl<'a> Manager<'a> {
     ) -> Result<()> {
         let pointer_on_window = query_pointer_reply.child == window.window;
         pgwm_core::debug!(
-            "Pointer on window {pointer_on_window} handles focus internally {}",
-            window.internal_focus_handling
+            "Pointer on window {pointer_on_window} handles focus internally {:?}",
+            window.focus_style
         );
         if pointer_on_window {
             self.conditional_ungrab_pointer(state)?;
@@ -1237,8 +1238,23 @@ impl<'a> Manager<'a> {
                         }
                     }
                 }
-                PropertyChangeMessage::Urgent(win) => {
-                    self.make_window_urgent(win, state)?;
+                PropertyChangeMessage::Hints((win, cookie)) => {
+                    if let Ok(hints) = cookie.reply() {
+                        if hints.urgent {
+                            // Making something not urgent happens through focusing
+                            pgwm_core::debug!("Got wm hint for urgency for window {win}");
+                            self.make_window_urgent(win, state)?;
+                        }
+
+                        let focus_style = if hints.input.filter(|b| *b).is_some() {
+                            FocusStyle::Push {
+                                group_leader: hints.window_group,
+                            }
+                        } else {
+                            FocusStyle::Pull
+                        };
+                        state.workspaces.update_focus_style(focus_style, win);
+                    }
                 }
                 PropertyChangeMessage::WmStateChange((win, wm_state)) => {
                     if wm_state == Some(WmState::Withdrawn) {
@@ -1261,15 +1277,15 @@ impl<'a> Manager<'a> {
                 if let Some(ind) = state.workspaces.find_ws_for_window_class_name(&class) {
                     if mapped != ind {
                         pgwm_core::debug!("Remapping from {} to {} on prop change", mapped, ind);
-                        let refocus_parent = self
+                        let focus_style = self
                             .remove_win_from_state_then_redraw_if_tiled(win, state)?
-                            .map_or(false, |mw| mw.internal_focus_handling);
+                            .map_or(FocusStyle::Pull, |mw| mw.focus_style);
                         self.call_wrapper.unmap_window(win, state)?;
                         state.workspaces.add_child_to_ws(
                             win,
                             ind,
                             ArrangeKind::NoFloat,
-                            refocus_parent,
+                            focus_style,
                         )?;
                     }
                 }

@@ -305,7 +305,7 @@ mod tests {
     use crate::config::{Cfg, USED_DIFFERENT_COLOR_SEGMENTS};
     use crate::geometry::{Dimensions, Line};
     use crate::state::bar_geometry::{BarGeometry, ShortcutSection, WorkspaceSection};
-    use crate::state::workspace::{ArrangeKind, ManagedWindow, Workspaces};
+    use crate::state::workspace::{ArrangeKind, FocusStyle, ManagedWindow, Workspaces};
     use crate::state::{Monitor, PermanentDrawables, State};
     use x11rb::protocol::xproto::{BackingStore, Screen};
 
@@ -428,10 +428,14 @@ mod tests {
         assert_eq!(1, state.find_monitor_hosting_workspace(1).unwrap());
         state
             .workspaces
-            .add_child_to_ws(15, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(15, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         assert!(state.find_monitor_focusing_window(15).is_none());
-        state.monitors[0].last_focus = Some(ManagedWindow::new(15, ArrangeKind::NoFloat, false));
+        state.monitors[0].last_focus = Some(ManagedWindow::new(
+            15,
+            ArrangeKind::NoFloat,
+            FocusStyle::Pull,
+        ));
         assert_eq!(0, state.find_monitor_focusing_window(15).unwrap());
         assert_eq!(0, state.find_monitor_index_of_window(15).unwrap());
         assert_eq!(

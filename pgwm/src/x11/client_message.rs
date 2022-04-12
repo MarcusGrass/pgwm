@@ -6,6 +6,7 @@ use x11rb::{
     protocol::xproto::{ClientMessageEvent, PropertyNotifyEvent, Window},
     rust_connection::RustConnection,
 };
+use x11rb::properties::WmHintsCookie;
 
 use crate::x11::call_wrapper::{SupportedAtom, WmState};
 
@@ -38,13 +39,7 @@ impl<'a> ClientMessageHandler<'a> {
                 }
                 SupportedAtom::WmHints => {
                     let hints = WmHints::get(self.connection, event.window)?;
-                    if let Ok(hints) = hints.reply() {
-                        pgwm_core::debug!("Updated hints to {hints:?}");
-                        if hints.urgent {
-                            return Ok(Some(PropertyChangeMessage::Urgent(event.window)));
-                        }
-                    }
-                    Ok(None)
+                    Ok(Some(PropertyChangeMessage::Hints((event.window, hints))))
                 }
                 SupportedAtom::WmState => {
                     let state = self.call_wrapper.get_state(event.window)?;
@@ -160,7 +155,7 @@ pub(crate) enum ClientMessage {
 }
 
 pub(crate) enum PropertyChangeMessage<'a> {
-    Urgent(Window),
+    Hints((Window, WmHintsCookie<'a, RustConnection>)),
     ClassName((Window, ClassConvertCookie<'a>)),
     Name((Window, FallbackNameConvertCookie<'a>)),
     WmStateChange((Window, Option<WmState>)),

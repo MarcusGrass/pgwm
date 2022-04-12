@@ -14,6 +14,7 @@ use x11rb::{CURRENT_TIME, NONE};
 
 use pgwm_core::config::{WINDOW_MANAGER_NAME, WINDOW_MANAGER_NAME_BUF_SIZE};
 use pgwm_core::geometry::Dimensions;
+use pgwm_core::state::workspace::FocusStyle;
 use pgwm_core::state::State;
 
 use super::cookies::{
@@ -588,20 +589,29 @@ impl<'a> CallWrapper<'a> {
         Ok(())
     }
 
+    /// Handling x10 style windows becomes strange: <https://tronche.com/gui/x/xlib/ICC/client-to-window-manager/wm-hints.html>
     pub(crate) fn take_focus(
         &self,
         root: Window,
         target: Window,
-        handles_focus_internally: bool,
+        focus_style: FocusStyle,
     ) -> Result<()> {
-        // Revert to could be anything, WM is dictatorial when it comes to determining focus on all cases
-        // except subwindows
-        if !handles_focus_internally {
-            pgwm_core::debug!("Input focus set to {target}");
-            self.connection
-                .set_input_focus(InputFocus::PARENT, target, CURRENT_TIME)?;
+        match focus_style {
+            FocusStyle::Push { group_leader } => {
+                if let Some(leader) = group_leader {
+                    self.connection
+                        .set_input_focus(InputFocus::PARENT, leader, CURRENT_TIME)?;
+                } else {
+                    pgwm_core::debug!("Found window with focus_style pull with no group leader");
+                    self.connection
+                        .set_input_focus(InputFocus::PARENT, target, CURRENT_TIME)?;
+                }
+            }
+            FocusStyle::Pull => {
+                self.connection
+                    .set_input_focus(InputFocus::PARENT, target, CURRENT_TIME)?;
+            }
         }
-
         let target = if target == root {
             // No active window if root gets focused
             NONE

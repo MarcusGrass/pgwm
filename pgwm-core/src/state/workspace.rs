@@ -224,12 +224,12 @@ impl Workspaces {
         window: Window,
         num: usize,
         arrange: ArrangeKind,
-        refocus_parent: bool,
+        focus_style: FocusStyle,
     ) -> Result<()> {
         self.win_to_ws
             .insert(window, num)
             .expect("Map capacity overflow, increase configured capacity to have more windows");
-        self.spaces[num].add_child(window, arrange, refocus_parent)
+        self.spaces[num].add_child(window, arrange, focus_style)
     }
 
     pub fn add_attached(
@@ -237,13 +237,13 @@ impl Workspaces {
         parent: Window,
         attached: Window,
         arrange: ArrangeKind,
-        internal_focus_handling: bool,
+        focus_style: FocusStyle,
     ) -> Result<bool> {
         if let Some(ws) = self.win_to_ws.get(&parent).copied() {
             self.win_to_ws
                 .insert(attached, ws)
                 .expect("Map capacity overflow, increase configured capacity to have more windows");
-            self.spaces[ws].add_attached(parent, attached, arrange, internal_focus_handling)?;
+            self.spaces[ws].add_attached(parent, attached, arrange, focus_style)?;
             Ok(true)
         } else {
             Ok(false)
@@ -370,6 +370,16 @@ impl Workspaces {
             ws.draw_mode
         }
     }
+
+    pub fn update_focus_style(&mut self, focus_style: FocusStyle, win: Window) {
+        if let Some(mut mw) = self
+            .win_to_ws
+            .get(&win)
+            .and_then(|ind| self.spaces[*ind].find_managed_window(win))
+        {
+            mw.focus_style = focus_style;
+        }
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -395,7 +405,7 @@ impl Workspace {
         &mut self,
         window: Window,
         arrange: ArrangeKind,
-        refocus_parent: bool,
+        focus_style: FocusStyle,
     ) -> Result<()> {
         crate::debug!("Adding child to ws: win = {} {:?}", window, arrange,);
         for child in &mut self.children {
@@ -411,7 +421,7 @@ impl Workspace {
                     window,
                     wants_focus: false,
                     arrange,
-                    internal_focus_handling: refocus_parent,
+                    focus_style,
                 },
                 attached: heapless::CopyVec::new(),
             },
@@ -447,7 +457,7 @@ impl Workspace {
         parent: Window,
         attached: Window,
         arrange: ArrangeKind,
-        refocus_parent: bool,
+        focus_style: FocusStyle,
     ) -> Result<()> {
         if let Some(ind) = self
             .children
@@ -467,7 +477,7 @@ impl Workspace {
                     window: attached,
                     wants_focus: false,
                     arrange,
-                    internal_focus_handling: refocus_parent,
+                    focus_style,
                 },
             )?;
         }
@@ -670,17 +680,25 @@ pub struct ManagedWindow {
     pub window: Window,
     pub wants_focus: bool,
     pub arrange: ArrangeKind,
-    pub internal_focus_handling: bool,
+    pub focus_style: FocusStyle,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FocusStyle {
+    // Might be more correct to actually query the top level window (walk the tree up to root)
+    // We'll see how this works out
+    Push { group_leader: Option<Window> },
+    Pull,
 }
 
 impl ManagedWindow {
     #[must_use]
-    pub fn new(window: Window, arrange: ArrangeKind, refocus_parent: bool) -> Self {
+    pub fn new(window: Window, arrange: ArrangeKind, focus_style: FocusStyle) -> Self {
         ManagedWindow {
             window,
             wants_focus: false,
             arrange,
-            internal_focus_handling: refocus_parent,
+            focus_style,
         }
     }
 }
@@ -690,7 +708,7 @@ mod tests {
     use crate::config::Cfg;
     use crate::geometry::draw::Mode;
     use crate::geometry::layout::Layout;
-    use crate::state::workspace::{ArrangeKind, DeleteResult, Workspaces};
+    use crate::state::workspace::{ArrangeKind, DeleteResult, FocusStyle, Workspaces};
 
     fn empty_workspaces() -> Workspaces {
         let cfg = Cfg::default();
@@ -711,7 +729,7 @@ mod tests {
     fn map_doesnt_leak() {
         let mut workspaces = empty_workspaces();
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         assert!(workspaces.get_managed_win(0).is_some());
         assert!(workspaces.get_managed_win(1).is_none());
@@ -722,7 +740,7 @@ mod tests {
         assert_eq!(1, workspaces.get_all_tiled_windows(0).unwrap().len());
         assert!(workspaces.find_all_attached(0).is_none());
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::FloatingActive, false)
+            .add_child_to_ws(1, 0, ArrangeKind::FloatingActive, FocusStyle::Pull)
             .unwrap();
         assert!(workspaces.get_managed_win(0).is_some());
         assert!(workspaces.get_managed_win(1).is_some());
@@ -734,7 +752,12 @@ mod tests {
         assert!(workspaces.find_all_attached(0).is_none());
 
         assert!(workspaces
-            .add_attached(0, 2, ArrangeKind::FloatingInactive(0.0, 0.0), false)
+            .add_attached(
+                0,
+                2,
+                ArrangeKind::FloatingInactive(0.0, 0.0),
+                FocusStyle::Pull
+            )
             .unwrap());
         assert!(workspaces.get_managed_win(0).is_some());
         assert!(workspaces.get_managed_win(1).is_some());
@@ -746,7 +769,7 @@ mod tests {
         assert_eq!(1, workspaces.find_all_attached(0).unwrap().len());
 
         workspaces
-            .add_child_to_ws(3, 1, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(3, 1, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
 
         assert!(workspaces.get_managed_win(0).is_some());
@@ -810,7 +833,7 @@ mod tests {
         let mut workspaces = empty_workspaces();
         assert!(workspaces.find_ws_containing_window(0).is_none());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         assert_eq!(0, workspaces.find_ws_containing_window(0).unwrap());
     }
@@ -861,12 +884,17 @@ mod tests {
         assert!(workspaces.find_first_tiled(0).unwrap().is_none());
         assert_eq!(workspaces, empty_workspaces());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::FloatingInactive(0.0, 0.0), false)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::FloatingInactive(0.0, 0.0),
+                FocusStyle::Pull,
+            )
             .unwrap();
         assert!(workspaces.find_first_tiled(0).unwrap().is_none());
         assert_ne!(workspaces, empty_workspaces());
         workspaces
-            .add_attached(0, 1, ArrangeKind::NoFloat, false)
+            .add_attached(0, 1, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         assert!(workspaces.find_first_tiled(0).unwrap().is_some());
         assert!(matches!(
@@ -885,10 +913,10 @@ mod tests {
         assert_eq!(workspaces, empty_workspaces());
         assert!(!workspaces.update_size_modifier(1, 0.1).unwrap());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         let base = workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0];
         assert!(workspaces.update_size_modifier(0, 0.1).unwrap());
@@ -912,10 +940,10 @@ mod tests {
         assert_eq!(workspaces, empty_workspaces());
         assert!(!workspaces.update_size_modifier(1, 0.1).unwrap());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         let base = workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0];
         assert!(workspaces.update_size_modifier(0, 0.1).unwrap());
@@ -944,7 +972,7 @@ mod tests {
             .is_none());
         assert_eq!(workspaces, empty_workspaces());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         assert!(workspaces
             .set_wants_focus(0, true)
@@ -969,17 +997,17 @@ mod tests {
         assert!(workspaces.next_window(0).is_none());
         assert!(workspaces.prev_window(0).is_none());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         assert!(workspaces.next_window(0).is_none());
         assert!(workspaces.prev_window(0).is_none());
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::FloatingActive, false)
+            .add_child_to_ws(1, 0, ArrangeKind::FloatingActive, FocusStyle::Pull)
             .unwrap();
         assert_eq!(Some(0), workspaces.next_window(1).map(|mw| mw.window));
         assert_eq!(Some(0), workspaces.prev_window(1).map(|mw| mw.window));
         workspaces
-            .add_child_to_ws(2, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(2, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         // Reverse insertion order
         assert_eq!(Some(1), workspaces.next_window(2).map(|mw| mw.window));
@@ -1000,13 +1028,13 @@ mod tests {
         assert_eq!(Mode::Tabbed(0), workspaces.get_draw_mode(0));
 
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         workspaces.set_draw_mode(0, Mode::Tabbed(5));
         // Will return a draw_mode of 0 if OOB
         assert_eq!(Mode::Tabbed(0), workspaces.get_draw_mode(0));
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         // still oob...
         assert_eq!(Mode::Tabbed(0), workspaces.get_draw_mode(0));
@@ -1025,10 +1053,10 @@ mod tests {
         workspaces.set_draw_mode(0, Mode::Tabbed(0));
         assert!(workspaces.switch_tab_focus_window(0, 0).unwrap().is_none());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, false)
+            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
             .unwrap();
         assert!(workspaces.switch_tab_focus_window(0, 5).unwrap().is_none());
         assert_eq!(Mode::Tabbed(0), workspaces.get_draw_mode(0));
@@ -1046,7 +1074,12 @@ mod tests {
         let mut workspaces = empty_workspaces();
         assert!(!workspaces.is_managed_floating(0));
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::FloatingInactive(0.0, 0.0), false)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::FloatingInactive(0.0, 0.0),
+                FocusStyle::Pull,
+            )
             .unwrap();
         assert!(workspaces.is_managed_floating(0));
         workspaces.delete_child_from_ws(0);
