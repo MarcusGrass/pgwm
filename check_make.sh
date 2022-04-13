@@ -92,6 +92,14 @@ check_uninstall docs docs 1
 
 ensure_no_previous_make
 ./configure --profile=optimized
+OPTIMIZED_MAKEFILE=$(cat Makefile)
+ensure_no_previous_make
+./configure
+NO_ARG_MAKEFILE=$(cat Makefile)
+if [ "$OPTIMIZED_MAKEFILE" != "$NO_ARG_MAKEFILE" ]; then
+  echo "Default profile isn't 'optimized'"
+  exit 1
+fi
 make clean
 check_clean
 make
@@ -103,15 +111,3 @@ check_uninstall "$DEAD_VAR1" "$DEAD_VAR2" 0
 make uninstall CLEAN_CONFIG=1
 check_uninstall "$DEAD_VAR1" "$DEAD_VAR2" 1
 
-ensure_no_previous_make
-./configure
-make clean
-check_clean
-make
-check_build optimized
-make install
-check_install "$DEAD_VAR1" "$DEAD_VAR2"
-make uninstall
-check_uninstall "$DEAD_VAR1" "$DEAD_VAR2" 0
-make uninstall CLEAN_CONFIG=1
-check_uninstall "$DEAD_VAR1" "$DEAD_VAR2" 1

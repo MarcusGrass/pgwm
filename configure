@@ -67,7 +67,7 @@ install:
 \telif [ -d \$(CONFIG_DIR) ]; then \
 \t\tinstall pgwm.toml \$(CONFIG_DIR)/pgwm.toml; \
 \telse \
-\t\techo \"Configuration directory specified but does not exist, will try to create\" \
+\t\techo \"Configuration directory specified but does not exist, will try to create it\"; \
 \t\tmkdir -p \$(CONFIG_DIR) && echo \"Placing configuration at \$(CONFIG_DIR)/pgwm.toml\" && install pgwm.toml \$(CONFIG_DIR)/pgwm.toml; \
 \tfi
 \t@echo \"Installed binary at \$(DESTDIR)/\$(APP), configuration was installed at \$(CONFIG_DIR)/pgwm.toml (if not already present)\"

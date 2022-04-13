@@ -8,18 +8,33 @@ on:
   pull_request: {}
 
 jobs:
-  check:
+  clippy:
     runs-on: ubuntu-latest
     container: marcusgrass/pgwm-check:latest
     steps:
       - uses: actions/checkout@v3
       - name: Run clippy on all feature permutations
         run: cargo hack clippy --feature-powerset -- -D warnings
+  deny:
+    runs-on: ubuntu-latest
+    container: marcusgrass/pgwm-check:latest
+    steps:
+      - uses: actions/checkout@v3
       - name: Run cargo deny
-        run: cargo deny --all-features --frozen --locked check
+        run: cargo deny --all-features --locked check
+  test:
+    runs-on: ubuntu-latest
+    container: marcusgrass/pgwm-check:latest
+    steps:
+      - uses: actions/checkout@v3
       - name: Run tests on core with all feature permutations
         run: cargo hack test -p pgwm-core --feature-powerset
       - name: Run tests on project with default features
         run: cargo test
+  makefile:
+    runs-on: ubuntu-latest
+    container: marcusgrass/pgwm-check:latest
+    steps:
+      - uses: actions/checkout@v3
       - name: Run makefile tests
         run: ./check_make.sh
