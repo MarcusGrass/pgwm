@@ -1,19 +1,24 @@
 use crate::error::{Error, Result};
 use heapless::FnvIndexMap;
+use x11rb::connection::Connection;
 use x11rb::cookie::{Cookie, VoidCookie};
 use x11rb::properties::{WmHints, WmHintsCookie, WmSizeHints, WmSizeHintsCookie};
+use x11rb::protocol::render::{
+    CreatePictureAux, Glyphinfo, Glyphset, PictOp, Picture, PolyEdge, PolyMode, Repeat,
+};
 use x11rb::protocol::xproto::{
     Atom, AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent, ConfigureRequestEvent,
     ConfigureWindowAux, ConnectionExt, EventMask, GetPropertyReply, GetWindowAttributesReply,
-    GrabMode, InputFocus, InternAtomReply, Pixmap, PropMode, QueryPointerReply, Rectangle, Screen,
-    StackMode, Window,
+    GrabMode, InputFocus, InternAtomReply, PropMode, QueryPointerReply, Screen, StackMode, Window,
 };
 use x11rb::protocol::ErrorKind;
 use x11rb::rust_connection::{ReplyError, RustConnection};
 use x11rb::{CURRENT_TIME, NONE};
 
+use crate::error::Error::GlyphMismatch;
 use pgwm_core::config::{WINDOW_MANAGER_NAME, WINDOW_MANAGER_NAME_BUF_SIZE};
 use pgwm_core::geometry::Dimensions;
+use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
 use pgwm_core::state::workspace::FocusStyle;
 use pgwm_core::state::State;
 
@@ -299,20 +304,20 @@ impl<'a> CallWrapper<'a> {
             state.screen.root,
             self.name_to_atom[_NET_SUPPORTING_WM_CHECK].value,
             AtomEnum::WINDOW,
-            &[state.permanent_drawables.wm_check_win],
+            &[state.wm_check_win],
         )?;
         x11rb::wrapper::ConnectionExt::change_property32(
             self.connection,
             PropMode::REPLACE,
-            state.permanent_drawables.wm_check_win,
+            state.wm_check_win,
             self.name_to_atom[_NET_SUPPORTING_WM_CHECK].value,
             AtomEnum::WINDOW,
-            &[state.permanent_drawables.wm_check_win],
+            &[state.wm_check_win],
         )?;
         x11rb::wrapper::ConnectionExt::change_property8(
             self.connection,
             PropMode::REPLACE,
-            state.permanent_drawables.wm_check_win,
+            state.wm_check_win,
             self.name_to_atom[_NET_WM_NAME].value,
             AtomEnum::STRING,
             WINDOW_MANAGER_NAME.as_bytes(),
@@ -638,7 +643,7 @@ impl<'a> CallWrapper<'a> {
         )?;
         Ok(self.connection.set_input_focus(
             InputFocus::POINTER_ROOT,
-            x11::xlib::PointerRoot as u32,
+            u32::from(InputFocus::POINTER_ROOT),
             CURRENT_TIME,
         )?)
     }
@@ -789,47 +794,121 @@ impl<'a> CallWrapper<'a> {
         Ok(self.connection.change_window_attributes(window, &cw)?)
     }
 
-    pub(crate) fn fill_rectangle(
+    pub(crate) fn window_mapped_picture(
         &self,
-        window: Window,
-        gc: u32,
-        dimension: Dimensions,
-    ) -> Result<VoidCookie<'a, RustConnection>> {
-        Ok(self.connection.poly_fill_rectangle(
-            window,
-            gc,
-            &[Rectangle {
-                x: dimension.x,
-                y: dimension.y,
-                width: dimension.width as u16,
-                height: dimension.height as u16,
-            }],
-        )?)
+        win: Window,
+        vis_info: &RenderVisualInfo,
+    ) -> Result<Picture> {
+        let picture = self.connection.generate_id()?;
+        x11rb::protocol::render::create_picture(
+            self.connection,
+            picture,
+            win,
+            vis_info.root.pict_format,
+            &CreatePictureAux::new()
+                .polyedge(PolyEdge::SMOOTH)
+                .polymode(PolyMode::IMPRECISE),
+        )?;
+        Ok(picture)
     }
 
-    pub(crate) fn copy_area(
+    pub(crate) fn pixmap_mapped_picture(
         &self,
-        src: Pixmap,
-        dst: Pixmap,
-        graphics_context: u32,
-        src_x: i16,
-        src_y: i16,
-        dst_x: i16,
-        dst_y: i16,
-        width: u16,
-        height: u16,
-    ) -> Result<VoidCookie<'a, RustConnection>> {
-        Ok(self.connection.copy_area(
-            src,
-            dst,
-            graphics_context,
-            src_x,
-            src_y,
-            dst_x,
-            dst_y,
-            width,
-            height,
-        )?)
+        win: Window,
+        vis_info: &RenderVisualInfo,
+    ) -> Result<Picture> {
+        let picture = self.connection.generate_id()?;
+        x11rb::protocol::render::create_picture(
+            self.connection,
+            picture,
+            win,
+            vis_info.render.pict_format,
+            &CreatePictureAux::new().repeat(Repeat::NORMAL),
+        )?;
+        Ok(picture)
+    }
+
+    pub(crate) fn create_glyphset(&self, vis_info: &RenderVisualInfo) -> Result<Glyphset> {
+        let id = self.connection.generate_id()?;
+        x11rb::protocol::render::create_glyph_set(
+            self.connection,
+            id,
+            vis_info.render.pict_format,
+        )?;
+        Ok(id)
+    }
+
+    pub(crate) fn add_glyphs(
+        &self,
+        glyph_set: Glyphset,
+        glyph_ids: &[u32],
+        glyph_info: &[Glyphinfo],
+        rendered_picture_glyphs: &[u8],
+    ) -> Result<()> {
+        if !glyph_ids.len() == glyph_info.len() {
+            return Err(GlyphMismatch);
+        }
+        x11rb::protocol::render::add_glyphs(
+            self.connection,
+            glyph_set,
+            glyph_ids,
+            glyph_info,
+            rendered_picture_glyphs,
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn fill_xrender_rectangle(
+        &self,
+        picture: Picture,
+        color: x11rb::protocol::render::Color,
+        dimensions: Dimensions,
+    ) -> Result<()> {
+        //let (red, green, blue, alpha) = color.to_rgba16();
+        x11rb::protocol::render::fill_rectangles(
+            self.connection,
+            PictOp::SRC,
+            picture,
+            color,
+            &[dimensions.to_rectangle()],
+        )?;
+        Ok(())
+    }
+
+    // https://lists.freedesktop.org/archives/xcb/2006-October/002157.html
+    // Can push everything in one request when switching glyphs instead of chunking
+    pub(crate) fn draw_glyphs(
+        &self,
+        x: i16,
+        y: i16,
+        glyphs: Glyphset,
+        dbw: &DoubleBufferedRenderPicture,
+        glyph_ids: &[u32],
+    ) -> Result<()> {
+        let mut buf = Vec::with_capacity(glyph_ids.len());
+        if glyph_ids.len() >= 254 {
+            // 252 for elt8, 254 for elt16
+            return Ok(()); // TODO: Better err
+        }
+        buf.extend_from_slice(&[glyph_ids.len() as u8, 0, 0, 0]); // Pad to 32bit
+                                                                  //buf.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]); // Actually a delta x and y as u16s encoded as 2 u8s each <- lies
+        buf.extend_from_slice(&(x).to_ne_bytes()); // Dest x
+        buf.extend_from_slice(&(y).to_ne_bytes()); // Dest y, why is it like this, why is the documentation lying to me?
+        for glyph in glyph_ids {
+            buf.extend_from_slice(&glyph.to_ne_bytes()); // Dump to u8s
+        }
+        x11rb::protocol::render::composite_glyphs32(
+            self.connection,
+            PictOp::OVER,
+            dbw.pixmap.picture,
+            dbw.window.picture,
+            0,
+            glyphs,
+            0,
+            0,
+            &buf,
+        )?;
+        Ok(())
     }
 
     pub(crate) fn resolve_atom(&self, atom: Atom) -> Option<ResolvedAtom> {

@@ -15,13 +15,14 @@ config-file = ["serde", "heapless/serde", "toml"]
 atoi = { version = "1.0.0", default-features = false }
 bstr = { version = "0.2.17", default-features = false }
 heapless = { version = "0.7.10" }
-toml = {version = "0.5.8", optional = true}
+fontdue = { git = "https://github.com/MarcusGrass/fontdue", branch = "rasterize-oneshot", default-features = false, features = ["simd"] }
+toml = {version = "0.5.9", optional = true}
 thiserror = "1.0.30"
-x11 = { version = "2.19.1", default-features = false, features = ["xft"] }
+x11-keysyms = { git = "https://github.com/MarcusGrass/x11-keysyms", rev = "4b0f0e3516100666d18df4b6e8eb520b318e1dc9", features = ["miscellany", "latin1"] }
 x11rb = { version = "0.9.0", default-features = false, features = ["cursor"]}
 
 time = { version = "0.3.9", optional = true, default-features = false, features = ["formatting", "local-offset"] }
-serde = { version = "1.0.136", default-features = false, features = ["derive"], optional = true }
+serde = { version = "1.0.137", default-features = false, features = ["derive"], optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.3.5", default-features = false }

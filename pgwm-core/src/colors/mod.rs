@@ -5,7 +5,30 @@ use crate::config::USED_DIFFERENT_COLOR_SEGMENTS;
 #[derive(Debug, Copy, Clone)]
 pub struct Color {
     pub pixel: u32,
-    pub rgba8: (u8, u8, u8, u8),
+    pub bgra8: [u8; 4],
+}
+
+impl Color {
+    #[must_use]
+    pub fn as_render_color(&self) -> x11rb::protocol::render::Color {
+        x11rb::protocol::render::Color {
+            red: convert_up(self.bgra8[2]),
+            green: convert_up(self.bgra8[1]),
+            blue: convert_up(self.bgra8[0]),
+            alpha: convert_up(self.bgra8[3]),
+        }
+    }
+}
+
+impl Rgba8 for Color {
+    fn to_rgba16(&self) -> (u16, u16, u16, u16) {
+        (
+            convert_up(self.bgra8[2]),
+            convert_up(self.bgra8[1]),
+            convert_up(self.bgra8[0]),
+            convert_up(self.bgra8[3]),
+        )
+    }
 }
 
 pub trait Rgba8 {

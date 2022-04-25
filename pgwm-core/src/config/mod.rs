@@ -3,7 +3,7 @@ use crate::config::key_map::KeyboardMapping;
 use crate::config::mouse_map::{MouseMapping, MouseTarget};
 use crate::config::workspaces::UserWorkspace;
 use std::collections::HashMap;
-use x11::keysym::{
+use x11_keysyms::{
     XK_Print, XK_Return, XK_b, XK_c, XK_comma, XK_d, XK_f, XK_h, XK_j, XK_k, XK_l, XK_n, XK_period,
     XK_q, XK_r, XK_space, XK_t, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
 };
@@ -88,7 +88,7 @@ pub const BINARY_HEAP_LIMIT: usize = 64;
 pub const DYING_WINDOW_CACHE: usize = 16;
 
 /**
-    Internally used for writing the font buffer to xft when drawing, 32 gives good performance.
+    Internally used for writing the render buffer to xft when drawing, 32 gives good performance.
 **/
 pub const FONT_WRITE_BUF_LIMIT: usize = 32;
 
@@ -98,8 +98,9 @@ pub const FONT_WRITE_BUF_LIMIT: usize = 32;
 pub const NUM_TILING_MODIFIERS: usize = WS_WINDOW_LIMIT - 1;
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[cfg_attr(test, derive(PartialEq, Debug))]
 #[cfg_attr(feature = "config-file", serde(default))]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Cfg {
     pub sizing: Sizing,
     pub options: Options,
@@ -112,7 +113,7 @@ pub struct Cfg {
         feature = "config-file",
         serde(alias = "char-remap", default = "init_char_remap")
     )]
-    pub char_remap: HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, String>,
+    pub char_remap: HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, FontCfg>,
     #[cfg_attr(
         feature = "config-file",
         serde(alias = "workspace", default = "init_workspaces")
@@ -314,13 +315,30 @@ impl Default for TilingModifiers {
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Fonts {
-    pub workspace_section: Vec<String>,
-    pub window_name_display_section: Vec<String>,
-    pub status_section: Vec<String>,
-    pub tab_bar_section: Vec<String>,
-    pub shortcut_section: Vec<String>,
+    pub workspace_section: Vec<FontCfg>,
+    pub window_name_display_section: Vec<FontCfg>,
+    pub status_section: Vec<FontCfg>,
+    pub tab_bar_section: Vec<FontCfg>,
+    pub shortcut_section: Vec<FontCfg>,
+}
+
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
+pub struct FontCfg {
+    pub path: String,
+    // Can't have an f32 as a map key.. sigh
+    pub size: String,
+}
+
+impl FontCfg {
+    pub fn new(path: impl Into<String>, size: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            size: size.into(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -366,27 +384,32 @@ impl Shortcut {
 
 /**
 This is a mapping of fonts to be drawn at different sections.
-It will use fonts left-to-right and draw single characters with the backup font if
-the previous font does not provide them. There can at most be `FALLBACK_FONTS_LIMIT`
+It will use fonts left-to-right and draw single characters with the backup render if
+the previous render does not provide them. There can at most be `FALLBACK_FONTS_LIMIT`
 per target segment.
  **/
 impl Default for Fonts {
     fn default() -> Self {
         Self {
-            workspace_section: vec![String::from(
-                "JetBrains Mono Nerd Font:size=10:antialias=true",
+            workspace_section: vec![FontCfg::new(
+                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
+                "12.0",
             )],
-            window_name_display_section: vec![String::from(
-                "JetBrains Mono Nerd Font:size=10:antialias=true",
+            window_name_display_section: vec![FontCfg::new(
+                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
+                "12.0",
             )],
-            status_section: vec![String::from(
-                "JetBrains Mono Nerd Font:size=10:antialias=true",
+            status_section: vec![FontCfg::new(
+                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
+                "12.0",
             )],
-            tab_bar_section: vec![String::from(
-                "JetBrains Mono Nerd Font:size=10:antialias=true",
+            tab_bar_section: vec![FontCfg::new(
+                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
+                "12.0",
             )],
-            shortcut_section: vec![String::from(
-                "JetBrains Mono Nerd Font:size=10:antialias=true",
+            shortcut_section: vec![FontCfg::new(
+                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
+                "12.0",
             )],
         }
     }
@@ -924,12 +947,18 @@ fn init_key_mappings() -> Vec<SimpleKeyMapping> {
 
 /**
     Overrides specific character drawing.
-    If some character needs icons from a certain font, they should be mapped below.
+    If some character needs icons from a certain render, they should be mapped below.
 **/
-fn init_char_remap() -> HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, String> {
+fn init_char_remap() -> HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, FontCfg> {
     let mut icon_map = HashMap::new();
-    let icon_font = String::from("Font Awesome 6 Free Solid:pixelsize=11");
-    let brand_font = String::from("Font Awesome 6 Brands:pixelsize=11");
+    let icon_font = FontCfg::new(
+        "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf",
+        "10.0",
+    );
+    let brand_font = FontCfg::new(
+        "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf",
+        "10.0",
+    );
     let _ = icon_map.insert(heapless::String::from("\u{f121}"), icon_font.clone());
     let _ = icon_map.insert(heapless::String::from("\u{f120}"), icon_font.clone());
     let _ = icon_map.insert(heapless::String::from("\u{f086}"), icon_font.clone());

@@ -28,7 +28,9 @@ skip = [
 
 [sources]
 allow-git = [
-    "https://github.com/MarcusGrass/heapless"
+    "https://github.com/MarcusGrass/heapless",
+    "https://github.com/MarcusGrass/x11-keysyms",
+    "https://github.com/MarcusGrass/fontdue",
 ]
 
 [licenses]

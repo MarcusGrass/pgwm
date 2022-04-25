@@ -710,7 +710,7 @@ impl<'a> Manager<'a> {
         let mon = &state.monitors[mon_ind];
         if let (Mode::Tabbed(_), true) = (
             state.workspaces.get_draw_mode(mon.hosted_workspace),
-            event.event == mon.tab_bar_win,
+            event.event == mon.tab_bar_win.window.drawable,
         ) {
             let width = mon.dimensions.width;
             let stacked_children = state
@@ -1302,7 +1302,7 @@ impl<'a> Manager<'a> {
     ) -> Result<()> {
         if event.state == Visibility::UNOBSCURED {
             for mon_ind in 0..state.monitors.len() {
-                if state.monitors[mon_ind].bar_win == event.window {
+                if state.monitors[mon_ind].bar_win.window.drawable == event.window {
                     self.bar_manager.redraw_on(mon_ind, state)?;
                 }
             }

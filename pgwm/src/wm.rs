@@ -2,15 +2,19 @@ use crate::error::{Error, Result};
 use crate::manager;
 use crate::manager::bar::BarManager;
 use crate::manager::draw::Drawer;
-use crate::manager::font::FontManager;
+use crate::manager::font::{load_alloc_fonts, FontDrawer, LoadedFonts};
 use crate::manager::Manager;
 use crate::x11::call_wrapper::CallWrapper;
 use crate::x11::client_message::ClientMessageHandler;
 use crate::x11::colors::alloc_colors;
 use pgwm_core::config::{BarCfg, Cfg, Options, Sizing};
+use pgwm_core::render::{RenderVisualInfo, VisualInfo};
 use pgwm_core::state::State;
+use std::collections::HashMap;
 use std::time::Duration;
 use x11rb::connection::Connection;
+use x11rb::protocol::render::{PictType, Pictformat, Pictforminfo};
+use x11rb::protocol::xproto::{Screen, Visualid};
 use x11rb::resource_manager::Database;
 use x11rb::rust_connection::RustConnection;
 
@@ -63,21 +67,26 @@ pub(crate) fn run_wm() -> Result<()> {
     } = bar;
     let (connection, screen_num) = x11rb::connect(None)?;
     let setup = connection.setup();
+    pgwm_core::debug!("Setup formats {:?}", setup.pixmap_formats);
+    pgwm_core::debug!("Setup visuals {:?}", setup.roots[0].root_visual);
     let screen = &setup.roots[screen_num];
     let call_wrapper = CallWrapper::new(&connection)?;
     call_wrapper.try_become_wm(screen)?;
     connection.flush()?;
     let resource_db = Database::new_from_default(&connection)?;
     let cursor_handle = x11rb::cursor::Handle::new(&connection, 0, &resource_db)?;
+    let visual = find_render_visual_info(&connection, screen)?;
+    let loaded = load_alloc_fonts(&call_wrapper, &visual, &fonts, &char_remap)?;
+    let lf = LoadedFonts::new(loaded, &char_remap)?;
 
+    let font_drawer = FontDrawer::new(&call_wrapper, &lf);
     let colors = alloc_colors(&connection, screen.default_colormap, colors)?;
-
-    let font_manager = FontManager::new(&colors, &fonts, &char_remap)?;
 
     let mut state = crate::x11::state_lifecycle::create_state(
         &connection,
         &call_wrapper,
-        &font_manager,
+        &font_drawer,
+        visual,
         &fonts,
         screen,
         colors,
@@ -101,12 +110,11 @@ pub(crate) fn run_wm() -> Result<()> {
     )?;
 
     crate::debug!("Initialized mappings");
-    let drawer = Drawer::new(&font_manager, &call_wrapper, &fonts);
+    let drawer = Drawer::new(&font_drawer, &call_wrapper, &fonts);
     crate::debug!("Initialized Drawer");
     let client_message_handler = ClientMessageHandler::new(&connection, &call_wrapper);
     crate::debug!("Initialized Client message handler");
-
-    let bar_manager = BarManager::new(&call_wrapper, &font_manager, &fonts);
+    let bar_manager = BarManager::new(&call_wrapper, &font_drawer, &fonts);
     crate::debug!("Initialized bar sections");
     let manager = manager::Manager::new(
         &call_wrapper,
@@ -144,8 +152,9 @@ pub(crate) fn run_wm() -> Result<()> {
                     state = crate::x11::state_lifecycle::reinit_state(
                         &connection,
                         &call_wrapper,
-                        &font_manager,
+                        &font_drawer,
                         &fonts,
+                        visual,
                         state,
                         &workspaces,
                         &shortcuts,
@@ -155,7 +164,7 @@ pub(crate) fn run_wm() -> Result<()> {
                     manager.pick_up_state(&mut state)?;
                 }
                 Error::GracefulShutdown => {
-                    crate::x11::state_lifecycle::teardown_full_state(&connection, &state)?;
+                    crate::x11::state_lifecycle::teardown_full_state(&connection, &state, &lf)?;
                     connection.flush()?;
                     call_wrapper.reset_root_focus(&state)?;
                     connection.flush()?;
@@ -263,4 +272,57 @@ fn new_event_within_deadline(
             return Ok(false);
         }
     }
+}
+
+fn find_render_visual_info(
+    connection: &RustConnection,
+    screen: &Screen,
+) -> Result<RenderVisualInfo> {
+    Ok(RenderVisualInfo {
+        root: find_appropriate_visual(connection, screen.root_depth, Some(screen.root_visual))?,
+        render: find_appropriate_visual(connection, 32, None)?,
+    })
+}
+
+fn find_appropriate_visual(
+    connection: &RustConnection,
+    depth: u8,
+    match_visual_id: Option<Visualid>,
+) -> Result<VisualInfo> {
+    let formats = x11rb::protocol::render::query_pict_formats(connection)?.reply()?;
+    let candidates = formats
+        .formats
+        .into_iter()
+        // Need a 32 bit depth visual
+        .filter_map(|pfi| {
+            (pfi.type_ == PictType::DIRECT && pfi.depth == depth).then(|| (pfi.id, pfi))
+        })
+        .collect::<HashMap<Pictformat, Pictforminfo>>();
+    // Should only be one
+    pgwm_core::debug!("{candidates:?}");
+    for screen in formats.screens {
+        let candidate = screen.depths.into_iter().find_map(|pd| {
+            (pd.depth == depth)
+                .then(|| {
+                    pd.visuals.into_iter().find(|pv| {
+                        if let Some(match_vid) = match_visual_id {
+                            pv.visual == match_vid && candidates.contains_key(&pv.format)
+                        } else {
+                            candidates.contains_key(&pv.format)
+                        }
+                    })
+                })
+                .flatten()
+        });
+        if let Some(candidate) = candidate {
+            pgwm_core::debug!("{candidate:?}");
+            return Ok(VisualInfo {
+                visual_id: candidate.visual,
+                pict_format: candidate.format,
+                direct_format: candidates[&candidate.format].direct,
+                depth,
+            });
+        }
+    }
+    Err(Error::NoAppropriateVisual)
 }

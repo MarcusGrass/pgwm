@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::manager::font::FontManager;
+use crate::manager::font::FontDrawer;
 use crate::x11::call_wrapper::CallWrapper;
 use crate::x11::cookies::FallbackNameConvertCookie;
 use pgwm_core::config::{Fonts, WM_NAME_LIMIT, WS_WINDOW_LIMIT};
@@ -11,7 +11,7 @@ use pgwm_core::state::State;
 use x11rb::protocol::xproto::Window;
 
 pub(crate) struct Drawer<'a> {
-    font_manager: &'a FontManager<'a>,
+    font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     call_wrapper: &'a CallWrapper<'a>,
 }
@@ -100,7 +100,7 @@ impl<'a> Drawer<'a> {
     ) -> Result<()> {
         if targets.is_empty() {
             self.call_wrapper
-                .unmap_window(state.monitors[mon_ind].tab_bar_win, state)?;
+                .unmap_window(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
             return Ok(());
         }
         let ws_ind = state.monitors[mon_ind].hosted_workspace;
@@ -146,7 +146,7 @@ impl<'a> Drawer<'a> {
     ) -> Result<()> {
         pgwm_core::debug!("Drawing tiled {windows:?} on mon = {mon_ind}");
         self.call_wrapper
-            .unmap_window(state.monitors[mon_ind].tab_bar_win, state)?;
+            .unmap_window(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
         let mon_dimensions = state.monitors[mon_ind].dimensions;
         let tiling_modifiers = &state.workspaces.get_ws(ws_ind).tiling_modifiers;
         let dimensions = layout.calculate_dimensions(
@@ -246,7 +246,7 @@ impl<'a> Drawer<'a> {
 
     pub(crate) fn undraw(&self, mon_ind: usize, state: &mut State) -> Result<()> {
         self.call_wrapper
-            .unmap_window(state.monitors[mon_ind].tab_bar_win, state)?;
+            .unmap_window(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
         state
             .workspaces
             .get_all_windows_in_ws(state.monitors[mon_ind].hosted_workspace)
@@ -267,13 +267,12 @@ impl<'a> Drawer<'a> {
         state: &mut State,
     ) -> Result<()> {
         let dimensions = state.monitors[mon_ind].dimensions;
-        let tab_bar_win = state.monitors[mon_ind].tab_bar_win;
         let split = (dimensions.width - 2 * padding) as usize / ws_names.len();
         let mut rounding_err =
             dimensions.width as usize - 2 * padding as usize - ws_names.len() * split;
-        let mut offset = 0;
+        let win = state.monitors[mon_ind].tab_bar_win.window.drawable;
         self.call_wrapper.configure_window(
-            tab_bar_win,
+            win,
             Dimensions::new(
                 dimensions.width - 2 * padding,
                 state.tab_bar_height,
@@ -283,7 +282,8 @@ impl<'a> Drawer<'a> {
             0,
             state,
         )?;
-        self.call_wrapper.map_window(tab_bar_win, state)?;
+        self.call_wrapper.map_window(win, state)?;
+        let dbw = &state.monitors[mon_ind].tab_bar_win;
         for (i, name) in ws_names.iter().enumerate() {
             let split_width = if rounding_err > 0 {
                 rounding_err -= 1;
@@ -291,32 +291,14 @@ impl<'a> Drawer<'a> {
             } else {
                 split as i16
             };
-            let gc = if i == selected {
-                state.permanent_drawables.tab_bar_selected_gc
+            let bg = if i == selected {
+                state.colors.tab_bar_focused_tab_background
             } else {
-                state.permanent_drawables.tab_bar_deselected_gc
+                state.colors.tab_bar_unfocused_tab_background
             };
-            self.call_wrapper
-                .fill_rectangle(
-                    state.permanent_drawables.tab_bar_pixmap,
-                    gc,
-                    Dimensions {
-                        width: split_width,
-                        height: state.tab_bar_height,
-                        x: dimensions.x + offset,
-                        y: 0,
-                    },
-                )?
-                .check()?;
             let text_dimensions = self
                 .font_manager
-                .get_width_and_height(name, &self.fonts.workspace_section)?;
-            let y_height = text_dimensions.1;
-            let y_center_offset = if y_height > state.tab_bar_height as u16 {
-                0 //Will look bad but won't crash
-            } else {
-                (state.tab_bar_height as u16 - text_dimensions.1) / 2
-            };
+                .text_geometry(name, &self.fonts.tab_bar_section);
             let mut text_width = text_dimensions.0 as usize;
             let text = if text_width > split_width as usize {
                 let ratio = split_width as f32 / (text_width as f32 * 1.25f32); // Add some paddig for safety
@@ -328,34 +310,23 @@ impl<'a> Drawer<'a> {
                 name
             };
             let center_offset = (split_width as usize - text_width) / 2;
-            self.font_manager.draw_text(
-                state.permanent_drawables.tab_bar_pixmap,
-                text,
-                (dimensions.x + offset + center_offset as i16) as u32,
-                y_center_offset as u32,
-                &self.fonts.tab_bar_section,
-                &state.colors.tab_bar_text().pixel,
-                state.status_bar_height,
-            )?;
-            offset += split_width;
-        }
-        self.call_wrapper.copy_area(
-            state.permanent_drawables.tab_bar_pixmap,
-            tab_bar_win,
-            state.permanent_drawables.tab_bar_text_gc,
-            dimensions.x,
-            0,
-            0,
-            0,
-            (dimensions.width - padding) as u16,
-            state.tab_bar_height as u16,
-        )?;
 
+            self.font_manager.draw(
+                dbw,
+                text,
+                &self.fonts.tab_bar_section,
+                Dimensions::new(split_width, state.tab_bar_height, split_width * i as i16, 0),
+                center_offset as i16,
+                0,
+                bg,
+                state.colors.tab_bar_text,
+            )?;
+        }
         Ok(())
     }
 
     pub fn new(
-        font_manager: &'a FontManager,
+        font_manager: &'a FontDrawer<'a>,
         call_wrapper: &'a CallWrapper,
         fonts: &'a Fonts,
     ) -> Self {
