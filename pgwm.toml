@@ -397,6 +397,11 @@ key = 0x0072 # r
 # Resets all resized windows to the provided default tiling sizes on the currently focused workspace
 on_click = { action = "ResetToDefaultSizeModifiers" }
 [[key-mapping]]
+mods = ["M4", "Shift"]
+key = 0x0072 # r
+# Restarts the WM
+on_click = { action = "Restart" }
+[[key-mapping]]
 mods = ["M4"]
 key = 0xff0d # <Return/enter>
 # Sends the currently focused window to the logically first position of the tiling stack

@@ -19,16 +19,25 @@ mod manager;
 mod wm;
 mod x11;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::wm::run_wm;
 use pgwm_core::debug;
 
 fn main() -> Result<()> {
     debug!("Starting pgwm");
-    if let Err(e) = run_wm() {
-        debug!("Fatal error {:?}", e);
-        Err(e)
-    } else {
-        Ok(())
+    loop {
+        match run_wm() {
+            Ok(_) => {
+                debug!("Exiting");
+                return Ok(());
+            }
+            Err(e) => {
+                if let Error::FullRestart = e {
+                    debug!("Restarting");
+                    continue;
+                }
+                debug!("Fatal error {e}");
+            }
+        }
     }
 }

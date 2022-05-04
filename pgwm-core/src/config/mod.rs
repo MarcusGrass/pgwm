@@ -883,6 +883,8 @@ fn init_key_mappings() -> Vec<SimpleKeyMapping> {
         ),
         // Reset runtime window resizing to configured defaults.
         SimpleKeyMapping::new(MOD_KEY, XK_r, Action::ResetToDefaultSizeModifiers),
+        // Restart the wm.
+        SimpleKeyMapping::new(MOD_KEY | ModMask::SHIFT, XK_r, Action::Restart),
         // Send a window to logically 0th position of the tiling stack
         SimpleKeyMapping::new(MOD_KEY, XK_Return, Action::SendToFront),
         // Close a window
@@ -984,6 +986,7 @@ fn init_char_remap() -> HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, FontCfg> 
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum Action {
     Quit,
+    Restart,
     Spawn(String, Vec<String>),
     Close,
     ToggleWorkspace(usize),

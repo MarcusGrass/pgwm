@@ -38,6 +38,8 @@ pub(crate) enum Error {
     StateInvalidated,
     #[error("Exit triggered")]
     GracefulShutdown,
+    #[error("Restart triggered")]
+    FullRestart,
     #[error("Size not parseable as f32")]
     ParseFloat,
     #[error("Failed to load font {0}")]

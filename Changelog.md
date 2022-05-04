@@ -1,5 +1,4 @@
 # Change Log
-
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
@@ -10,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 
 ### Added
+ - Reloading configuration without having to kill the WM
 
 ### Changed
  - Fonts are now rasterized using [Fontdue](https://github.com/mooman219/fontdue).
