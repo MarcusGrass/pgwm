@@ -169,13 +169,14 @@ impl<'a> Drawer<'a> {
             return Err(Error::Tiling);
         }
         let mon_x = state.monitors[mon_ind].dimensions.x;
+        let mon_y = state.monitors[mon_ind].dimensions.y;
         for (ind, target) in targets.iter().enumerate() {
             let dim = dimensions[ind];
             let new_dimensions = Dimensions {
                 width: dim.width,
                 height: dim.height,
                 x: dim.x + mon_x,
-                y: dim.y,
+                y: dim.y + mon_y,
             };
             let win = target.window;
 
@@ -277,7 +278,7 @@ impl<'a> Drawer<'a> {
                 dimensions.width - 2 * padding,
                 state.tab_bar_height,
                 dimensions.x + padding,
-                state.status_bar_height + padding,
+                state.status_bar_height + padding + dimensions.y,
             ),
             0,
             state,
@@ -299,21 +300,12 @@ impl<'a> Drawer<'a> {
             let text_dimensions = self
                 .font_manager
                 .text_geometry(name, &self.fonts.tab_bar_section);
-            let mut text_width = text_dimensions.0 as usize;
-            let text = if text_width > split_width as usize {
-                let ratio = split_width as f32 / (text_width as f32 * 1.25f32); // Add some paddig for safety
-                let text = name;
-                let max_write = (text.len() as f32 * ratio) as usize;
-                text_width = (text_width as f32 * ratio) as usize; // Ugly fix will make it a bit off-center probably
-                &text[..max_write]
-            } else {
-                name
-            };
+            let text_width = text_dimensions.0 as usize;
             let center_offset = (split_width as usize - text_width) / 2;
 
             self.font_manager.draw(
                 dbw,
-                text,
+                name,
                 &self.fonts.tab_bar_section,
                 Dimensions::new(split_width, state.tab_bar_height, split_width * i as i16, 0),
                 center_offset as i16,
