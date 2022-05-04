@@ -167,12 +167,6 @@ If built with `cargo build` The binary ends up in target/release/pgwm or target/
 Replace the (probably) last line of .xinitrc with
 `exec $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary, or just `pgwm` if using `cargo install`.   
 
-If you want it to be hot-reloadable, say if you make a code or config-change (and recomopile in the case of code-changes) and quit (program exits 0), it'll start back up immediately
-without open applications closing, replace the last line of .xinitrc with
-`BINARY_LOCATION="$SOURCE_DIR/target/release/pgwm"`
-`while type $BINARY_LOCATION >/dev/null ; do $BINARY_LOCATION && continue || break ; done`.
-In that case, exiting would require killing the wm some other way, like `killall pgwm`.
-
 # Changing configuration
 ## Config file
 The WM can be configured by either using a configuration file, a sample configuration exists [here in the repo](pgwm.toml) 
@@ -180,6 +174,8 @@ the different properties are commented and hopefully makes sense. The file needs
 or if `$XDG_CONFIG_HOME` is not set, `$HOME/.config/pgwm/pgwm.toml`. If none of the environment variables `$HOME` or `$XDG_CONFIG_HOME` are set, 
 or if the file does not exist, the WM will use hard-coded configuration.  
 Constants that need to be known at compile time for stack-usage reasons are hard-coded and described further in the below section.
+If using a configuration file, the WM can reload it's config by restarting (default key-bind `mod + shift + r`), keeping 
+the xorg-server alive and the current applications remain open.
 
 ## Hard coded configuration
 Hard coded configuration resides in [pgwm_core/src/config/mod.rs](pgwm-core/src/config/mod.rs) and consists of rust code.

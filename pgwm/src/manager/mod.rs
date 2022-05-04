@@ -198,6 +198,10 @@ impl<'a> Manager<'a> {
         state: &mut State,
     ) -> Result<()> {
         match action {
+            Action::Restart => {
+                self.cleanup(state)?;
+                return Err(Error::FullRestart);
+            }
             Action::Quit => {
                 self.cleanup(state)?;
                 return Err(Error::GracefulShutdown);

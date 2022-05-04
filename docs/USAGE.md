@@ -50,6 +50,8 @@ To change to another tiling layout, by default `mod+n` can be used, although bot
 looks the same on a workspace containing 2 or fewer tiled windows.
 
 ## Customization
+After editing the toml configuration file (default) `mod + shift + r` will load the new configuration.  
+
 The WM doesn't try to do much when it comes to aesthetics, it can display borders with colors depending on whether the 
 window is focused or not. It can pad windows with slack-space. It draws things on the bar, and tab-bar if in the tabbed layout.
 These things and some more properties can be configured with fonts, colors, sizing etc.
@@ -78,6 +80,7 @@ on_click = { action = "Spawn", args = ["bash", ["-c", "maim -s -u | xclip -selec
 Which is equivalent to running:  
 `maim -s -u | xclip -selection clipboard -t image/png -i`  
 in your terminal if using bash. (The command let's you take a screenshot).
+
 
 ## Exit
 Exiting is bound by default to `mod+shift+q`, the WM will try to tear down it's state and then close.
