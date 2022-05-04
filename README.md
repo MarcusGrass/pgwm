@@ -1,4 +1,4 @@
-# PGWM, a DWM-inspired tiling window manager written in Rust
+# PGWM, a DWM-inspired tiling window manager written in pure safe Rust
 [![Latest workflow](https://github.com/MarcusGrass/pgwm/workflows/CI/badge.svg)](https://github.com/MarcusGrass/pgwm/actions)
 
 The WM is to my understanding compliant with the [wm-spec](https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html).

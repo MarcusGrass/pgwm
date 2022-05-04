@@ -52,11 +52,7 @@ impl<'a> FontDrawer<'a> {
         )?;
         let mut offset = area.x + area_x;
         for chunk in encoded {
-            let box_shift = if chunk.glyph_ids.len() == 1 {
-                (area.height - chunk.font_height as i16) / 2
-            } else {
-                -((area.height - chunk.height as i16) / 2 - (area.height - chunk.font_height))
-            };
+            let box_shift = (area.height - chunk.font_height as i16) / 2;
 
             self.call_wrapper.draw_glyphs(
                 offset,
@@ -190,7 +186,6 @@ impl<'a> LoadedFonts<'a> {
     #[must_use]
     pub fn encode(&self, text: &str, fonts: &[FontCfg]) -> Vec<FontEncodedChunk> {
         let mut cur_width = 0;
-        let mut cur_max_height = 0;
         let mut cur_gs = None;
         let mut cur_glyphs = vec![];
         let mut chunks = vec![];
@@ -200,7 +195,6 @@ impl<'a> LoadedFonts<'a> {
                 if !cur_glyphs.is_empty() {
                     chunks.push(FontEncodedChunk {
                         width: std::mem::take(&mut cur_width),
-                        height: std::mem::take(&mut cur_max_height),
                         font_height: std::mem::take(&mut cur_font_height),
                         glyph_set: cur_gs.unwrap(),
                         glyph_ids: std::mem::take(&mut cur_glyphs),
@@ -208,7 +202,6 @@ impl<'a> LoadedFonts<'a> {
                 }
                 chunks.push(FontEncodedChunk {
                     width: lchar.char_info.horizontal_space,
-                    height: lchar.char_info.height,
                     font_height: lchar.font_height,
                     glyph_set: lchar.gsid,
                     glyph_ids: vec![lchar.char_info.glyph_id],
@@ -227,7 +220,6 @@ impl<'a> LoadedFonts<'a> {
                         if gs != cur_gs.unwrap() {
                             chunks.push(FontEncodedChunk {
                                 width: std::mem::take(&mut cur_width),
-                                height: std::mem::take(&mut cur_max_height),
                                 font_height: mh,
                                 glyph_set: cur_gs.unwrap(),
                                 glyph_ids: std::mem::take(&mut cur_glyphs),
@@ -236,9 +228,6 @@ impl<'a> LoadedFonts<'a> {
                             cur_width = 0;
                         }
                         cur_width += info.horizontal_space as i16;
-                        if cur_max_height < info.height {
-                            cur_max_height = info.height;
-                        }
                         cur_font_height = mh;
                         cur_glyphs.push(info.glyph_id);
                     }
@@ -248,7 +237,6 @@ impl<'a> LoadedFonts<'a> {
         if !cur_glyphs.is_empty() {
             chunks.push(FontEncodedChunk {
                 width: cur_width,
-                height: cur_max_height,
                 font_height: cur_font_height,
                 glyph_set: cur_gs.unwrap(),
                 glyph_ids: cur_glyphs,
@@ -289,7 +277,6 @@ impl<'a> LoadedFonts<'a> {
 #[derive(Debug)]
 pub struct FontEncodedChunk {
     width: i16,
-    height: u16,
     font_height: i16,
     glyph_set: Glyphset,
     glyph_ids: Vec<u32>,

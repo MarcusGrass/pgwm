@@ -282,7 +282,7 @@ dependencies = [
 [[package]]
 name = "fontdue"
 version = "0.7.2"
-source = "git+https://github.com/MarcusGrass/fontdue?branch=rasterize-oneshot#37183294ad72b9dc10162daaaee6c755ebfa42dc"
+source = "git+https://github.com/MarcusGrass/fontdue?branch=rasterize-oneshot#f11491c93bdd013e208e085c54811e0ce1fdd828"
 dependencies = [
  "ttf-parser",
 ]

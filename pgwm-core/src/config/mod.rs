@@ -393,23 +393,23 @@ impl Default for Fonts {
         Self {
             workspace_section: vec![FontCfg::new(
                 "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "12.0",
+                "14.0",
             )],
             window_name_display_section: vec![FontCfg::new(
                 "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "12.0",
+                "14.0",
             )],
             status_section: vec![FontCfg::new(
                 "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "12.0",
+                "14.0",
             )],
             tab_bar_section: vec![FontCfg::new(
                 "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "12.0",
+                "14.0",
             )],
             shortcut_section: vec![FontCfg::new(
                 "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "12.0",
+                "14.0",
             )],
         }
     }
@@ -953,11 +953,11 @@ fn init_char_remap() -> HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, FontCfg> 
     let mut icon_map = HashMap::new();
     let icon_font = FontCfg::new(
         "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf",
-        "10.0",
+        "13.0",
     );
     let brand_font = FontCfg::new(
         "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf",
-        "10.0",
+        "13.0",
     );
     let _ = icon_map.insert(heapless::String::from("\u{f121}"), icon_font.clone());
     let _ = icon_map.insert(heapless::String::from("\u{f120}"), icon_font.clone());

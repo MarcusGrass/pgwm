@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - make_file
   pull_request: {}
 
 jobs:

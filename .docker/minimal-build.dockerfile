@@ -1,10 +1,4 @@
-FROM debian:bullseye-slim
+FROM rust:1-slim-bullseye
 WORKDIR /pgwm
-COPY .. /pgwm
-RUN apt-get update -y && apt-get install --no-install-recommends -y \
-        build-essential \
-        ca-certificates \
-        curl
-RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
-ENV PATH="/root/.cargo/bin:$PATH"
+COPY . /pgwm
 RUN cargo install --profile=optimized --path pgwm
