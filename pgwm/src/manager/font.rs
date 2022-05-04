@@ -1,389 +1,332 @@
-use crate::error::{Result, XftError};
-use pgwm_core::colors::{Color, Colors, Rgba8};
-use pgwm_core::config::{Fonts, FONT_WRITE_BUF_LIMIT, UTF8_CHAR_MAX_BYTES};
-use std::collections::{HashMap, HashSet};
-use std::ffi::CString;
-use std::mem::MaybeUninit;
-use std::os::raw::{c_int, c_uchar, c_ulong};
-use std::ptr::null;
-use x11::xft::{
-    XftCharExists, XftColor, XftColorAllocValue, XftColorFree, XftDraw, XftDrawCreate,
-    XftDrawDestroy, XftDrawStringUtf8, XftFont, XftFontClose, XftFontOpenName, XftTextExtentsUtf8,
-};
-use x11::xlib::{
-    Display, Visual, XCloseDisplay, XDefaultColormap, XDefaultScreen, XDefaultVisual, XOpenDisplay,
-    XSync,
-};
-use x11::xrender::{XGlyphInfo, XRenderColor};
-use x11rb::protocol::xproto::Window;
+use crate::error::{Error, Result};
+use crate::x11::call_wrapper::CallWrapper;
+use fontdue::FontSettings;
+use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use x11rb::protocol::render::{Glyphinfo, Glyphset};
 
-pub(crate) struct FontManager<'a> {
-    dpy: *mut Display,
-    visual: *mut Visual,
-    color_map: c_ulong,
-    loaded_fonts: HashMap<&'a str, *mut XftFont>,
-    loaded_colors: HashMap<u32, MaybeUninit<XftColor>>,
-    icon_mapping: HashMap<char, *mut XftFont>,
+use pgwm_core::colors::Color;
+use pgwm_core::config::{FontCfg, Fonts};
+use pgwm_core::geometry::Dimensions;
+
+pub(crate) struct FontDrawer<'a> {
+    call_wrapper: &'a CallWrapper<'a>,
+    loaded_render_fonts: &'a LoadedFonts<'a>,
 }
 
-#[allow(unsafe_code)]
-impl<'a> FontManager<'a> {
-    pub fn new(
-        colors: &'a Colors,
-        fonts: &'a Fonts,
-        font_icon_overrides: &'a HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, String>,
-    ) -> Result<Self> {
-        unsafe {
-            let dpy = XOpenDisplay(null());
-            let screen = XDefaultScreen(dpy);
-            let visual = XDefaultVisual(dpy, screen);
-            let color_map = XDefaultColormap(dpy, screen);
-            if dpy.is_null() {
-                Err(XftError::OpenDisplay.into())
-            } else {
-                let mut fm = FontManager {
-                    dpy,
-                    visual,
-                    color_map,
-                    loaded_fonts: HashMap::new(),
-                    loaded_colors: HashMap::new(),
-                    icon_mapping: HashMap::new(),
-                };
-                for color in colors.get_all() {
-                    fm.load_color(color)?;
-                }
-                let mut font_set = HashSet::new();
-                fonts.status_section.iter().for_each(|f| {
-                    font_set.insert(f);
-                });
-                fonts.window_name_display_section.iter().for_each(|f| {
-                    font_set.insert(f);
-                });
-                fonts.workspace_section.iter().for_each(|f| {
-                    font_set.insert(f);
-                });
-                fonts.tab_bar_section.iter().for_each(|f| {
-                    font_set.insert(f);
-                });
-                for font in font_icon_overrides.values() {
-                    font_set.insert(font);
-                }
-                for font in &font_set {
-                    fm.load_font(font)?;
-                }
-                for (k, font_name) in font_icon_overrides.iter() {
-                    let mut chars = k.chars();
-                    let count = k.chars().count();
-                    assert_eq!(
-                        count, 1,
-                        "Icon remapping expected a single char, {count} supplied in string {k:?}"
-                    );
-                    let char = chars.next().unwrap();
-                    let _ = fm
-                        .icon_mapping
-                        .insert(char, fm.loaded_fonts[font_name.as_str()]);
-                }
-                Ok(fm)
-            }
+impl<'a> FontDrawer<'a> {
+    pub(crate) fn new(
+        call_wrapper: &'a CallWrapper<'a>,
+        loaded_xrender_fonts: &'a LoadedFonts<'a>,
+    ) -> Self {
+        Self {
+            call_wrapper,
+            loaded_render_fonts: loaded_xrender_fonts,
         }
     }
 
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub(crate) fn draw_text(
+    pub(crate) fn text_geometry(&self, text: &str, fonts: &[FontCfg]) -> (i16, u16) {
+        self.loaded_render_fonts.geometry(text, fonts)
+    }
+
+    pub(crate) fn draw(
         &self,
-        win: Window,
+        dbw: &DoubleBufferedRenderPicture,
         text: &str,
-        x: u32,
-        y: u32,
-        fonts: &[String],
-        color: &u32,
-        status_bar_height: i16,
-    ) -> Result<u16> {
-        let draw = self.create_draw(win)?;
-        unsafe {
-            let color = self.loaded_colors[color];
-            let drawn = self.draw_with_available(
-                draw,
-                text,
-                fonts,
-                color.as_ptr(),
-                x,
-                y,
-                status_bar_height,
+        fonts: &[FontCfg],
+        area: Dimensions,
+        area_x: i16,
+        area_y: i16,
+        bg: Color,
+        text_color: Color,
+    ) -> Result<()> {
+        let encoded = self
+            .loaded_render_fonts
+            .encode(text, fonts, area.width - area_x);
+        pgwm_core::debug!("Encoded {encoded:?}");
+        self.call_wrapper
+            .fill_xrender_rectangle(dbw.window.picture, bg.as_render_color(), area)?;
+        self.call_wrapper.fill_xrender_rectangle(
+            dbw.pixmap.picture,
+            text_color.as_render_color(),
+            Dimensions::new(1, 1, 0, 0),
+        )?;
+        let mut offset = area.x + area_x;
+        for chunk in encoded {
+            let box_shift = (area.height - chunk.font_height as i16) / 2;
+
+            self.call_wrapper.draw_glyphs(
+                offset,
+                area.y + area_y + box_shift,
+                chunk.glyph_set,
+                dbw,
+                &chunk.glyph_ids,
             )?;
-            if !draw.is_null() {
-                XftDrawDestroy(draw);
-            }
-            XSync(self.dpy, 0);
-            Ok(drawn)
+
+            offset += chunk.width as i16;
         }
+        Ok(())
     }
+}
 
-    fn draw_with_available(
-        &self,
-        drawable: *mut XftDraw,
-        text: &str,
-        fonts: &[String],
-        color: *const XftColor,
-        x_start: u32,
-        y: u32,
-        status_bar_height: i16,
-    ) -> Result<u16> {
-        let (width, _) =
-            self.pass_over_buf(text, fonts, x_start, |str, font, current_offset| unsafe {
-                let res = self.do_draw(
-                    drawable,
-                    str,
-                    font,
-                    color,
-                    current_offset as u32,
-                    y,
-                    status_bar_height,
-                )?;
-                Ok(res as u32)
-            })?;
-        Ok(width - x_start as u16)
-    }
-
-    pub fn get_width_and_height(&self, text: &str, fonts: &[String]) -> Result<(u16, u16)> {
-        self.pass_over_buf(text, fonts, 0, |str, font, _| {
-            let repr = CString::new(str)?;
-            let exts = self.get_exts(
-                font,
-                repr.as_ptr().cast::<u8>(),
-                repr.as_bytes().len() as c_int,
-            )?;
-            Ok(exts.xOff as u32)
-        })
-    }
-
-    fn pass_over_buf<F>(
-        &self,
-        text: &str,
-        fonts: &[String],
-        start_offset: u32,
-        mut func: F,
-    ) -> Result<(u16, u16)>
-    where
-        F: FnMut(&str, *mut XftFont, u32) -> Result<u32>,
+pub(crate) fn load_alloc_fonts<'a>(
+    call_wrapper: &'a CallWrapper<'a>,
+    vis_info: &RenderVisualInfo,
+    fonts: &'a Fonts,
+    char_remap: &'a HashMap<heapless::String<4>, FontCfg>,
+) -> Result<HashMap<&'a FontCfg, LoadedFont>> {
+    let mut map = HashMap::new();
+    for f_cfg in fonts
+        .workspace_section
+        .iter()
+        .chain(fonts.window_name_display_section.iter())
+        .chain(fonts.status_section.iter())
+        .chain(fonts.shortcut_section.iter())
+        .chain(fonts.tab_bar_section.iter())
+        .chain(char_remap.values())
     {
-        let mut check_font_ind = 0;
-        let mut cur_font = self.get_font(fonts[check_font_ind].as_str())?;
-        let mut char_buf: heapless::String<FONT_WRITE_BUF_LIMIT> = heapless::String::new();
-        let mut current_offset = start_offset;
-        let mut max_height = 0;
-        for cur_char in text.chars() {
-            unsafe {
-                let utf8val = cur_char as u32;
-                loop {
-                    if let Some(manual_mapping) = self.icon_mapping.get(&cur_char) {
-                        if !char_buf.is_empty() {
-                            let str = char_buf.as_str();
-                            current_offset += func(str, cur_font, current_offset)?;
-                            let height = (*cur_font).ascent + (*cur_font).descent;
-                            if height >= max_height {
-                                max_height = height;
+        // Ugly and kind of dumb
+        if let Entry::Vacant(v) = map.entry(f_cfg) {
+            let data = std::fs::read(&f_cfg.path)?;
+
+            let gs = call_wrapper.create_glyphset(vis_info)?;
+
+            let mut ids = vec![];
+            let mut infos = vec![];
+            let mut raw_data = vec![];
+            let mut char_map = HashMap::new();
+            let size = f_cfg.size.parse::<f32>().map_err(|_| Error::ParseFloat)?;
+            let rasterized = fontdue::rasterize_all(
+                data.as_slice(),
+                size,
+                FontSettings {
+                    collection_index: 0,
+                    scale: size, // We're just oneshot rasterizing here so the size we're drawing for = scale without waste
+                },
+            )
+            .map_err(Error::FontLoad)?;
+            for data in rasterized.data {
+                ids.push(data.ch as u32);
+                for byte in data.buf {
+                    raw_data.extend_from_slice(&[byte, byte, byte, byte]);
+                }
+                // When placing chars next to each other this is the appropriate width to use
+                let horizontal_space = data.metrics.advance_width.ceil() as i16;
+                let glyph_info = Glyphinfo {
+                    width: data.metrics.width as u16,
+                    height: data.metrics.height as u16,
+                    x: -data.metrics.xmin as i16,
+                    y: data.metrics.height as i16 - rasterized.max_height as i16
+                        + data.metrics.ymin as i16, // pt2
+                    x_off: horizontal_space,
+                    y_off: data.metrics.advance_height.ceil() as i16,
+                };
+                infos.push(glyph_info);
+                char_map.insert(
+                    data.ch,
+                    CharInfo {
+                        glyph_id: data.ch as u32,
+                        horizontal_space,
+                        height: data.metrics.height as u16,
+                    },
+                );
+            }
+            call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
+            v.insert(LoadedFont {
+                glyph_set: gs,
+                char_map,
+                font_height: rasterized.max_height as i16,
+            });
+        }
+    }
+    Ok(map)
+}
+
+pub struct LoadedFonts<'a> {
+    pub(crate) fonts: HashMap<&'a FontCfg, LoadedFont>,
+    chars: HashMap<char, LoadedChar>,
+}
+
+struct LoadedChar {
+    gsid: Glyphset,
+    char_info: CharInfo,
+    font_height: i16,
+}
+
+impl<'a> LoadedFonts<'a> {
+    pub(crate) fn new(
+        fonts: HashMap<&'a FontCfg, LoadedFont>,
+        char_mapping: &HashMap<heapless::String<4>, FontCfg>,
+    ) -> Result<Self> {
+        let mut chars = HashMap::new();
+        for (char, font) in char_mapping {
+            let maybe_char = char.chars().next();
+            match maybe_char {
+                Some(char) => match fonts.get(font) {
+                    Some(loaded) => match loaded.char_map.get(&char) {
+                        Some(char_info) => {
+                            chars.insert(
+                                char,
+                                LoadedChar {
+                                    gsid: loaded.glyph_set,
+                                    char_info: *char_info,
+                                    font_height: loaded.font_height,
+                                },
+                            );
+                        }
+                        None => return Err(Error::FontLoad("Char not in specified font")),
+                    },
+                    None => return Err(Error::FontLoad("Font not loaded when expected")),
+                },
+                None => return Err(Error::BadCharFontMapping("No char supplied")),
+            }
+        }
+        Ok(Self { fonts, chars })
+    }
+
+    #[must_use]
+    pub fn encode(&self, text: &str, fonts: &[FontCfg], max_width: i16) -> Vec<FontEncodedChunk> {
+        let mut total_width = 0;
+        let mut total_glyphs = 0;
+        let mut cur_width = 0;
+        let mut cur_gs = None;
+        let mut cur_glyphs = vec![];
+        let mut chunks = vec![];
+        let mut cur_font_height = 0;
+        for char in text.chars() {
+            total_glyphs += 1;
+            if let Some(lchar) = self.chars.get(&char) {
+                if !cur_glyphs.is_empty() {
+                    chunks.push(FontEncodedChunk {
+                        width: std::mem::take(&mut cur_width),
+                        font_height: std::mem::take(&mut cur_font_height),
+                        glyph_set: cur_gs.unwrap(),
+                        glyph_ids: std::mem::take(&mut cur_glyphs),
+                    });
+                }
+                // Early return if next char would go OOB
+                if total_width + lchar.char_info.horizontal_space > max_width {
+                    if !cur_glyphs.is_empty() {
+                        chunks.push(FontEncodedChunk {
+                            width: cur_width,
+                            font_height: cur_font_height,
+                            glyph_set: cur_gs.unwrap(),
+                            glyph_ids: cur_glyphs,
+                        });
+                    }
+                    return chunks;
+                }
+                total_width += lchar.char_info.horizontal_space;
+                chunks.push(FontEncodedChunk {
+                    width: lchar.char_info.horizontal_space,
+                    font_height: lchar.font_height,
+                    glyph_set: lchar.gsid,
+                    glyph_ids: vec![lchar.char_info.glyph_id],
+                });
+            } else {
+                for font in fonts {
+                    if let Some((gs, info, mh)) = self.fonts.get(font).and_then(|loaded| {
+                        loaded
+                            .char_map
+                            .get(&char)
+                            .map(|info| (loaded.glyph_set, info, loaded.font_height))
+                    }) {
+                        if cur_gs.is_none() {
+                            cur_gs = Some(gs);
+                        }
+                        if gs != cur_gs.unwrap() {
+                            chunks.push(FontEncodedChunk {
+                                width: std::mem::take(&mut cur_width),
+                                font_height: mh,
+                                glyph_set: cur_gs.unwrap(),
+                                glyph_ids: std::mem::take(&mut cur_glyphs),
+                            });
+                            cur_gs = Some(gs);
+                            cur_width = 0;
+                        }
+                        // Early return if next char would go OOB
+                        if total_width + info.horizontal_space > max_width {
+                            if !cur_glyphs.is_empty() {
+                                chunks.push(FontEncodedChunk {
+                                    width: cur_width,
+                                    font_height: cur_font_height,
+                                    glyph_set: cur_gs.unwrap(),
+                                    glyph_ids: cur_glyphs,
+                                });
                             }
-                            char_buf = heapless::String::new();
+                            return chunks;
                         }
-                        cur_font = *manual_mapping;
-                        char_buf.push(cur_char).unwrap();
-                        let str = char_buf.as_str();
-                        current_offset += func(str, cur_font, current_offset)?;
-                        let height = (*cur_font).ascent + (*cur_font).descent;
-                        if height >= max_height {
-                            max_height = height;
+                        total_width += info.horizontal_space;
+                        cur_width += info.horizontal_space as i16;
+                        cur_font_height = mh;
+                        cur_glyphs.push(info.glyph_id);
+                    }
+                }
+            }
+            // Magic 254 glyph limit, might use a better solution than just cutting it off
+            if total_glyphs == 254 {
+                break;
+            }
+        }
+        if !cur_glyphs.is_empty() {
+            chunks.push(FontEncodedChunk {
+                width: cur_width,
+                font_height: cur_font_height,
+                glyph_set: cur_gs.unwrap(),
+                glyph_ids: cur_glyphs,
+            });
+        }
+        chunks
+    }
+
+    pub fn geometry(&self, text: &str, fonts: &[FontCfg]) -> (i16, u16) {
+        let mut width = 0;
+        let mut height = 0;
+        for char in text.chars() {
+            if let Some(lchar) = self.chars.get(&char) {
+                width += lchar.char_info.horizontal_space;
+                if height < lchar.char_info.height {
+                    height = lchar.char_info.height;
+                }
+            } else {
+                for font_name in fonts {
+                    if let Some(info) = self
+                        .fonts
+                        .get(font_name)
+                        .and_then(|loaded| loaded.char_map.get(&char))
+                    {
+                        width += info.horizontal_space;
+                        if height < info.height {
+                            height = info.height;
                         }
-                        char_buf = heapless::String::new();
-                        check_font_ind = 0; // Use default font if possible
-                        cur_font = self.get_font(fonts[check_font_ind].as_str())?;
-                        break;
-                    } else if XftCharExists(self.dpy, cur_font, utf8val) == 0 {
-                        if !char_buf.is_empty() {
-                            let str = char_buf.as_str();
-                            current_offset += func(str, cur_font, current_offset)?;
-                            let height = (*cur_font).ascent + (*cur_font).descent;
-                            if height >= max_height {
-                                max_height = height;
-                            }
-                            char_buf = heapless::String::new();
-                        }
-                        if check_font_ind < fonts.len() - 1 {
-                            check_font_ind += 1;
-                            cur_font = self.get_font(fonts[check_font_ind].as_str())?;
-                        } else {
-                            check_font_ind = 0;
-                            cur_font = self.get_font(fonts[check_font_ind].as_str())?;
-                            if !char_buf.is_empty() {
-                                let str = char_buf.as_str();
-                                current_offset += func(str, cur_font, current_offset)?;
-                                let height = (*cur_font).ascent + (*cur_font).descent;
-                                if height >= max_height {
-                                    max_height = height;
-                                }
-                                char_buf = heapless::String::new();
-                            }
-                            break;
-                        }
-                    } else {
-                        char_buf.push(cur_char).unwrap();
-                        // Dump buf if too big or if we can switch to normal font
-                        if check_font_ind != 0
-                            || char_buf.len() > FONT_WRITE_BUF_LIMIT - UTF8_CHAR_MAX_BYTES
-                        {
-                            check_font_ind = 0; // Use default font if possible
-                            let str = char_buf.as_str();
-                            current_offset += func(str, cur_font, current_offset)?;
-                            let height = (*cur_font).ascent + (*cur_font).descent;
-                            if height >= max_height {
-                                max_height = height;
-                            }
-                            char_buf = heapless::String::new();
-                            cur_font = self.get_font(fonts[check_font_ind].as_str())?;
-                        }
-                        break;
+                        continue;
                     }
                 }
             }
         }
-        if !char_buf.is_empty() {
-            let str = char_buf.as_str();
-            current_offset += func(str, cur_font, current_offset)?;
-            unsafe {
-                let height = (*cur_font).ascent + (*cur_font).descent;
-                if height >= max_height {
-                    max_height = height;
-                }
-            }
-        }
-        Ok((current_offset as u16, max_height as u16))
-    }
-
-    unsafe fn do_draw(
-        &self,
-        drawable: *mut XftDraw,
-        text: &str,
-        font: *mut XftFont,
-        color: *const XftColor,
-        x: u32,
-        y: u32,
-        status_bar_height: i16,
-    ) -> Result<u16> {
-        let len = text.as_bytes().len() as c_int;
-        let converted = text.as_ptr().cast::<u8>();
-        let font_deref = *font;
-        let y =
-            y as c_int + (status_bar_height as c_int - font_deref.height) / 2 + font_deref.ascent;
-        XftDrawStringUtf8(drawable, color, font, x as c_int, y, converted, len);
-        let exts = self.get_exts(font, converted, len)?;
-        Ok(exts.xOff as u16)
-    }
-
-    fn get_exts(&self, font: *mut XftFont, text: *const c_uchar, len: c_int) -> Result<XGlyphInfo> {
-        let mut glyph_info = MaybeUninit::uninit();
-        unsafe {
-            XftTextExtentsUtf8(self.dpy, font, text, len, glyph_info.as_mut_ptr());
-            if glyph_info.as_ptr().is_null() {
-                Err(XftError::GetGlyphInfo.into())
-            } else {
-                Ok(glyph_info.assume_init())
-            }
-        }
-    }
-
-    fn create_draw(&self, win: Window) -> Result<*mut XftDraw> {
-        unsafe {
-            if !self.visual.is_null() {
-                let draw_create = XftDrawCreate(self.dpy, win as u64, self.visual, self.color_map);
-                if !draw_create.is_null() {
-                    return Ok(draw_create);
-                }
-            }
-        }
-        Err(XftError::CreateDraw.into())
-    }
-
-    unsafe fn load_color(&mut self, user_color: Color) -> Result<()> {
-        let mut color: MaybeUninit<XftColor> = MaybeUninit::uninit();
-        let (red, green, blue, alpha) = user_color.rgba8.to_rgba16();
-        let render_col = XRenderColor {
-            red,
-            green,
-            blue,
-            alpha,
-        };
-        let ptr = std::ptr::addr_of!(render_col);
-        let exit_code = XftColorAllocValue(
-            self.dpy,
-            self.visual,
-            self.color_map,
-            ptr,
-            color.as_mut_ptr(),
-        );
-        if exit_code == 0 || color.as_ptr().is_null() {
-            return Err(XftError::AllocColorByRgb(format!("{:?}", user_color)).into());
-        }
-        pgwm_core::debug!(
-            "Allocated RGBA ({}, {}, {}, {}) as pixel {}",
-            red,
-            green,
-            blue,
-            alpha,
-            color.assume_init().pixel
-        );
-        self.loaded_colors.insert(user_color.pixel, color);
-        Ok(())
-    }
-
-    fn get_font(&self, font_name: &'a str) -> Result<*mut XftFont> {
-        self.loaded_fonts
-            .get(font_name)
-            .copied()
-            .ok_or_else(|| XftError::LoadFont(font_name.to_owned()).into())
-    }
-
-    fn load_font(&mut self, font_name: &'a str) -> Result<()> {
-        if !self.loaded_fonts.contains_key(font_name) {
-            let loaded = get_font(self.dpy, font_name)?;
-            pgwm_core::debug!("Loaded font {}", font_name);
-            self.loaded_fonts.insert(font_name, loaded);
-        }
-        Ok(())
+        (width, height)
     }
 }
 
-// Just clean up some stuff
-#[allow(unsafe_code)]
-impl<'a> Drop for FontManager<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            for font_ptr in self.loaded_fonts.values() {
-                if !font_ptr.is_null() {
-                    XftFontClose(self.dpy, *font_ptr);
-                }
-            }
-            for col_ptr in self.loaded_colors.values_mut() {
-                if !col_ptr.as_mut_ptr().is_null() {
-                    XftColorFree(self.dpy, self.visual, self.color_map, col_ptr.as_mut_ptr());
-                }
-            }
-            if !self.dpy.is_null() {
-                XCloseDisplay(self.dpy);
-            }
-        }
-    }
+#[derive(Debug)]
+pub struct FontEncodedChunk {
+    width: i16,
+    font_height: i16,
+    glyph_set: Glyphset,
+    glyph_ids: Vec<u32>,
 }
 
-#[allow(unsafe_code)]
-fn get_font(dpy: *mut Display, font_name: &str) -> Result<*mut XftFont> {
-    unsafe {
-        let cstr = CString::new(font_name)?;
-        let xft_font = XftFontOpenName(dpy, 0, cstr.as_ptr());
-        if xft_font.is_null() {
-            pgwm_core::debug!("Nullptr from opening font");
-            Err(XftError::LoadFont(font_name.to_owned()).into())
-        } else {
-            Ok(xft_font)
-        }
-    }
+#[allow(clippy::module_name_repetitions)]
+pub struct LoadedFont {
+    pub glyph_set: Glyphset,
+    pub char_map: HashMap<char, CharInfo>,
+    pub font_height: i16,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct CharInfo {
+    pub glyph_id: u32,
+    pub horizontal_space: i16,
+    pub height: u16,
 }

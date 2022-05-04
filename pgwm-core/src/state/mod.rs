@@ -10,13 +10,14 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use x11rb::protocol::xproto::{Gcontext, Pixmap, Screen, Window};
+use x11rb::protocol::xproto::{Screen, Window};
 
 use crate::config::key_map::KeyBoardMappingKey;
 use crate::config::mouse_map::{MouseActionKey, MouseTarget};
 use crate::config::Action;
 use crate::geometry::draw::Mode;
 use crate::geometry::Dimensions;
+use crate::render::DoubleBufferedRenderPicture;
 use crate::state::bar_geometry::BarGeometry;
 use crate::{
     colors::Colors,
@@ -26,7 +27,7 @@ use crate::{
 
 #[allow(clippy::struct_excessive_bools)]
 pub struct State {
-    pub permanent_drawables: PermanentDrawables,
+    pub wm_check_win: Window,
     pub intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
     pub dying_windows: heapless::CopyVec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
     pub drag_window: Option<(Window, DragPosition)>,
@@ -36,8 +37,6 @@ pub struct State {
     pub sequences_to_ignore: heapless::BinaryHeap<u16, Min, BINARY_HEAP_LIMIT>,
     pub monitors: Vec<Monitor>,
     pub workspaces: Workspaces,
-    #[cfg(feature = "status-bar")]
-    pub status_pixmap: Pixmap,
     pub colors: Colors,
     pub window_border_width: u32,
     pub status_bar_height: i16,
@@ -188,7 +187,7 @@ impl State {
         mon_ind: usize,
     ) -> Option<MouseTarget> {
         let mon = &self.monitors[mon_ind];
-        (clicked_win == mon.bar_win)
+        (clicked_win == mon.bar_win.window.drawable)
             .then(|| {
                 let rel_x = x - mon.dimensions.x;
                 self.bar_geometry.hit_on_click(mon.dimensions.width, rel_x)
@@ -216,25 +215,9 @@ impl State {
     }
 }
 
-pub struct PermanentDrawables {
-    pub wm_check_win: Window,
-    pub tab_bar_pixmap: Pixmap,
-    pub tab_bar_selected_gc: Gcontext,
-    pub tab_bar_deselected_gc: Gcontext,
-    pub tab_bar_text_gc: Gcontext,
-    pub unfocused_workspace_gc: Gcontext,
-    pub selected_unfocused_workspace_gc: Gcontext,
-    pub focused_workspace_gc: Gcontext,
-    pub current_workspace_gc: Gcontext,
-    pub urgent_workspace_gc: Gcontext,
-    pub status_bar_gc: Gcontext,
-    pub shortcut_gc: Gcontext,
-}
-
 pub struct Monitor {
-    pub bar_win: Window,
-    pub bar_pixmap: Pixmap,
-    pub tab_bar_win: Window,
+    pub bar_win: DoubleBufferedRenderPicture,
+    pub tab_bar_win: DoubleBufferedRenderPicture,
     pub dimensions: Dimensions,
     pub hosted_workspace: usize,
     pub last_focus: Option<ManagedWindow>,
@@ -304,17 +287,39 @@ mod tests {
     use crate::colors::{Color, Colors};
     use crate::config::{Cfg, USED_DIFFERENT_COLOR_SEGMENTS};
     use crate::geometry::{Dimensions, Line};
+    use crate::render::{DoubleBufferedRenderPicture, RenderPicture};
     use crate::state::bar_geometry::{BarGeometry, ShortcutSection, WorkspaceSection};
     use crate::state::workspace::{ArrangeKind, FocusStyle, ManagedWindow, Workspaces};
-    use crate::state::{Monitor, PermanentDrawables, State};
+    use crate::state::{Monitor, State};
     use x11rb::protocol::xproto::{BackingStore, Screen};
 
     fn create_base_state() -> State {
         let cfg = Cfg::default();
         let monitor0 = Monitor {
-            bar_win: 0,
-            bar_pixmap: 0,
-            tab_bar_win: 0,
+            bar_win: DoubleBufferedRenderPicture {
+                window: RenderPicture {
+                    drawable: 0,
+                    picture: 0,
+                    format: 0,
+                },
+                pixmap: RenderPicture {
+                    drawable: 0,
+                    picture: 0,
+                    format: 0,
+                },
+            },
+            tab_bar_win: DoubleBufferedRenderPicture {
+                window: RenderPicture {
+                    drawable: 0,
+                    picture: 0,
+                    format: 0,
+                },
+                pixmap: RenderPicture {
+                    drawable: 0,
+                    picture: 0,
+                    format: 0,
+                },
+            },
             dimensions: Dimensions::new(1000, 1000, 0, 0),
             hosted_workspace: 0,
             last_focus: None,
@@ -322,9 +327,30 @@ mod tests {
             window_title_display: heapless::String::default(),
         };
         let monitor1 = Monitor {
-            bar_win: 0,
-            bar_pixmap: 0,
-            tab_bar_win: 0,
+            bar_win: DoubleBufferedRenderPicture {
+                window: RenderPicture {
+                    drawable: 0,
+                    picture: 0,
+                    format: 0,
+                },
+                pixmap: RenderPicture {
+                    drawable: 0,
+                    picture: 0,
+                    format: 0,
+                },
+            },
+            tab_bar_win: DoubleBufferedRenderPicture {
+                window: RenderPicture {
+                    drawable: 0,
+                    picture: 0,
+                    format: 0,
+                },
+                pixmap: RenderPicture {
+                    drawable: 0,
+                    picture: 0,
+                    format: 0,
+                },
+            },
             dimensions: Dimensions::new(1000, 1000, 1000, 0),
             hosted_workspace: 1,
             last_focus: None,
@@ -334,25 +360,12 @@ mod tests {
         let pixels: heapless::CopyVec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
             std::iter::repeat_with(|| Color {
                 pixel: 0,
-                rgba8: (0, 0, 0, 0),
+                bgra8: [0, 0, 0, 0],
             })
             .take(USED_DIFFERENT_COLOR_SEGMENTS)
             .collect();
         State {
-            permanent_drawables: PermanentDrawables {
-                wm_check_win: 0,
-                tab_bar_pixmap: 0,
-                tab_bar_selected_gc: 0,
-                tab_bar_deselected_gc: 0,
-                tab_bar_text_gc: 0,
-                unfocused_workspace_gc: 0,
-                selected_unfocused_workspace_gc: 0,
-                focused_workspace_gc: 0,
-                current_workspace_gc: 0,
-                urgent_workspace_gc: 0,
-                status_bar_gc: 0,
-                shortcut_gc: 0,
-            },
+            wm_check_win: 0,
             intern_created_windows: heapless::IndexSet::default(),
             dying_windows: heapless::CopyVec::default(),
             drag_window: None,
@@ -379,8 +392,6 @@ mod tests {
             sequences_to_ignore: heapless::BinaryHeap::default(),
             monitors: vec![monitor0, monitor1],
             workspaces: Workspaces::create_empty(&cfg.workspaces, cfg.tiling_modifiers).unwrap(),
-            #[cfg(feature = "status-bar")]
-            status_pixmap: 0,
             colors: Colors::from_vec(pixels),
             window_border_width: 0,
             status_bar_height: 0,

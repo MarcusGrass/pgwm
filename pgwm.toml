@@ -94,39 +94,49 @@ shortcut_background = [28, 31, 36, 0]
 shortcut_text = [223, 223, 223, 0]
 
 # Fonts that the WM uses to draw different sections
-# Fonts are picked left-to right out of available fonts, drawing single chars and falling back if they are missing in the current font
-# If no font can draw a character some x11 default character will be drawn instead.
+# Fonts are picked left-to right out of available fonts, drawing single chars and falling back if they are missing in the current render
+# If no render can draw a character some x11 default character will be drawn instead.
 [fonts]
 # Fonts to use when drawing workspace names (top left of status-bar)
-workspace_section = ["JetBrains Mono Nerd Font:size=10:antialias=true"]
+workspace_section = [
+    { path = "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf", size = "14.0" },
+]
 # Fonts to use when the currentl focused window's name
-window_name_display_section = ["JetBrains Mono Nerd Font:size=10:antialias=true"]
+window_name_display_section = [
+    { path = "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf", size = "14.0" },
+]
 # Fonts to use when drawing the status section
-status_section = ["JetBrains Mono Nerd Font:size=10:antialias=true"]
+status_section = [
+    { path = "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf", size = "14.0" },
+]
 # Fonts to use when drawing the name of tabbed windows
-tab_bar_section = ["JetBrains Mono Nerd Font:size=10:antialias=true"]
+tab_bar_section = [
+    { path = "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf", size = "14.0" },
+]
 # Fonts to use when drawing the shortcut section
-shortcut_section = ["JetBrains Mono Nerd Font:size=10:antialias=true"]
+shortcut_section = [
+    { path = "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf", size = "14.0" },
+]
 
 # Mapping for specific characters to specific fonts.
-# If a certain font contains a desired icon the mapping for that char-mapping is put below
+# If a certain render contains a desired icon the mapping for that char-mapping is put below
 [char-remap]
-"\uf121" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf120" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf086" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\ue007" = "Font Awesome 6 Brands:pixelsize=11"
-"\uf1bc" = "Font Awesome 6 Brands:pixelsize=11"
-"\uf11b" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf7d9" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf02b" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf02c" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf2db" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf538" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf019" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf093" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf073" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf502" = "Font Awesome 6 Free Solid:pixelsize=11"
-"\uf304" = "Font Awesome 6 Free Solid:pixelsize=11"
+"\uf121" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf120" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf086" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\ue007" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf", size = "13.0" }
+"\uf1bc" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf", size = "13.0" }
+"\uf11b" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf7d9" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf02b" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf02c" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf2db" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf538" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf019" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf093" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf073" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf502" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+"\uf304" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
 
 # Available workspaces and their names and respective class_name mappings
 # The mapped_class_names is an array of wm class names

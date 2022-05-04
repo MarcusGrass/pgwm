@@ -48,4 +48,6 @@ pub enum Error {
     #[cfg(feature = "status-bar")]
     #[error("Failed to parse proc stat, could not find aggregate CPU")]
     ProcStatParseError,
+    #[error("Error loading render {0}")]
+    FontLoad(String),
 }

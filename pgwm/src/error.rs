@@ -16,12 +16,14 @@ pub(crate) enum Error {
     X11Reply(#[from] ReplyError),
     #[error(transparent)]
     X11IdCreation(#[from] ReplyOrIdError),
+    #[error("Number of glyph ids not corresponding to number of metrics")]
+    GlyphMismatch,
     #[error("Could not become wm, access denied, there is likely another WM running")]
     BecomeWm,
     #[error("Failed to calculate correct tiling dimensions (this is a programming error)")]
     Tiling,
-    #[error(transparent)]
-    Xft(#[from] XftError),
+    #[error("Failed to find an appropriate 32 bit depth visual")]
+    NoAppropriateVisual,
     #[error(transparent)]
     ContentToCstr(#[from] NulError),
     #[error(transparent)]
@@ -36,18 +38,10 @@ pub(crate) enum Error {
     StateInvalidated,
     #[error("Exit triggered")]
     GracefulShutdown,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub(crate) enum XftError {
-    #[error("Failed to alloc color {0:?} by rgb")]
-    AllocColorByRgb(String),
+    #[error("Size not parseable as f32")]
+    ParseFloat,
     #[error("Failed to load font {0}")]
-    LoadFont(String),
-    #[error("Failed to get glyph info")]
-    GetGlyphInfo,
-    #[error("Failed to create xft draw")]
-    CreateDraw,
-    #[error("Failed to open display")]
-    OpenDisplay,
+    FontLoad(&'static str),
+    #[error("Invalid char to font mapping {0}")]
+    BadCharFontMapping(&'static str),
 }

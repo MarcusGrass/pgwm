@@ -1,4 +1,4 @@
-# PGWM, a DWM-inspired tiling window manager written in Rust
+# PGWM, a DWM-inspired tiling window manager written in pure safe Rust
 [![Latest workflow](https://github.com/MarcusGrass/pgwm/workflows/CI/badge.svg)](https://github.com/MarcusGrass/pgwm/actions)
 
 The WM is to my understanding compliant with the [wm-spec](https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html).
@@ -78,10 +78,8 @@ if there is, please let me know by creating an issue.
 ![multi-monitor-tabbed-float](demo3.png)
 
 # How to build
-To build locally libx11-dev, libxft-dev, platform build essentials, and lld is required
+To build locally platform build essentials, is required
 see the [min building dockerfile](.docker/minimal-build.dockerfile).  
-Lld is not a strict requirement but if not using lld either edit or remove the line `"-C", "link-arg=-fuse-ld=lld",` from
-[config.toml](.cargo/config.toml)  
 To run the same test as the ci locally libssl and perl is also required, 
 [see the ci dockerfile](.docker/full-checks.dockerfile).
 
@@ -219,9 +217,9 @@ wmname compiz # or wmname LG3D
 ```
 
 # Resources
-The WM, according to `smem` on glibc, has a PSS of around 5Mb Memory usage and no known memory leaks,
-a memory leak would likely result in a crash rather than a slow increase over time since most if not all dynamic
-datastructures are on the stack.  
+The WM, according to `smem` on glibc, has a USS/PSS/RSS of around 2M when built for musl with the optimized profile and no known leaks,
+a memory leak would likely result in a crash rather than a slow increase over time since most dynamic
+data structures are on the stack.  
 CPU-wise it has a fairly low usage, with idle usage that depends completely on whether you use the status bar, what update frequency you're
 running it on, and which checks you're using. Running the full checks on a 1 second interval as I am doing currently draws very little cpu.
 

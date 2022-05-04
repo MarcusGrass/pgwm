@@ -13,10 +13,12 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_precision_loss)]
+#![allow(clippy::module_name_repetitions)]
 pub mod colors;
 pub mod config;
 pub mod error;
 pub mod geometry;
+pub mod render;
 pub mod state;
 #[cfg(feature = "status-bar")]
 pub mod status;

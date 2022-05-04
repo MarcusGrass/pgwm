@@ -7,19 +7,20 @@ use x11rb::cookie::VoidCookie;
 
 use pgwm_core::colors::Colors;
 use pgwm_core::config::{
-    Action, Fonts, Shortcut, SimpleKeyMapping, SimpleMouseMapping, TilingModifiers,
+    Action, FontCfg, Fonts, Shortcut, SimpleKeyMapping, SimpleMouseMapping, TilingModifiers,
     APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE,
 };
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::{STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP};
 use pgwm_core::geometry::{Dimensions, Line};
 use pgwm_core::state::workspace::Workspaces;
-use pgwm_core::state::{Monitor, PermanentDrawables, State, WinMarkedForDeath};
+use pgwm_core::state::{Monitor, State, WinMarkedForDeath};
 
 use pgwm_core::config::key_map::{KeyBoardMappingKey, KeyboardMapping};
 use pgwm_core::config::mouse_map::MouseActionKey;
 use pgwm_core::config::workspaces::UserWorkspace;
 use pgwm_core::push_heapless;
+use pgwm_core::render::{DoubleBufferedRenderPicture, RenderPicture, RenderVisualInfo};
 #[cfg(feature = "status-bar")]
 use pgwm_core::state::bar_geometry::StatusSection;
 use pgwm_core::state::bar_geometry::{
@@ -32,13 +33,14 @@ use x11rb::protocol::xproto::{
 use x11rb::rust_connection::RustConnection;
 use x11rb::COPY_DEPTH_FROM_PARENT;
 
-use crate::manager::font::FontManager;
+use crate::manager::font::{FontDrawer, LoadedFonts};
 use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) fn create_state<'a>(
     connection: &'a RustConnection,
     call_wrapper: &'a CallWrapper<'a>,
-    font_manager: &'a FontManager<'a>,
+    font_manager: &'a FontDrawer<'a>,
+    visual: RenderVisualInfo,
     fonts: &'a Fonts,
     screen: &'a Screen,
     colors: Colors,
@@ -72,12 +74,13 @@ pub(crate) fn create_state<'a>(
         call_wrapper,
         font_manager,
         fonts,
+        visual,
         screen.clone(),
         static_state.intern_created_windows,
         &heapless::CopyVec::new(),
         Workspaces::create_empty(init_workspaces, tiling_modifiers)?,
         colors,
-        static_state.permanent_drawables,
+        static_state.wm_check_win,
         static_state.sequences_to_ignore,
         cursor_name,
         false,
@@ -103,8 +106,9 @@ pub(crate) fn create_state<'a>(
 pub(crate) fn reinit_state<'a>(
     connection: &'a RustConnection,
     call_wrapper: &'a CallWrapper<'a>,
-    font_manager: &'a FontManager<'a>,
+    font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
+    visual: RenderVisualInfo,
     state: State,
     init_workspaces: &[UserWorkspace],
     shortcuts: &[Shortcut],
@@ -117,12 +121,13 @@ pub(crate) fn reinit_state<'a>(
         call_wrapper,
         font_manager,
         fonts,
+        visual,
         state.screen.clone(),
         state.intern_created_windows,
         &state.dying_windows,
         state.workspaces,
         state.colors,
-        state.permanent_drawables,
+        state.wm_check_win,
         state.sequences_to_ignore,
         state.cursor_name,
         state.pointer_grabbed,
@@ -147,29 +152,24 @@ pub(crate) fn reinit_state<'a>(
 
 pub(crate) fn teardown_dynamic_state(connection: &RustConnection, state: &State) -> Result<()> {
     for mon in &state.monitors {
-        connection.destroy_window(mon.tab_bar_win)?;
-        connection.destroy_window(mon.bar_win)?;
-        connection.free_pixmap(mon.bar_pixmap)?;
+        connection.destroy_window(mon.bar_win.window.drawable)?;
+        x11rb::protocol::render::free_picture(connection, mon.bar_win.window.picture)?;
+        connection.destroy_window(mon.tab_bar_win.window.drawable)?;
+        x11rb::protocol::render::free_picture(connection, mon.tab_bar_win.window.picture)?;
     }
-    #[cfg(feature = "status-bar")]
-    connection.free_pixmap(state.status_pixmap)?;
     Ok(())
 }
 
-pub(crate) fn teardown_full_state(connection: &RustConnection, state: &State) -> Result<()> {
+pub(crate) fn teardown_full_state(
+    connection: &RustConnection,
+    state: &State,
+    loaded_fonts: &LoadedFonts,
+) -> Result<()> {
     let _ = teardown_dynamic_state(connection, state);
-    connection.destroy_window(state.permanent_drawables.wm_check_win)?;
-    connection.free_pixmap(state.permanent_drawables.tab_bar_pixmap)?;
-    connection.free_gc(state.permanent_drawables.shortcut_gc)?;
-    connection.free_gc(state.permanent_drawables.status_bar_gc)?;
-    connection.free_gc(state.permanent_drawables.tab_bar_text_gc)?;
-    connection.free_gc(state.permanent_drawables.tab_bar_selected_gc)?;
-    connection.free_gc(state.permanent_drawables.tab_bar_deselected_gc)?;
-    connection.free_gc(state.permanent_drawables.urgent_workspace_gc)?;
-    connection.free_gc(state.permanent_drawables.focused_workspace_gc)?;
-    connection.free_gc(state.permanent_drawables.current_workspace_gc)?;
-    connection.free_gc(state.permanent_drawables.selected_unfocused_workspace_gc)?;
-    connection.free_gc(state.permanent_drawables.unfocused_workspace_gc)?;
+    connection.destroy_window(state.wm_check_win)?;
+    for font in loaded_fonts.fonts.values() {
+        x11rb::protocol::render::free_glyph_set(connection, font.glyph_set)?;
+    }
     Ok(())
 }
 
@@ -178,14 +178,15 @@ pub(crate) fn teardown_full_state(connection: &RustConnection, state: &State) ->
 fn do_create_state<'a>(
     connection: &'a RustConnection,
     call_wrapper: &'a CallWrapper<'a>,
-    font_manager: &'a FontManager<'a>,
+    font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
+    vis_info: RenderVisualInfo,
     screen: Screen,
     mut intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
     dying_windows: &heapless::CopyVec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
     workspaces: Workspaces,
     colors: Colors,
-    permanent_drawables: PermanentDrawables,
+    wm_check_win: Window,
     sequences_to_ignore: heapless::BinaryHeap<u16, Min, BINARY_HEAP_LIMIT>,
     cursor_name: String,
     pointer_grabbed: bool,
@@ -225,7 +226,7 @@ fn do_create_state<'a>(
         intern_created_windows.insert(tab_bar_win).unwrap();
         push_heapless!(
             cookie_container,
-            create_tab_bar_win(connection, &screen, tab_bar_win, dimensions)?
+            create_tab_bar_win(connection, &screen, tab_bar_win, dimensions, tab_bar_height)?
         )?;
         let bar_win = connection.generate_id()?;
         intern_created_windows.insert(bar_win).unwrap();
@@ -250,19 +251,26 @@ fn do_create_state<'a>(
                 status_bar_height as u16
             )?
         )?;
-        init_ws_bar_drawable(
+        if show_bar_initially {
+            connection.map_window(bar_win)?;
+        }
+
+        let bar_win = init_xrender_double_buffered(
             connection,
             call_wrapper,
-            dimensions,
+            screen.root,
             bar_win,
-            permanent_drawables.unfocused_workspace_gc,
-            status_bar_height,
-            show_bar_initially,
+            &vis_info,
         )?;
-
+        let tab_bar_win = init_xrender_double_buffered(
+            connection,
+            call_wrapper,
+            screen.root,
+            tab_bar_win,
+            &vis_info,
+        )?;
         let new_mon = Monitor {
             bar_win,
-            bar_pixmap,
             tab_bar_win,
             dimensions,
             hosted_workspace: i,
@@ -277,7 +285,7 @@ fn do_create_state<'a>(
         fonts,
         init_workspaces,
         workspace_bar_window_name_padding,
-    )?;
+    );
 
     let shortcuts = create_shortcut_geometry(
         font_manager,
@@ -285,33 +293,30 @@ fn do_create_state<'a>(
         workspace_section.position.length,
         shortcuts,
         workspace_bar_window_name_padding,
-    )?;
+    );
     let mouse_mapping = init_mouse(mouse_mappings);
     let key_mapping = init_keys(connection, key_mappings)?;
     grab_keys(connection, &key_mapping, screen.root)?;
-    for bar_win in monitors.iter().map(|mon| mon.bar_win) {
-        init_shortcut_section(
-            call_wrapper,
-            workspace_section.position.start + workspace_section.position.length,
-            bar_win,
-            permanent_drawables.unfocused_workspace_gc,
-            status_bar_height,
-            &shortcuts,
+    for bar_win in monitors.iter().map(|mon| &mon.bar_win) {
+        grab_mouse(
+            connection,
+            bar_win.window.drawable,
+            screen.root,
+            &mouse_mapping,
         )?;
-        grab_mouse(connection, bar_win, screen.root, &mouse_mapping)?;
     }
     #[cfg(feature = "status-bar")]
     let bar_geometry = {
         let sep_len = font_manager
-            .get_width_and_height(STATUS_BAR_CHECK_SEP, &fonts.status_section)?
+            .text_geometry(STATUS_BAR_CHECK_SEP, &fonts.status_section)
             .0;
         let first_sep = font_manager
-            .get_width_and_height(STATUS_BAR_FIRST_SEP, &fonts.status_section)?
+            .text_geometry(STATUS_BAR_FIRST_SEP, &fonts.status_section)
             .0;
         BarGeometry::new(
             workspace_section,
             shortcuts,
-            StatusSection::new(num_checks, sep_len as i16, first_sep as i16),
+            StatusSection::new(num_checks, sep_len, first_sep),
         )
     };
     #[cfg(not(feature = "status-bar"))]
@@ -343,12 +348,10 @@ fn do_create_state<'a>(
         input_focus: None,
         screen: screen.clone(),
         dying_windows: *dying_windows,
-        permanent_drawables,
+        wm_check_win,
         sequences_to_ignore,
         monitors,
         workspaces,
-        #[cfg(feature = "status-bar")]
-        status_pixmap,
         window_border_width,
         colors,
         pointer_grabbed,
@@ -376,8 +379,6 @@ fn create_static_state<'a>(
 ) -> Result<StaticState> {
     let mut intern_created_windows = FnvIndexSet::new();
     let mut gcs = create_gcs(connection, screen, colors)?;
-    let (text_gc, cookie) = create_background_gc(connection, screen.root, screen.black_pixel)?;
-    push_heapless!(cookie_container, cookie)?;
     let tab_pixmap = connection.generate_id()?;
     push_heapless!(
         cookie_container,
@@ -391,23 +392,6 @@ fn create_static_state<'a>(
         cookie_container,
         create_wm_check_win(connection, screen, check_win)?
     )?;
-    let permanent_drawables = PermanentDrawables {
-        tab_bar_pixmap: tab_pixmap,
-        tab_bar_selected_gc: gcs[&colors.tab_bar_focused_tab_background().pixel].0,
-        tab_bar_deselected_gc: gcs[&colors.tab_bar_unfocused_tab_background().pixel].0,
-        tab_bar_text_gc: text_gc,
-        wm_check_win: check_win,
-        unfocused_workspace_gc: gcs[&colors.workspace_bar_unfocused_workspace_background().pixel].0,
-        selected_unfocused_workspace_gc: gcs[&colors
-            .workspace_bar_selected_unfocused_workspace_background()
-            .pixel]
-            .0,
-        focused_workspace_gc: gcs[&colors.workspace_bar_focused_workspace_background().pixel].0,
-        current_workspace_gc: gcs[&colors.workspace_bar_current_window_title_background().pixel].0,
-        urgent_workspace_gc: gcs[&colors.workspace_bar_urgent_workspace_background().pixel].0,
-        status_bar_gc: gcs[&colors.status_bar_background().pixel].0,
-        shortcut_gc: gcs[&colors.shortcut_background().pixel].0,
-    };
     let keys = gcs.keys().copied().collect::<heapless::CopyVec<u32, 8>>();
     for key in keys {
         let (_, cookie) = gcs.remove(&key).unwrap();
@@ -415,14 +399,14 @@ fn create_static_state<'a>(
     }
 
     Ok(StaticState {
-        permanent_drawables,
+        wm_check_win: check_win,
         sequences_to_ignore,
         intern_created_windows,
     })
 }
 
 struct StaticState {
-    permanent_drawables: PermanentDrawables,
+    wm_check_win: Window,
     sequences_to_ignore: heapless::BinaryHeap<u16, Min, BINARY_HEAP_LIMIT>,
     intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
 }
@@ -432,6 +416,7 @@ fn create_tab_bar_win<'a>(
     screen: &Screen,
     tab_bar_win: Window,
     dimensions: Dimensions,
+    tab_bar_height: i16,
 ) -> Result<VoidCookie<'a, RustConnection>> {
     let create_win = CreateWindowAux::new()
         .event_mask(EventMask::BUTTON_PRESS)
@@ -443,7 +428,7 @@ fn create_tab_bar_win<'a>(
         dimensions.x,
         dimensions.y,
         dimensions.width as u16,
-        dimensions.height as u16,
+        tab_bar_height as u16,
         0,
         WindowClass::INPUT_OUTPUT,
         0,
@@ -630,38 +615,38 @@ fn create_status_bar_pixmap<'a>(
 }
 
 fn create_bar_geometry<'a>(
-    font_manager: &'a FontManager<'a>,
+    font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     workspaces: &[UserWorkspace],
     workspace_bar_window_name_padding: u16,
-) -> Result<WorkspaceSection> {
+) -> WorkspaceSection {
     let (components, position) = create_fixed_components(
         workspaces.iter().map(|s| s.name.clone()),
         0,
         workspace_bar_window_name_padding,
         font_manager,
         &fonts.workspace_section,
-    )?;
-    Ok(WorkspaceSection {
+    );
+    WorkspaceSection {
         position,
         components,
-    })
+    }
 }
 fn create_shortcut_geometry<'a>(
-    font_manager: &'a FontManager<'a>,
+    font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     offset: i16,
     shortcuts: &[Shortcut],
     shortcut_padding: u16,
-) -> Result<ShortcutSection> {
+) -> ShortcutSection {
     let (components, position) = create_fixed_components(
         shortcuts.iter().map(|s| s.name.clone()),
         offset,
         shortcut_padding,
         font_manager,
         &fonts.workspace_section,
-    )?;
-    Ok(ShortcutSection {
+    );
+    ShortcutSection {
         width: position.length,
         components: components
             .into_iter()
@@ -671,34 +656,34 @@ fn create_shortcut_geometry<'a>(
                 text: cmp.text,
             })
             .collect(),
-    })
+    }
 }
 
 fn create_fixed_components<It: Iterator<Item = String>>(
     it: It,
     x: i16,
     padding: u16,
-    font_manager: &FontManager,
-    fonts: &[String],
-) -> Result<(Vec<FixedDisplayComponent>, Line)> {
+    font_manager: &FontDrawer,
+    fonts: &[FontCfg],
+) -> (Vec<FixedDisplayComponent>, Line) {
     let mut widths = Vec::new();
     // Equal spacing
     let mut max_width = 0;
     for (i, text) in it.enumerate() {
         widths.push((
-            font_manager.get_width_and_height(text.as_str(), fonts)?.0,
+            font_manager.text_geometry(text.as_str(), fonts).0,
             text.clone(),
         ));
         if widths[i].0 > max_width {
             max_width = widths[i].0;
         }
     }
-    let box_width = max_width + padding;
+    let box_width = max_width as u16 + padding;
     let mut components = Vec::with_capacity(16);
     let mut component_offset = x;
     let num_widths = widths.len();
     for (width, text) in widths {
-        let write_offset = (box_width - width) as f32 / 2f32;
+        let write_offset = (box_width - width as u16) as f32 / 2f32;
         components.push(FixedDisplayComponent {
             position: Line::new(component_offset, box_width as i16),
             write_offset: write_offset as i16,
@@ -707,53 +692,7 @@ fn create_fixed_components<It: Iterator<Item = String>>(
         component_offset += box_width as i16;
     }
     let total_width = num_widths * box_width as usize;
-    Ok((components, Line::new(x, total_width as i16)))
-}
-
-fn init_ws_bar_drawable<'a>(
-    connection: &'a RustConnection,
-    call_wrapper: &'a CallWrapper<'a>,
-    monitor_dimensions: Dimensions,
-    bar_win: Window,
-    deselected_workspace_gc: Gcontext,
-    status_bar_height: i16,
-    show_initially: bool,
-) -> Result<()> {
-    call_wrapper.fill_rectangle(
-        bar_win,
-        deselected_workspace_gc,
-        Dimensions {
-            x: 0,
-            y: 0,
-            width: monitor_dimensions.width,
-            height: status_bar_height,
-        },
-    )?;
-    if show_initially {
-        connection.map_window(bar_win)?;
-    }
-    Ok(())
-}
-
-fn init_shortcut_section<'a>(
-    call_wrapper: &'a CallWrapper<'a>,
-    offset: i16,
-    bar_win: Window,
-    shortcut_bg: Gcontext,
-    status_bar_height: i16,
-    shortcuts: &ShortcutSection,
-) -> Result<()> {
-    call_wrapper.fill_rectangle(
-        bar_win,
-        shortcut_bg,
-        Dimensions {
-            x: offset,
-            y: 0,
-            width: shortcuts.width,
-            height: status_bar_height,
-        },
-    )?;
-    Ok(())
+    (components, Line::new(x, total_width as i16))
 }
 
 fn init_keys(
@@ -844,4 +783,40 @@ fn grab_mouse(
         )?;
     }
     Ok(())
+}
+
+fn init_xrender_double_buffered(
+    connection: &RustConnection,
+    call_wrapper: &CallWrapper,
+    root: Window,
+    window: Window,
+    vis_info: &RenderVisualInfo,
+) -> Result<DoubleBufferedRenderPicture> {
+    let direct = call_wrapper.window_mapped_picture(window, vis_info)?;
+    let write_buf_pixmap = connection.generate_id()?;
+    connection.create_pixmap(vis_info.render.depth, write_buf_pixmap, root, 1, 1)?;
+    let write_buf_picture = call_wrapper.pixmap_mapped_picture(write_buf_pixmap, vis_info)?;
+    call_wrapper.fill_xrender_rectangle(
+        write_buf_picture,
+        x11rb::protocol::render::Color {
+            red: 0xffff,
+            green: 0xffff,
+            blue: 0xffff,
+            alpha: 0xffff,
+        },
+        Dimensions::new(1, 1, 0, 0),
+    )?;
+    connection.free_pixmap(write_buf_pixmap)?;
+    Ok(DoubleBufferedRenderPicture {
+        window: RenderPicture {
+            drawable: window,
+            picture: direct,
+            format: vis_info.root.pict_format,
+        },
+        pixmap: RenderPicture {
+            drawable: write_buf_pixmap,
+            picture: write_buf_picture,
+            format: vis_info.render.pict_format,
+        },
+    })
 }
