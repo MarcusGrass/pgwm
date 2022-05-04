@@ -41,7 +41,9 @@ impl<'a> FontDrawer<'a> {
         bg: Color,
         text_color: Color,
     ) -> Result<()> {
-        let encoded = self.loaded_render_fonts.encode(text, fonts);
+        let encoded = self
+            .loaded_render_fonts
+            .encode(text, fonts, area.width - area_x);
         pgwm_core::debug!("Encoded {encoded:?}");
         self.call_wrapper
             .fill_xrender_rectangle(dbw.window.picture, bg.as_render_color(), area)?;
@@ -184,13 +186,16 @@ impl<'a> LoadedFonts<'a> {
     }
 
     #[must_use]
-    pub fn encode(&self, text: &str, fonts: &[FontCfg]) -> Vec<FontEncodedChunk> {
+    pub fn encode(&self, text: &str, fonts: &[FontCfg], max_width: i16) -> Vec<FontEncodedChunk> {
+        let mut total_width = 0;
+        let mut total_glyphs = 0;
         let mut cur_width = 0;
         let mut cur_gs = None;
         let mut cur_glyphs = vec![];
         let mut chunks = vec![];
         let mut cur_font_height = 0;
         for char in text.chars() {
+            total_glyphs += 1;
             if let Some(lchar) = self.chars.get(&char) {
                 if !cur_glyphs.is_empty() {
                     chunks.push(FontEncodedChunk {
@@ -200,6 +205,19 @@ impl<'a> LoadedFonts<'a> {
                         glyph_ids: std::mem::take(&mut cur_glyphs),
                     });
                 }
+                // Early return if next char would go OOB
+                if total_width + lchar.char_info.horizontal_space > max_width {
+                    if !cur_glyphs.is_empty() {
+                        chunks.push(FontEncodedChunk {
+                            width: cur_width,
+                            font_height: cur_font_height,
+                            glyph_set: cur_gs.unwrap(),
+                            glyph_ids: cur_glyphs,
+                        });
+                    }
+                    return chunks;
+                }
+                total_width += lchar.char_info.horizontal_space;
                 chunks.push(FontEncodedChunk {
                     width: lchar.char_info.horizontal_space,
                     font_height: lchar.font_height,
@@ -227,11 +245,28 @@ impl<'a> LoadedFonts<'a> {
                             cur_gs = Some(gs);
                             cur_width = 0;
                         }
+                        // Early return if next char would go OOB
+                        if total_width + info.horizontal_space > max_width {
+                            if !cur_glyphs.is_empty() {
+                                chunks.push(FontEncodedChunk {
+                                    width: cur_width,
+                                    font_height: cur_font_height,
+                                    glyph_set: cur_gs.unwrap(),
+                                    glyph_ids: cur_glyphs,
+                                });
+                            }
+                            return chunks;
+                        }
+                        total_width += info.horizontal_space;
                         cur_width += info.horizontal_space as i16;
                         cur_font_height = mh;
                         cur_glyphs.push(info.glyph_id);
                     }
                 }
+            }
+            // Magic 254 glyph limit, might use a better solution than just cutting it off
+            if total_glyphs == 254 {
+                break;
             }
         }
         if !cur_glyphs.is_empty() {

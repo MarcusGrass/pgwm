@@ -886,15 +886,17 @@ impl<'a> CallWrapper<'a> {
         glyph_ids: &[u32],
     ) -> Result<()> {
         let mut buf = Vec::with_capacity(glyph_ids.len());
-        if glyph_ids.len() >= 254 {
-            // 252 for elt8, 254 for elt16
-            return Ok(()); // TODO: Better err
-        }
-        buf.extend_from_slice(&[glyph_ids.len() as u8, 0, 0, 0]); // Pad to 32bit
-                                                                  //buf.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]); // Actually a delta x and y as u16s encoded as 2 u8s each <- lies
+        let render = if glyph_ids.len() > 254 {
+            // 252 for elt8, 254 for elt16 and elt32
+            &glyph_ids[..254]
+        } else {
+            glyph_ids
+        };
+        buf.extend_from_slice(&[render.len() as u8, 0, 0, 0]); // Pad to 32bit
+                                                               //buf.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]); // Actually a delta x and y as u16s encoded as 2 u8s each <- lies
         buf.extend_from_slice(&(x).to_ne_bytes()); // Dest x
         buf.extend_from_slice(&(y).to_ne_bytes()); // Dest y, why is it like this, why is the documentation lying to me?
-        for glyph in glyph_ids {
+        for glyph in render {
             buf.extend_from_slice(&glyph.to_ne_bytes()); // Dump to u8s
         }
         x11rb::protocol::render::composite_glyphs32(
