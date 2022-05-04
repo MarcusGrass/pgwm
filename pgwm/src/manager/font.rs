@@ -98,10 +98,14 @@ pub(crate) fn load_alloc_fonts<'a>(
             let mut infos = vec![];
             let mut raw_data = vec![];
             let mut char_map = HashMap::new();
+            let size = f_cfg.size.parse::<f32>().map_err(|_| Error::ParseFloat)?;
             let rasterized = fontdue::rasterize_all(
                 data.as_slice(),
-                f_cfg.size.parse::<f32>().map_err(|_| Error::ParseFloat)?,
-                FontSettings::default(),
+                size,
+                FontSettings {
+                    collection_index: 0,
+                    scale: size, // We're just oneshot rasterizing here so the size we're drawing for = scale without waste
+                },
             )
             .map_err(Error::FontLoad)?;
             for data in rasterized.data {
@@ -109,13 +113,15 @@ pub(crate) fn load_alloc_fonts<'a>(
                 for byte in data.buf {
                     raw_data.extend_from_slice(&[byte, byte, byte, byte]);
                 }
+                // When placing chars next to each other this is the appropriate width to use
+                let horizontal_space = data.metrics.advance_width.ceil() as i16;
                 let glyph_info = Glyphinfo {
                     width: data.metrics.width as u16,
                     height: data.metrics.height as u16,
                     x: -data.metrics.xmin as i16,
                     y: data.metrics.height as i16 - rasterized.max_height as i16
                         + data.metrics.ymin as i16, // pt2
-                    x_off: data.metrics.advance_width.ceil() as i16,
+                    x_off: horizontal_space,
                     y_off: data.metrics.advance_height.ceil() as i16,
                 };
                 infos.push(glyph_info);
@@ -123,7 +129,8 @@ pub(crate) fn load_alloc_fonts<'a>(
                     data.ch,
                     CharInfo {
                         glyph_id: data.ch as u32,
-                        glyph_info,
+                        horizontal_space,
+                        height: data.metrics.height as u16,
                     },
                 );
             }
@@ -200,8 +207,8 @@ impl<'a> LoadedFonts<'a> {
                     });
                 }
                 chunks.push(FontEncodedChunk {
-                    width: lchar.char_info.glyph_info.x_off,
-                    height: lchar.char_info.glyph_info.height,
+                    width: lchar.char_info.horizontal_space,
+                    height: lchar.char_info.height,
                     font_height: lchar.font_height,
                     glyph_set: lchar.gsid,
                     glyph_ids: vec![lchar.char_info.glyph_id],
@@ -228,9 +235,9 @@ impl<'a> LoadedFonts<'a> {
                             cur_gs = Some(gs);
                             cur_width = 0;
                         }
-                        cur_width += info.glyph_info.x_off;
-                        if cur_max_height < info.glyph_info.height {
-                            cur_max_height = info.glyph_info.height;
+                        cur_width += info.horizontal_space as i16;
+                        if cur_max_height < info.height {
+                            cur_max_height = info.height;
                         }
                         cur_font_height = mh;
                         cur_glyphs.push(info.glyph_id);
@@ -255,9 +262,9 @@ impl<'a> LoadedFonts<'a> {
         let mut height = 0;
         for char in text.chars() {
             if let Some(lchar) = self.chars.get(&char) {
-                width += lchar.char_info.glyph_info.x_off;
-                if height < lchar.char_info.glyph_info.height {
-                    height = lchar.char_info.glyph_info.height;
+                width += lchar.char_info.horizontal_space;
+                if height < lchar.char_info.height {
+                    height = lchar.char_info.height;
                 }
             } else {
                 for font_name in fonts {
@@ -266,9 +273,9 @@ impl<'a> LoadedFonts<'a> {
                         .get(font_name)
                         .and_then(|loaded| loaded.char_map.get(&char))
                     {
-                        width += info.glyph_info.x_off;
-                        if height < info.glyph_info.height {
-                            height = info.glyph_info.height;
+                        width += info.horizontal_space;
+                        if height < info.height {
+                            height = info.height;
                         }
                         continue;
                     }
@@ -298,5 +305,6 @@ pub struct LoadedFont {
 #[derive(Debug, Copy, Clone)]
 pub struct CharInfo {
     pub glyph_id: u32,
-    pub glyph_info: Glyphinfo,
+    pub horizontal_space: i16,
+    pub height: u16,
 }
