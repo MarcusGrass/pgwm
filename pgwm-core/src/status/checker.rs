@@ -45,12 +45,17 @@ impl BatFormat {
     pub fn new(above: u8, icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>) -> Self {
         Self { above, icon }
     }
+
     fn format_bat(&self, capacity: u8) -> Option<String<STATUS_BAR_CHECK_CONTENT_LIMIT>> {
         if self.above <= capacity {
             Some(format_heapless!("{} {}%", self.icon, capacity))
         } else {
             None
         }
+    }
+
+    pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+        format_heapless!("{} 100%", self.icon)
     }
 }
 
@@ -66,6 +71,7 @@ impl CpuFormat {
     pub fn new(icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>, decimals: usize) -> Self {
         Self { icon, decimals }
     }
+
     fn format_cpu(&self, load_percentage: f64) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             self.decimals + 4
@@ -76,6 +82,21 @@ impl CpuFormat {
             "{} {:N$.D$}%",
             self.icon,
             load_percentage,
+            N = chars,
+            D = self.decimals
+        )
+    }
+
+    pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+        let chars = if self.decimals > 0 {
+            self.decimals + 4
+        } else {
+            3
+        };
+        format_heapless!(
+            "{} {:N$.D$}%",
+            self.icon,
+            99.999_999_999,
             N = chars,
             D = self.decimals
         )
@@ -119,6 +140,25 @@ impl NetFormat {
             self.icon_up,
             up_val,
             up_short,
+            N = chars,
+            D = self.decimals
+        )
+    }
+
+    pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+        let chars = if self.decimals > 0 {
+            self.decimals + 4
+        } else {
+            3
+        };
+        format_heapless!(
+            "{} {:N$.D$}{} {} {:N$.D$}{}",
+            self.icon_down,
+            999.999_999_999f64,
+            "GB",
+            self.icon_up,
+            999.999_999_999f64,
+            "GB",
             N = chars,
             D = self.decimals
         )
@@ -169,13 +209,29 @@ impl MemFormat {
             D = self.decimals,
         )
     }
+
+    pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+        let chars = if self.decimals > 0 {
+            self.decimals + 4
+        } else {
+            3
+        };
+        format_heapless!(
+            "{} {:N$.D$}{}",
+            self.icon,
+            999.999_999_999f64,
+            "GB",
+            N = chars,
+            D = self.decimals,
+        )
+    }
 }
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct DateFormat {
     icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-    pattern: String<STATUS_BAR_DATE_PATTERN_LIMIT>,
+    pub pattern: String<STATUS_BAR_DATE_PATTERN_LIMIT>,
     #[cfg_attr(feature = "config-file", serde(deserialize_with = "from_hms_tuple"))]
     utc_offset: UtcOffset,
 }
@@ -203,7 +259,7 @@ impl DateFormat {
         }
     }
 
-    fn format_date<'a>(
+    pub fn format_date<'a>(
         &self,
         items: &'a [FormatItem<'a>],
     ) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
@@ -219,18 +275,18 @@ impl DateFormat {
 pub struct Checker<'a> {
     cpu_checker: LoadChecker,
     net_checker: ThroughputChecker,
-    check_heap: BinaryHeap<PackagedCheck, Min, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
+    check_heap: BinaryHeap<PackagedCheck<'a>, Min, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
     date_fmt: std::prelude::rust_2021::Vec<FormatItem<'a>>,
 }
 
 #[derive(PartialEq, Eq)]
-struct PackagedCheck {
+struct PackagedCheck<'a> {
     next_time: Instant,
-    check: Check,
+    check: &'a Check,
     position: usize,
 }
 
-impl PackagedCheck {
+impl<'a> PackagedCheck<'a> {
     fn update_check_time(&mut self) {
         // Using this instead of SystemTime now avoids de-syncs between checks and unnecessary system calls
         self.next_time = self
@@ -239,13 +295,13 @@ impl PackagedCheck {
     }
 }
 
-impl PartialOrd<Self> for PackagedCheck {
+impl<'a> PartialOrd<Self> for PackagedCheck<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.next_time.partial_cmp(&other.next_time)
     }
 }
 
-impl Ord for PackagedCheck {
+impl<'a> Ord for PackagedCheck<'a> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.next_time.cmp(&other.next_time)
     }
@@ -328,11 +384,10 @@ impl<'a> Checker<'a> {
         let mut check_heap = BinaryHeap::new();
         let sync_start_time = Instant::now();
 
-        for (position, check) in checks.into_iter().enumerate() {
+        for (position, check) in checks.iter().enumerate() {
             let _ = check_heap.push(PackagedCheck {
                 next_time: sync_start_time,
-                // Ugh have to duplicate the ref or rewrite here
-                check: *check,
+                check,
                 position,
             });
         }

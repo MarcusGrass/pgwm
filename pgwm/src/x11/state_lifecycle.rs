@@ -26,6 +26,7 @@ use pgwm_core::state::bar_geometry::StatusSection;
 use pgwm_core::state::bar_geometry::{
     BarGeometry, FixedDisplayComponent, ShortcutComponent, ShortcutSection, WorkspaceSection,
 };
+use pgwm_core::status::checker::{Check, CheckType};
 use x11rb::protocol::xproto::{
     ButtonIndex, CapStyle, ConnectionExt, CreateGCAux, CreateWindowAux, EventMask, Gcontext,
     GrabMode, JoinStyle, LineStyle, Pixmap, Screen, Window, WindowClass,
@@ -59,7 +60,7 @@ pub(crate) fn create_state<'a>(
     shortcuts: &[Shortcut],
     key_mappings: &[SimpleKeyMapping],
     mouse_mappings: &[SimpleMouseMapping],
-    #[cfg(feature = "status-bar")] num_checks: usize,
+    #[cfg(feature = "status-bar")] checks: &[Check],
 ) -> Result<State> {
     let mut cookie_container = heapless::Vec::new();
     let static_state = create_static_state(
@@ -98,7 +99,7 @@ pub(crate) fn create_state<'a>(
         key_mappings,
         mouse_mappings,
         #[cfg(feature = "status-bar")]
-        num_checks,
+        checks,
         cookie_container,
     )
 }
@@ -114,6 +115,7 @@ pub(crate) fn reinit_state<'a>(
     shortcuts: &[Shortcut],
     key_mappings: &[SimpleKeyMapping],
     mouse_mappings: &[SimpleMouseMapping],
+    #[cfg(feature = "status-bar")] checks: &[Check],
 ) -> Result<State> {
     let cookie_container = heapless::Vec::new();
     do_create_state(
@@ -145,7 +147,7 @@ pub(crate) fn reinit_state<'a>(
         key_mappings,
         mouse_mappings,
         #[cfg(feature = "status-bar")]
-        state.bar_geometry.status.components.len(),
+        checks,
         cookie_container,
     )
 }
@@ -203,7 +205,7 @@ fn do_create_state<'a>(
     init_workspaces: &[UserWorkspace],
     key_mappings: &[SimpleKeyMapping],
     mouse_mappings: &[SimpleMouseMapping],
-    #[cfg(feature = "status-bar")] num_checks: usize,
+    #[cfg(feature = "status-bar")] checks: &[Check],
     mut cookie_container: heapless::Vec<VoidCookie<'a, RustConnection>, 32>,
 ) -> Result<State> {
     let screen_dimensions = get_screen_dimensions(connection, &screen)?;
@@ -269,7 +271,18 @@ fn do_create_state<'a>(
             tab_bar_win,
             &vis_info,
         )?;
+        let bar_geometry = create_bar_geometry(
+            font_manager,
+            fonts,
+            dimensions.width,
+            init_workspaces,
+            workspace_bar_window_name_padding,
+            shortcuts,
+            workspace_bar_window_name_padding,
+            checks,
+        );
         let new_mon = Monitor {
+            bar_geometry,
             bar_win,
             tab_bar_win,
             dimensions,
@@ -280,20 +293,6 @@ fn do_create_state<'a>(
         };
         monitors.push(new_mon);
     }
-    let workspace_section = create_bar_geometry(
-        font_manager,
-        fonts,
-        init_workspaces,
-        workspace_bar_window_name_padding,
-    );
-
-    let shortcuts = create_shortcut_geometry(
-        font_manager,
-        fonts,
-        workspace_section.position.length,
-        shortcuts,
-        workspace_bar_window_name_padding,
-    );
     let mouse_mapping = init_mouse(mouse_mappings);
     let key_mapping = init_keys(connection, key_mappings)?;
     grab_keys(connection, &key_mapping, screen.root)?;
@@ -305,22 +304,6 @@ fn do_create_state<'a>(
             &mouse_mapping,
         )?;
     }
-    #[cfg(feature = "status-bar")]
-    let bar_geometry = {
-        let sep_len = font_manager
-            .text_geometry(STATUS_BAR_CHECK_SEP, &fonts.status_section)
-            .0;
-        let first_sep = font_manager
-            .text_geometry(STATUS_BAR_FIRST_SEP, &fonts.status_section)
-            .0;
-        BarGeometry::new(
-            workspace_section,
-            shortcuts,
-            StatusSection::new(num_checks, sep_len, first_sep),
-        )
-    };
-    #[cfg(not(feature = "status-bar"))]
-    let bar_geometry = BarGeometry::new(workspace_section, shortcuts);
 
     #[cfg(feature = "status-bar")]
     let status_pixmap = connection.generate_id()?;
@@ -361,7 +344,6 @@ fn do_create_state<'a>(
         pad_while_tabbed,
         workspace_bar_window_name_padding,
         cursor_name,
-        bar_geometry,
         destroy_after,
         kill_after,
         show_bar_initially,
@@ -617,6 +599,103 @@ fn create_status_bar_pixmap<'a>(
 fn create_bar_geometry<'a>(
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
+    mon_width: i16,
+    workspaces: &[UserWorkspace],
+    workspace_bar_window_name_padding: u16,
+    shortcuts: &[Shortcut],
+    shortcut_padding: u16,
+    #[cfg(feature = "status-bar")] checks: &[Check],
+) -> BarGeometry {
+    let workspace_section = create_workspace_section_geometry(
+        font_manager,
+        fonts,
+        workspaces,
+        workspace_bar_window_name_padding,
+    );
+    let shortcut_section =
+        create_shortcut_geometry(font_manager, fonts, mon_width, shortcuts, shortcut_padding);
+    #[cfg(feature = "status-bar")]
+    let status_section = create_status_section_geometry(
+        font_manager,
+        fonts,
+        mon_width,
+        shortcut_section.position.length,
+        checks,
+    );
+
+    BarGeometry::new(
+        mon_width,
+        workspace_section,
+        shortcut_section,
+        status_section,
+    )
+}
+
+#[cfg(feature = "status-bar")]
+fn create_status_section_geometry<'a>(
+    font_manager: &'a FontDrawer<'a>,
+    fonts: &'a Fonts,
+    mon_width: i16,
+    shortcut_width: i16,
+    checks: &[Check],
+) -> StatusSection {
+    let mut check_lengths: heapless::CopyVec<
+        i16,
+        { pgwm_core::config::STATUS_BAR_UNIQUE_CHECK_LIMIT },
+    > = heapless::CopyVec::new();
+    for check in checks {
+        let length = match check.check_type {
+            CheckType::Battery(bc) => bc
+                .iter()
+                .map(|bc| {
+                    font_manager
+                        .text_geometry(&bc.max_length_content(), &fonts.status_section)
+                        .0
+                })
+                .max()
+                .unwrap_or(0),
+            CheckType::Cpu(fmt) => {
+                font_manager
+                    .text_geometry(&fmt.max_length_content(), &fonts.status_section)
+                    .0
+            }
+            CheckType::Net(fmt) => {
+                font_manager
+                    .text_geometry(&fmt.max_length_content(), &fonts.status_section)
+                    .0
+            }
+            CheckType::Mem(fmt) => {
+                font_manager
+                    .text_geometry(&fmt.max_length_content(), &fonts.status_section)
+                    .0
+            }
+            CheckType::Date(fmt) => {
+                let tokens = time::format_description::parse(&fmt.pattern).unwrap_or_default();
+                font_manager
+                    .text_geometry(&fmt.format_date(&tokens), &fonts.status_section)
+                    .0
+            }
+        };
+        let _ = check_lengths.push(length);
+    }
+    let sep_len = font_manager
+        .text_geometry(STATUS_BAR_CHECK_SEP, &fonts.status_section)
+        .0;
+    let first_sep = font_manager
+        .text_geometry(STATUS_BAR_FIRST_SEP, &fonts.status_section)
+        .0;
+    StatusSection::new(
+        mon_width,
+        shortcut_width,
+        &check_lengths,
+        sep_len,
+        first_sep,
+    )
+}
+
+fn create_workspace_section_geometry<'a>(
+    font_manager: &'a FontDrawer<'a>,
+    fonts: &'a Fonts,
     workspaces: &[UserWorkspace],
     workspace_bar_window_name_padding: u16,
 ) -> WorkspaceSection {
@@ -632,30 +711,34 @@ fn create_bar_geometry<'a>(
         components,
     }
 }
+
 fn create_shortcut_geometry<'a>(
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
-    offset: i16,
+    mon_width: i16,
     shortcuts: &[Shortcut],
     shortcut_padding: u16,
 ) -> ShortcutSection {
     let (components, position) = create_fixed_components(
         shortcuts.iter().map(|s| s.name.clone()),
-        offset,
+        0,
         shortcut_padding,
         font_manager,
         &fonts.workspace_section,
     );
+    let position = Line::new(mon_width - position.length, position.length);
+    let mut shifted_components = Vec::new();
+    let component_offset = 0;
+    for component in components {
+        shifted_components.push(ShortcutComponent {
+            position: Line::new(position.start + component_offset, component.position.length),
+            write_offset: component.write_offset,
+            text: component.text,
+        })
+    }
     ShortcutSection {
-        width: position.length,
-        components: components
-            .into_iter()
-            .map(|cmp| ShortcutComponent {
-                width: cmp.position.length,
-                write_offset: cmp.write_offset,
-                text: cmp.text,
-            })
-            .collect(),
+        position,
+        components: shifted_components,
     }
 }
 

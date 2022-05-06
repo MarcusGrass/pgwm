@@ -4,6 +4,7 @@ use crate::config::{
     STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP,
     STATUS_BAR_TOTAL_LENGTH_LIMIT, STATUS_BAR_UNIQUE_CHECK_LIMIT,
 };
+use crate::format_heapless;
 use crate::geometry::Line;
 
 pub struct BarGeometry {
@@ -11,76 +12,54 @@ pub struct BarGeometry {
     pub shortcuts: ShortcutSection,
     #[cfg(feature = "status-bar")]
     pub status: StatusSection,
-    pub window_title_start: i16,
+    pub window_title_section: Line,
 }
 
 impl BarGeometry {
     #[must_use]
-    pub fn hit_on_click(&self, mon_width: i16, x: i16) -> Option<MouseTarget> {
+    pub fn hit_on_click(&self, x: i16) -> Option<MouseTarget> {
         let hit = self
             .workspace
             .hit_component(x)
-            .or_else(|| self.shortcuts.hit_component(mon_width, x));
+            .or_else(|| self.shortcuts.hit_component(x));
         #[cfg(feature = "status-bar")]
         {
-            hit.or_else(|| self.status.hit_component(mon_width, x))
-                .or_else(|| {
-                    (x >= self.window_title_start
-                        && x <= self.window_title_start
-                            + (mon_width
-                                - self.status.width
-                                - self.window_title_start
-                                - self.shortcuts.width))
-                        .then(|| MouseTarget::WindowTitle)
-                })
+            hit.or_else(|| self.status.hit_component(x)).or_else(|| {
+                self.window_title_section
+                    .contains(x)
+                    .then(|| MouseTarget::WindowTitle)
+            })
         }
         #[cfg(not(feature = "status-bar"))]
         {
             hit.or_else(|| {
-                (x >= self.window_title_start
-                    && x <= self.window_title_start
-                        + (mon_width - self.window_title_start - self.shortcuts.width))
+                self.window_title_section
+                    .contains(x)
                     .then(|| MouseTarget::WindowTitle)
             })
         }
     }
 
     #[must_use]
-    pub fn calculate_window_title_position(&self, mon_width: i16) -> Line {
-        #[cfg(feature = "status-bar")]
-        let length = mon_width - self.status.width - self.shortcuts.width - self.window_title_start;
-        #[cfg(not(feature = "status-bar"))]
-        let length = mon_width - self.shortcuts.width - self.window_title_start;
-        Line::new(self.window_title_start, length)
-    }
-
-    #[must_use]
-    #[cfg(feature = "status-bar")]
-    pub fn calculate_status_position(&self, mon_width: i16) -> Line {
-        Line::new(
-            mon_width - self.status.width - self.shortcuts.width,
-            self.status.width,
-        )
-    }
-
-    #[must_use]
-    pub fn calculate_shortcuts_position(&self, mon_width: i16) -> Line {
-        let line = Line::new(mon_width - self.shortcuts.width, self.shortcuts.width);
-        crate::debug!(
-            "Calculated line at {line:?}, {:?}",
-            self.shortcuts.components
-        );
-        line
-    }
-
-    #[must_use]
     pub fn new(
+        mon_width: i16,
         workspace: WorkspaceSection,
         shortcuts: ShortcutSection,
         #[cfg(feature = "status-bar")] status: StatusSection,
     ) -> Self {
+        #[cfg(feature = "status-bar")]
+        let title_width = mon_width
+            - workspace.position.length
+            - shortcuts.position.length
+            - status.position.length;
+        #[cfg(not(feature = "status-bar"))]
+        let title_width = mon_width - workspace.position.length - shortcuts.position.length;
+
         Self {
-            window_title_start: workspace.position.start + workspace.position.length,
+            window_title_section: Line::new(
+                workspace.position.start + workspace.position.length,
+                title_width,
+            ),
             workspace,
             shortcuts,
             #[cfg(feature = "status-bar")]
@@ -90,36 +69,37 @@ impl BarGeometry {
 }
 
 pub struct ShortcutSection {
-    pub width: i16,
+    pub position: Line,
     pub components: Vec<ShortcutComponent>,
 }
 
 #[derive(Debug)]
 pub struct ShortcutComponent {
-    pub width: i16,
+    pub position: Line,
     pub write_offset: i16,
     pub text: String,
 }
 
 impl ShortcutSection {
-    fn hit_component(&self, mon_width: i16, x: i16) -> Option<MouseTarget> {
-        let start = mon_width - self.width;
-        if x >= start && x <= start + self.width {
-            let mut offset = start;
-            for (ind, component) in self.components.iter().enumerate() {
-                if x >= offset && x <= offset + component.width {
-                    return Some(MouseTarget::ShortcutComponent(ind));
-                }
-                offset += component.width;
-            }
-        }
-        None
+    fn hit_component(&self, x: i16) -> Option<MouseTarget> {
+        (x >= self.position.start && x <= self.position.start + self.position.length)
+            .then(|| {
+                self.components
+                    .iter()
+                    .enumerate()
+                    .find_map(|(ind, component)| {
+                        (x >= component.position.start
+                            && x <= component.position.start + component.position.length)
+                            .then(|| MouseTarget::ShortcutComponent(ind))
+                    })
+            })
+            .flatten()
     }
 }
 
 #[cfg(feature = "status-bar")]
 pub struct StatusSection {
-    pub width: i16,
+    pub position: Line,
     pub first_sep_len: i16,
     pub sep_len: i16,
     pub components: heapless::CopyVec<StatusComponent, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
@@ -128,90 +108,92 @@ pub struct StatusSection {
 #[cfg(feature = "status-bar")]
 impl StatusSection {
     #[must_use]
-    pub fn new(num_components: usize, sep_len: i16, first_sep_len: i16) -> Self {
+    pub fn new(
+        mon_width: i16,
+        right_offset: i16,
+        check_lengths: &[i16],
+        sep_len: i16,
+        first_sep_len: i16,
+    ) -> Self {
+        let mut total_length = 0;
+        let mut corrected_lengths: heapless::CopyVec<i16, STATUS_BAR_UNIQUE_CHECK_LIMIT> =
+            heapless::CopyVec::new();
+        for (ind, check) in check_lengths.iter().enumerate() {
+            let mut cur_length = 0;
+            if ind == 0 {
+                cur_length += check + first_sep_len;
+            } else if ind == check_lengths.len() - 1 {
+                cur_length += check + sep_len + first_sep_len;
+            } else {
+                cur_length += check + sep_len;
+            }
+            let _ = corrected_lengths.push(cur_length);
+            total_length += cur_length;
+        }
+        let mut components = heapless::CopyVec::new();
+        let start = mon_width - right_offset - total_length;
+        let mut offset = 0;
+        for length in corrected_lengths {
+            let _ = components.push(StatusComponent {
+                position: Line {
+                    start: start + offset,
+                    length,
+                },
+                display: Default::default(),
+            });
+            offset += length;
+        }
+
         Self {
-            width: 0,
+            position: Line {
+                start,
+                length: total_length,
+            },
             sep_len,
             first_sep_len,
-            components: std::iter::repeat(StatusComponent {
-                width: 0,
-                display: heapless::String::from(""),
-            })
-            .take(num_components)
-            .collect(),
+            components,
         }
     }
-    pub fn update_section_widths(
+
+    pub fn update_and_get_section_line(
         &mut self,
         new_content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-        new_component_width: i16,
         new_component_ind: usize,
-    ) -> bool {
-        if self.components[new_component_ind].display == new_content {
-            return false;
-        }
-        let last = self.components.len() - 1;
-        let component = &mut self.components[new_component_ind];
-        let old_width = component.width;
-        component.display = new_content;
-        if old_width == new_component_width {
-            false
+    ) -> (heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>, Line) {
+        let content = if new_component_ind == 0 {
+            format_heapless!("{STATUS_BAR_FIRST_SEP}{new_content}")
+        } else if new_component_ind == self.components.len() - 1 {
+            format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}{STATUS_BAR_FIRST_SEP}  ")
         } else {
-            if new_component_ind == 0 {
-                component.width = new_component_width + self.first_sep_len;
-            } else if new_component_ind == last {
-                component.width = new_component_width + self.sep_len + self.first_sep_len;
-            } else {
-                component.width = new_component_width + self.sep_len;
-            }
-            self.width = self.components.iter().map(|cmp| cmp.width).sum::<i16>();
-            true
-        }
+            format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}")
+        };
+        let component = &mut self.components[new_component_ind];
+        component.display = content;
+        (content, component.position)
     }
 
     #[must_use]
-    pub fn get_content_as_str(&self) -> heapless::String<STATUS_BAR_TOTAL_LENGTH_LIMIT> {
-        let mut s = heapless::String::from(STATUS_BAR_FIRST_SEP);
-        let last = self.components.len() - 1;
-
-        self.components
-            .iter()
-            .filter_map(|cnt| (!cnt.display.is_empty()).then(|| &cnt.display))
-            .enumerate()
-            .for_each(|(ind, content)| {
-                if ind == 0 {
-                    let _ = s.push_str(content);
-                } else if ind == last {
-                    let formatted: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT> =
-                        crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{content}{STATUS_BAR_FIRST_SEP}  ");
-                    let _ = s.push_str(&formatted);
-                } else {
-                    let formatted: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT> =
-                        crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{content}");
-                    let _ = s.push_str(&formatted);
-                }
-            });
+    pub fn get_full_content(&self) -> heapless::String<STATUS_BAR_TOTAL_LENGTH_LIMIT> {
+        let mut s = heapless::String::new();
+        for component in &self.components {
+            let _ = s.push_str(&component.display);
+        }
 
         s
     }
 
     #[must_use]
-    fn hit_component(&self, mon_width: i16, x: i16) -> Option<MouseTarget> {
-        crate::debug!(
-            "click on mon with width {mon_width} at {x}\n{:?}",
-            self.components
-        );
-        let start_x = mon_width - self.width;
-        (x >= start_x && x <= start_x + self.width)
+    fn hit_component(&self, x: i16) -> Option<MouseTarget> {
+        (x >= self.position.start && x <= self.position.start + self.position.length)
             .then(|| {
-                let mut offset = start_x;
-                for (ind, component) in self.components.iter().enumerate() {
-                    if x >= offset && x <= offset + component.width {
-                        return Some(MouseTarget::StatusComponent(ind));
-                    }
-                    offset += component.width;
-                }
-                None
+                self.components
+                    .iter()
+                    .enumerate()
+                    .find_map(|(ind, component)| {
+                        (x >= component.position.start
+                            && x <= component.position.start + component.position.length)
+                            .then(|| MouseTarget::StatusComponent(ind))
+                    })
             })
             .flatten()
     }
@@ -220,7 +202,7 @@ impl StatusSection {
 #[cfg(feature = "status-bar")]
 #[derive(Debug, Copy, Clone)]
 pub struct StatusComponent {
-    pub width: i16,
+    pub position: Line,
     pub display: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
 }
 
