@@ -479,6 +479,7 @@ dependencies = [
  "nix",
  "pgwm-core",
  "thiserror",
+ "time",
  "x11-keysyms",
  "x11rb",
 ]

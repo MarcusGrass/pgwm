@@ -17,22 +17,12 @@ pub(crate) struct BarManager<'a> {
 }
 
 impl<'a> BarManager<'a> {
-    #[cfg(feature = "status-bar")]
-    pub(crate) fn update_window_titles(&self, state: &mut State) -> Result<()> {
-        for mon in 0..state.monitors.len() {
-            self.set_window_title(mon, state)?;
-        }
-        Ok(())
-    }
-
     pub(crate) fn set_window_title(&self, mon_ind: usize, state: &mut State) -> Result<()> {
         let mon = &state.monitors[mon_ind];
         let maybe_name = mon
             .last_focus
             .and_then(|win| self.call_wrapper.get_name(win.window).ok());
-        let title_position = state
-            .bar_geometry
-            .calculate_window_title_position(mon.dimensions.width);
+        let title_position = mon.bar_geometry.window_title_section;
         let name = maybe_name
             .and_then(|r| r.await_name().ok())
             .flatten()
@@ -123,7 +113,7 @@ impl<'a> BarManager<'a> {
         state: &mut State,
     ) -> Result<()> {
         let mon = &mut state.monitors[mon_ind];
-        let component = &state.bar_geometry.workspace.components[ws_ind];
+        let component = &mon.bar_geometry.workspace.components[ws_ind];
         let name = &state.workspaces.get_ws(ws_ind).name;
         self.font_drawer.draw(
             &mon.bar_win,
@@ -147,7 +137,7 @@ impl<'a> BarManager<'a> {
         let mon = &mut state.monitors[mon_ind];
         let is_mon_focus = state.focused_mon == mon_ind;
         let wants_focus = state.workspaces.get_wants_focus_workspaces();
-        for (ind, ws) in state.bar_geometry.workspace.components.iter().enumerate() {
+        for (ind, ws) in mon.bar_geometry.workspace.components.iter().enumerate() {
             let name = &ws.text;
             let bg = if name.contains(state.workspaces.get_ws(ws_ind).name.as_str()) {
                 if is_mon_focus {
@@ -196,12 +186,7 @@ impl<'a> BarManager<'a> {
         content_ind: usize,
         state: &mut State,
     ) -> Result<()> {
-        //pgwm_core::debug!("Updating status, with {content} at {content_ind}");
-        if self.draw_status(content, content_ind, state)? {
-            //pgwm_core::debug!("Updated status");
-            self.update_window_titles(state)?;
-        }
-        Ok(())
+        self.draw_status(content, content_ind, state)
     }
 
     #[cfg(feature = "status-bar")]
@@ -210,30 +195,37 @@ impl<'a> BarManager<'a> {
         content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
         content_ind: usize,
         state: &mut State,
-    ) -> Result<bool> {
-        let content_slice_width = self
-            .font_drawer
-            .text_geometry(&content, &self.fonts.status_section)
-            .0;
-        let new_width = state.bar_geometry.status.update_section_widths(
-            content,
-            content_slice_width,
-            content_ind,
-        );
-        self.draw_status_with_internal_data(state)?;
-        Ok(new_width)
+    ) -> Result<()> {
+        let bg = state.colors.status_bar_background();
+        let text_col = state.colors.status_bar_text();
+        for mon_ind in 0..state.monitors.len() {
+            let (content, pos) = state.monitors[mon_ind]
+                .bar_geometry
+                .status
+                .update_and_get_section_line(content, content_ind);
+            let src_y = state.monitors[mon_ind].dimensions.y;
+            self.font_drawer.draw(
+                &state.monitors[mon_ind].bar_win,
+                &content,
+                &self.fonts.status_section,
+                Dimensions::new(pos.length, state.status_bar_height, pos.start, src_y),
+                0,
+                0,
+                *bg,
+                *text_col,
+            )?;
+        }
+        Ok(())
     }
 
     #[cfg(feature = "status-bar")]
     fn draw_status_with_internal_data(&self, state: &State) -> Result<()> {
-        let content = state.bar_geometry.status.get_content_as_str();
         let bg = state.colors.status_bar_background();
         let text_col = state.colors.status_bar_text();
 
         for i in 0..state.monitors.len() {
-            let status_position = state
-                .bar_geometry
-                .calculate_status_position(state.monitors[i].dimensions.width);
+            let content = state.monitors[i].bar_geometry.status.get_full_content();
+            let status_position = state.monitors[i].bar_geometry.status.position;
             let src_y = state.monitors[i].dimensions.y;
             self.font_drawer.draw(
                 &state.monitors[i].bar_win,
@@ -256,25 +248,23 @@ impl<'a> BarManager<'a> {
 
     pub(crate) fn draw_shortcuts(&self, mon_ind: usize, state: &mut State) -> Result<()> {
         let mon = &mut state.monitors[mon_ind];
-        let pos = state
-            .bar_geometry
-            .calculate_shortcuts_position(mon.dimensions.width);
+        let pos = mon.bar_geometry.shortcuts.position;
         let mut offset = pos.start;
         let bg = state.colors.shortcut_background();
         let text = state.colors.shortcut_text();
-        for shortcut in &state.bar_geometry.shortcuts.components {
+        for shortcut in &mon.bar_geometry.shortcuts.components {
             let name = &shortcut.text;
             self.font_drawer.draw(
                 &mon.bar_win,
                 name,
                 &self.fonts.shortcut_section,
-                Dimensions::new(shortcut.width, state.status_bar_height, offset, 0),
+                Dimensions::new(shortcut.position.length, state.status_bar_height, offset, 0),
                 shortcut.write_offset,
                 0,
                 *bg,
                 *text,
             )?;
-            offset += shortcut.width;
+            offset += shortcut.position.length;
         }
         Ok(())
     }

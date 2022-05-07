@@ -64,7 +64,7 @@ pub(crate) fn run_wm() -> Result<()> {
     let BarCfg {
         shortcuts,
         #[cfg(feature = "status-bar")]
-        mut status_checks,
+        status_checks,
     } = bar;
     let (connection, screen_num) = x11rb::connect(None)?;
     let setup = connection.setup();
@@ -107,7 +107,7 @@ pub(crate) fn run_wm() -> Result<()> {
         &key_mappings,
         &mouse_mappings,
         #[cfg(feature = "status-bar")]
-        status_checks.len(),
+        &status_checks,
     )?;
 
     crate::debug!("Initialized mappings");
@@ -128,8 +128,11 @@ pub(crate) fn run_wm() -> Result<()> {
     // Extremely ugly control flow here
     #[cfg(feature = "status-bar")]
     let should_check = !status_checks.is_empty();
+
     #[cfg(feature = "status-bar")]
-    let mut checker = pgwm_core::status::checker::Checker::new(&mut status_checks);
+    let mut mut_checks = status_checks;
+    #[cfg(feature = "status-bar")]
+    let mut checker = pgwm_core::status::checker::Checker::new(&mut mut_checks);
     crate::debug!("Initialized Checker");
     manager.init(&mut state)?;
     crate::debug!("Initialized manager state");
@@ -161,6 +164,8 @@ pub(crate) fn run_wm() -> Result<()> {
                         &shortcuts,
                         &key_mappings,
                         &mouse_mappings,
+                        #[cfg(feature = "status-bar")]
+                        &status_checks,
                     )?;
                     manager.pick_up_state(&mut state)?;
                 }

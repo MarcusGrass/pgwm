@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
  - Splitting text on a char boundary caused a panic in some cases while using the tabbed mode
  - Correctly positions tiles and tab bar on monitors with a y-offset relative to the root screen
+ - Status bar is redrawn in parts, further reducing CPU load
 
 ### Added
  - Reloading configuration without having to kill the WM

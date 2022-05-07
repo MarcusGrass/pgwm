@@ -45,7 +45,6 @@ pub struct State {
     pub pad_while_tabbed: bool,
     pub workspace_bar_window_name_padding: u16,
     pub cursor_name: String,
-    pub bar_geometry: BarGeometry,
     pub pointer_grabbed: bool,
     pub destroy_after: u64,
     pub kill_after: u64,
@@ -190,7 +189,7 @@ impl State {
         (clicked_win == mon.bar_win.window.drawable)
             .then(|| {
                 let rel_x = x - mon.dimensions.x;
-                self.bar_geometry.hit_on_click(mon.dimensions.width, rel_x)
+                mon.bar_geometry.hit_on_click(rel_x)
             })
             .flatten()
     }
@@ -218,6 +217,7 @@ impl State {
 pub struct Monitor {
     pub bar_win: DoubleBufferedRenderPicture,
     pub tab_bar_win: DoubleBufferedRenderPicture,
+    pub bar_geometry: BarGeometry,
     pub dimensions: Dimensions,
     pub hosted_workspace: usize,
     pub last_focus: Option<ManagedWindow>,
@@ -411,12 +411,12 @@ mod tests {
                 },
                 #[cfg(feature = "status-bar")]
                 status: crate::state::bar_geometry::StatusSection {
-                    width: 0,
+                    position: 0,
                     first_sep_len: 0,
                     sep_len: 0,
                     components: heapless::CopyVec::default(),
                 },
-                window_title_start: 0,
+                window_title_section: 0,
             },
             pointer_grabbed: false,
             destroy_after: 0,
