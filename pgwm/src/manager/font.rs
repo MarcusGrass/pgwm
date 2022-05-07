@@ -35,30 +35,35 @@ impl<'a> FontDrawer<'a> {
         dbw: &DoubleBufferedRenderPicture,
         text: &str,
         fonts: &[FontCfg],
-        area: Dimensions,
-        area_x: i16,
-        area_y: i16,
+        fill_area: Dimensions,
+        text_width: i16,
+        text_x: i16,
+        text_y: i16,
         bg: Color,
         text_color: Color,
-    ) -> Result<()> {
+    ) -> Result<i16> {
         let encoded = self
             .loaded_render_fonts
-            .encode(text, fonts, area.width - area_x);
-        pgwm_core::debug!("Encoded {encoded:?}");
-        self.call_wrapper
-            .fill_xrender_rectangle(dbw.window.picture, bg.as_render_color(), area)?;
+            .encode(text, fonts, text_width - text_x);
+        self.call_wrapper.fill_xrender_rectangle(
+            dbw.window.picture,
+            bg.as_render_color(),
+            fill_area,
+        )?;
         self.call_wrapper.fill_xrender_rectangle(
             dbw.pixmap.picture,
             text_color.as_render_color(),
             Dimensions::new(1, 1, 0, 0),
         )?;
-        let mut offset = area.x + area_x;
+        let mut offset = fill_area.x + text_x;
+        let mut drawn_width = 0;
         for chunk in encoded {
-            let box_shift = (area.height - chunk.font_height as i16) / 2;
+            drawn_width += chunk.width;
+            let box_shift = (fill_area.height - chunk.font_height as i16) / 2;
 
             self.call_wrapper.draw_glyphs(
                 offset,
-                area.y + area_y + box_shift,
+                fill_area.y + text_y + box_shift,
                 chunk.glyph_set,
                 dbw,
                 &chunk.glyph_ids,
@@ -66,7 +71,7 @@ impl<'a> FontDrawer<'a> {
 
             offset += chunk.width as i16;
         }
-        Ok(())
+        Ok(drawn_width)
     }
 }
 

@@ -12,7 +12,7 @@ pub struct BarGeometry {
     pub shortcuts: ShortcutSection,
     #[cfg(feature = "status-bar")]
     pub status: StatusSection,
-    pub window_title_section: Line,
+    pub window_title_section: WindowTitleSection,
 }
 
 impl BarGeometry {
@@ -26,6 +26,7 @@ impl BarGeometry {
         {
             hit.or_else(|| self.status.hit_component(x)).or_else(|| {
                 self.window_title_section
+                    .position
                     .contains(x)
                     .then(|| MouseTarget::WindowTitle)
             })
@@ -56,16 +57,25 @@ impl BarGeometry {
         let title_width = mon_width - workspace.position.length - shortcuts.position.length;
 
         Self {
-            window_title_section: Line::new(
-                workspace.position.start + workspace.position.length,
-                title_width,
-            ),
+            window_title_section: WindowTitleSection {
+                position: Line::new(
+                    workspace.position.start + workspace.position.length,
+                    title_width,
+                ),
+                last_draw_width: title_width, // Set last draw to full with so initial draw, paints the entire section
+            },
             workspace,
             shortcuts,
             #[cfg(feature = "status-bar")]
             status,
         }
     }
+}
+
+#[derive(Copy, Clone)]
+pub struct WindowTitleSection {
+    pub position: Line,
+    pub last_draw_width: i16,
 }
 
 pub struct ShortcutSection {
