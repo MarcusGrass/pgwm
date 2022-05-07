@@ -9,14 +9,14 @@ publish = false
 
 [features]
 config-file = ["pgwm-core/config-file"]
-default = ["xinerama", "status-bar", "config-file", "debug"]
+default = ["xinerama", "status-bar", "config-file"]
 debug = ["pgwm-core/debug"]
 xinerama = ["x11rb/xinerama"]
 status-bar = ["pgwm-core/status-bar", "time"]
 
 [dependencies]
 heapless = "0.7.10"
-fontdue = { git = "https://github.com/MarcusGrass/fontdue", branch = "rasterize-oneshot", default-features = false, features = ["simd"] }
+fontdue = { version = "0.7.2", default-features = false, features = ["simd"] }
 pgwm-core = { path = "../pgwm-core" }
 x11-keysyms = { git = "https://github.com/MarcusGrass/x11-keysyms", rev = "4b0f0e3516100666d18df4b6e8eb520b318e1dc9", features = ["miscellany", "latin1"] }
 nix = { version = "0.22.3" }

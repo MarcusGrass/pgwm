@@ -288,7 +288,9 @@ mod tests {
     use crate::config::{Cfg, USED_DIFFERENT_COLOR_SEGMENTS};
     use crate::geometry::{Dimensions, Line};
     use crate::render::{DoubleBufferedRenderPicture, RenderPicture};
-    use crate::state::bar_geometry::{BarGeometry, ShortcutSection, WorkspaceSection};
+    use crate::state::bar_geometry::{
+        BarGeometry, ShortcutSection, WindowTitleSection, WorkspaceSection,
+    };
     use crate::state::workspace::{ArrangeKind, FocusStyle, ManagedWindow, Workspaces};
     use crate::state::{Monitor, State};
     use x11rb::protocol::xproto::{BackingStore, Screen};
@@ -320,6 +322,27 @@ mod tests {
                     format: 0,
                 },
             },
+            bar_geometry: BarGeometry {
+                workspace: WorkspaceSection {
+                    position: Line::new(0, 0),
+                    components: vec![],
+                },
+                shortcuts: ShortcutSection {
+                    position: Line::new(0, 0),
+                    components: vec![],
+                },
+                #[cfg(feature = "status-bar")]
+                status: crate::state::bar_geometry::StatusSection {
+                    position: Line::new(0, 0),
+                    first_sep_len: 0,
+                    sep_len: 0,
+                    components: heapless::CopyVec::default(),
+                },
+                window_title_section: WindowTitleSection {
+                    position: Line::new(0, 0),
+                    last_draw_width: 0,
+                },
+            },
             dimensions: Dimensions::new(1000, 1000, 0, 0),
             hosted_workspace: 0,
             last_focus: None,
@@ -327,6 +350,27 @@ mod tests {
             window_title_display: heapless::String::default(),
         };
         let monitor1 = Monitor {
+            bar_geometry: BarGeometry {
+                workspace: WorkspaceSection {
+                    position: Line::new(0, 0),
+                    components: vec![],
+                },
+                shortcuts: ShortcutSection {
+                    position: Line::new(0, 0),
+                    components: vec![],
+                },
+                #[cfg(feature = "status-bar")]
+                status: crate::state::bar_geometry::StatusSection {
+                    position: Line::new(0, 0),
+                    first_sep_len: 0,
+                    sep_len: 0,
+                    components: heapless::CopyVec::default(),
+                },
+                window_title_section: WindowTitleSection {
+                    position: Line::new(0, 0),
+                    last_draw_width: 0,
+                },
+            },
             bar_win: DoubleBufferedRenderPicture {
                 window: RenderPicture {
                     drawable: 0,
@@ -400,24 +444,6 @@ mod tests {
             pad_while_tabbed: false,
             workspace_bar_window_name_padding: 0,
             cursor_name: String::new(),
-            bar_geometry: BarGeometry {
-                workspace: WorkspaceSection {
-                    position: Line::new(0, 0),
-                    components: vec![],
-                },
-                shortcuts: ShortcutSection {
-                    width: 0,
-                    components: vec![],
-                },
-                #[cfg(feature = "status-bar")]
-                status: crate::state::bar_geometry::StatusSection {
-                    position: 0,
-                    first_sep_len: 0,
-                    sep_len: 0,
-                    components: heapless::CopyVec::default(),
-                },
-                window_title_section: 0,
-            },
             pointer_grabbed: false,
             destroy_after: 0,
             kill_after: 0,

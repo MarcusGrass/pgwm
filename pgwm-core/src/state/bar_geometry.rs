@@ -4,7 +4,6 @@ use crate::config::{
     STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP,
     STATUS_BAR_TOTAL_LENGTH_LIMIT, STATUS_BAR_UNIQUE_CHECK_LIMIT,
 };
-use crate::format_heapless;
 use crate::geometry::Line;
 
 pub struct BarGeometry {
@@ -35,6 +34,7 @@ impl BarGeometry {
         {
             hit.or_else(|| {
                 self.window_title_section
+                    .position
                     .contains(x)
                     .then(|| MouseTarget::WindowTitle)
             })
@@ -149,7 +149,7 @@ impl StatusSection {
                     start: start + offset,
                     length,
                 },
-                display: Default::default(),
+                display: heapless::String::default(),
             });
             offset += length;
         }
@@ -171,11 +171,11 @@ impl StatusSection {
         new_component_ind: usize,
     ) -> (heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>, Line) {
         let content = if new_component_ind == 0 {
-            format_heapless!("{STATUS_BAR_FIRST_SEP}{new_content}")
+            crate::format_heapless!("{STATUS_BAR_FIRST_SEP}{new_content}")
         } else if new_component_ind == self.components.len() - 1 {
-            format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}{STATUS_BAR_FIRST_SEP}  ")
+            crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}{STATUS_BAR_FIRST_SEP}  ")
         } else {
-            format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}")
+            crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}")
         };
         let component = &mut self.components[new_component_ind];
         component.display = content;

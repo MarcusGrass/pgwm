@@ -54,6 +54,7 @@ impl BatFormat {
         }
     }
 
+    #[must_use]
     pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
         format_heapless!("{} 100%", self.icon)
     }
@@ -87,6 +88,7 @@ impl CpuFormat {
         )
     }
 
+    #[must_use]
     pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             self.decimals + 4
@@ -145,6 +147,7 @@ impl NetFormat {
         )
     }
 
+    #[must_use]
     pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             self.decimals + 4
@@ -210,6 +213,7 @@ impl MemFormat {
         )
     }
 
+    #[must_use]
     pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             self.decimals + 4
@@ -259,6 +263,7 @@ impl DateFormat {
         }
     }
 
+    #[must_use]
     pub fn format_date<'a>(
         &self,
         items: &'a [FormatItem<'a>],

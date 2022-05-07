@@ -3,3 +3,4 @@ members = ["pgwm", "pgwm-core"]
 
 [patch.crates-io]
 heapless = { git = "https://github.com/MarcusGrass/heapless", rev = "7bf327b6a37c703691700da67fcccaa2c245e76c" }
+fontdue = { git = "https://github.com/MarcusGrass/fontdue", branch = "rasterize-oneshot" }
