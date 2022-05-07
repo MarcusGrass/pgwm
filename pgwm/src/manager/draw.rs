@@ -308,6 +308,7 @@ impl<'a> Drawer<'a> {
                 name,
                 &self.fonts.tab_bar_section,
                 Dimensions::new(split_width, state.tab_bar_height, split_width * i as i16, 0),
+                split_width,
                 center_offset as i16,
                 0,
                 bg,

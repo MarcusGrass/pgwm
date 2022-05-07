@@ -4,7 +4,6 @@ use crate::config::{
     STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP,
     STATUS_BAR_TOTAL_LENGTH_LIMIT, STATUS_BAR_UNIQUE_CHECK_LIMIT,
 };
-use crate::format_heapless;
 use crate::geometry::Line;
 
 pub struct BarGeometry {
@@ -12,7 +11,7 @@ pub struct BarGeometry {
     pub shortcuts: ShortcutSection,
     #[cfg(feature = "status-bar")]
     pub status: StatusSection,
-    pub window_title_section: Line,
+    pub window_title_section: WindowTitleSection,
 }
 
 impl BarGeometry {
@@ -26,6 +25,7 @@ impl BarGeometry {
         {
             hit.or_else(|| self.status.hit_component(x)).or_else(|| {
                 self.window_title_section
+                    .position
                     .contains(x)
                     .then(|| MouseTarget::WindowTitle)
             })
@@ -34,6 +34,7 @@ impl BarGeometry {
         {
             hit.or_else(|| {
                 self.window_title_section
+                    .position
                     .contains(x)
                     .then(|| MouseTarget::WindowTitle)
             })
@@ -56,16 +57,25 @@ impl BarGeometry {
         let title_width = mon_width - workspace.position.length - shortcuts.position.length;
 
         Self {
-            window_title_section: Line::new(
-                workspace.position.start + workspace.position.length,
-                title_width,
-            ),
+            window_title_section: WindowTitleSection {
+                position: Line::new(
+                    workspace.position.start + workspace.position.length,
+                    title_width,
+                ),
+                last_draw_width: title_width, // Set last draw to full with so initial draw, paints the entire section
+            },
             workspace,
             shortcuts,
             #[cfg(feature = "status-bar")]
             status,
         }
     }
+}
+
+#[derive(Copy, Clone)]
+pub struct WindowTitleSection {
+    pub position: Line,
+    pub last_draw_width: i16,
 }
 
 pub struct ShortcutSection {
@@ -139,7 +149,7 @@ impl StatusSection {
                     start: start + offset,
                     length,
                 },
-                display: Default::default(),
+                display: heapless::String::default(),
             });
             offset += length;
         }
@@ -161,11 +171,11 @@ impl StatusSection {
         new_component_ind: usize,
     ) -> (heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>, Line) {
         let content = if new_component_ind == 0 {
-            format_heapless!("{STATUS_BAR_FIRST_SEP}{new_content}")
+            crate::format_heapless!("{STATUS_BAR_FIRST_SEP}{new_content}")
         } else if new_component_ind == self.components.len() - 1 {
-            format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}{STATUS_BAR_FIRST_SEP}  ")
+            crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}{STATUS_BAR_FIRST_SEP}  ")
         } else {
-            format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}")
+            crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}")
         };
         let component = &mut self.components[new_component_ind];
         component.display = content;

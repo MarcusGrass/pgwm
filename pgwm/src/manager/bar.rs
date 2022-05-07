@@ -22,28 +22,32 @@ impl<'a> BarManager<'a> {
         let maybe_name = mon
             .last_focus
             .and_then(|win| self.call_wrapper.get_name(win.window).ok());
-        let title_position = mon.bar_geometry.window_title_section;
+        let section = mon.bar_geometry.window_title_section;
+        let title_position = section.position;
         let name = maybe_name
             .and_then(|r| r.await_name().ok())
             .flatten()
             .unwrap_or_else(|| heapless::String::from("pgwm"));
 
         let mon = &mut state.monitors[mon_ind];
-        self.font_drawer.draw(
+        let draw_width = self.font_drawer.draw(
             &mon.bar_win,
             &name,
             &self.fonts.workspace_section,
             Dimensions::new(
-                title_position.length,
+                section.last_draw_width,
                 state.status_bar_height,
                 title_position.start,
                 0,
             ),
+            title_position.length,
             state.workspace_bar_window_name_padding as i16,
             0,
             state.colors.workspace_bar_current_window_title_background,
             state.colors.workspace_bar_current_window_title_text,
         )?;
+        mon.bar_geometry.window_title_section.last_draw_width =
+            draw_width + state.workspace_bar_window_name_padding as i16;
         Ok(())
     }
 
@@ -125,6 +129,7 @@ impl<'a> BarManager<'a> {
                 component.position.start,
                 0,
             ),
+            component.position.length,
             component.write_offset,
             0,
             bg_color,
@@ -162,6 +167,7 @@ impl<'a> BarManager<'a> {
                     ws.position.start,
                     0,
                 ),
+                ws.position.length,
                 ws.write_offset,
                 0,
                 bg,
@@ -209,6 +215,7 @@ impl<'a> BarManager<'a> {
                 &content,
                 &self.fonts.status_section,
                 Dimensions::new(pos.length, state.status_bar_height, pos.start, src_y),
+                pos.length,
                 0,
                 0,
                 *bg,
@@ -237,6 +244,7 @@ impl<'a> BarManager<'a> {
                     status_position.start,
                     src_y,
                 ),
+                status_position.length,
                 0,
                 0,
                 *bg,
@@ -259,6 +267,7 @@ impl<'a> BarManager<'a> {
                 name,
                 &self.fonts.shortcut_section,
                 Dimensions::new(shortcut.position.length, state.status_bar_height, offset, 0),
+                shortcut.position.length,
                 shortcut.write_offset,
                 0,
                 *bg,
@@ -273,6 +282,15 @@ impl<'a> BarManager<'a> {
         self.init_workspace(mon_ind, state.monitors[mon_ind].hosted_workspace, state)?;
         #[cfg(feature = "status-bar")]
         self.draw_status_with_internal_data(state)?;
+        // Make sure to cover the entire bar with a background again
+        state.monitors[mon_ind]
+            .bar_geometry
+            .window_title_section
+            .last_draw_width = state.monitors[mon_ind]
+            .bar_geometry
+            .window_title_section
+            .position
+            .length;
         self.set_window_title(mon_ind, state)?;
         self.draw_shortcuts(mon_ind, state)?;
         Ok(())

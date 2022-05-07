@@ -26,6 +26,7 @@ use pgwm_core::state::bar_geometry::StatusSection;
 use pgwm_core::state::bar_geometry::{
     BarGeometry, FixedDisplayComponent, ShortcutComponent, ShortcutSection, WorkspaceSection,
 };
+#[cfg(feature = "status-bar")]
 use pgwm_core::status::checker::{Check, CheckType};
 use x11rb::protocol::xproto::{
     ButtonIndex, CapStyle, ConnectionExt, CreateGCAux, CreateWindowAux, EventMask, Gcontext,
@@ -279,6 +280,7 @@ fn do_create_state<'a>(
             workspace_bar_window_name_padding,
             shortcuts,
             workspace_bar_window_name_padding,
+            #[cfg(feature = "status-bar")]
             checks,
         );
         let new_mon = Monitor {
@@ -627,6 +629,7 @@ fn create_bar_geometry<'a>(
         mon_width,
         workspace_section,
         shortcut_section,
+        #[cfg(feature = "status-bar")]
         status_section,
     )
 }
@@ -734,7 +737,7 @@ fn create_shortcut_geometry<'a>(
             position: Line::new(position.start + component_offset, component.position.length),
             write_offset: component.write_offset,
             text: component.text,
-        })
+        });
     }
     ShortcutSection {
         position,
