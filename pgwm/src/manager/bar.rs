@@ -17,22 +17,19 @@ pub(crate) struct BarManager<'a> {
 }
 
 impl<'a> BarManager<'a> {
-    pub(crate) fn set_window_title(&self, mon_ind: usize, state: &mut State) -> Result<()> {
+    pub(crate) fn draw_focused_window_title(
+        &self,
+        mon_ind: usize,
+        state: &mut State,
+    ) -> Result<()> {
         let mon = &state.monitors[mon_ind];
-        let maybe_name = mon
-            .last_focus
-            .and_then(|win| self.call_wrapper.get_name(win.window).ok());
         let section = mon.bar_geometry.window_title_section;
         let title_position = section.position;
-        let name = maybe_name
-            .and_then(|r| r.await_name().ok())
-            .flatten()
-            .unwrap_or_else(|| heapless::String::from("pgwm"));
-
         let mon = &mut state.monitors[mon_ind];
+        pgwm_core::debug!("Starting window title draw");
         let draw_width = self.font_drawer.draw(
             &mon.bar_win,
-            &name,
+            &section.display,
             &self.fonts.workspace_section,
             Dimensions::new(
                 section.last_draw_width,
@@ -119,6 +116,7 @@ impl<'a> BarManager<'a> {
         let mon = &mut state.monitors[mon_ind];
         let component = &mon.bar_geometry.workspace.components[ws_ind];
         let name = &state.workspaces.get_ws(ws_ind).name;
+        pgwm_core::debug!("Starting workspace draw");
         self.font_drawer.draw(
             &mon.bar_win,
             name,
@@ -157,6 +155,7 @@ impl<'a> BarManager<'a> {
             } else {
                 state.colors.workspace_bar_unfocused_workspace_background
             };
+            pgwm_core::debug!("Starting initial workspace draw");
             self.font_drawer.draw(
                 &mon.bar_win,
                 name,
@@ -202,6 +201,7 @@ impl<'a> BarManager<'a> {
         content_ind: usize,
         state: &mut State,
     ) -> Result<()> {
+        pgwm_core::debug!("Starting status draw");
         let bg = state.colors.status_bar_background();
         let text_col = state.colors.status_bar_text();
         for mon_ind in 0..state.monitors.len() {
@@ -230,31 +230,34 @@ impl<'a> BarManager<'a> {
         let bg = state.colors.status_bar_background();
         let text_col = state.colors.status_bar_text();
 
+        pgwm_core::debug!("Starting status redraw");
         for i in 0..state.monitors.len() {
-            let content = state.monitors[i].bar_geometry.status.get_full_content();
-            let status_position = state.monitors[i].bar_geometry.status.position;
-            let src_y = state.monitors[i].dimensions.y;
-            self.font_drawer.draw(
-                &state.monitors[i].bar_win,
-                &content,
-                &self.fonts.status_section,
-                Dimensions::new(
+            for section in &state.monitors[i].bar_geometry.status.components {
+                let status_position = section.position;
+                let src_y = state.monitors[i].dimensions.y;
+                self.font_drawer.draw(
+                    &state.monitors[i].bar_win,
+                    &section.display,
+                    &self.fonts.status_section,
+                    Dimensions::new(
+                        status_position.length,
+                        state.status_bar_height,
+                        status_position.start,
+                        src_y,
+                    ),
                     status_position.length,
-                    state.status_bar_height,
-                    status_position.start,
-                    src_y,
-                ),
-                status_position.length,
-                0,
-                0,
-                *bg,
-                *text_col,
-            )?;
+                    0,
+                    0,
+                    *bg,
+                    *text_col,
+                )?;
+            }
         }
         Ok(())
     }
 
     pub(crate) fn draw_shortcuts(&self, mon_ind: usize, state: &mut State) -> Result<()> {
+        pgwm_core::debug!("Starting shortcuts draw");
         let mon = &mut state.monitors[mon_ind];
         let pos = mon.bar_geometry.shortcuts.position;
         let mut offset = pos.start;
@@ -291,7 +294,7 @@ impl<'a> BarManager<'a> {
             .window_title_section
             .position
             .length;
-        self.set_window_title(mon_ind, state)?;
+        self.draw_focused_window_title(mon_ind, state)?;
         self.draw_shortcuts(mon_ind, state)?;
         Ok(())
     }

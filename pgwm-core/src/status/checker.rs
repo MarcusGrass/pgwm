@@ -396,7 +396,7 @@ impl<'a> Checker<'a> {
                 position,
             });
         }
-        let mut date_fmt = std::prelude::rust_2021::Vec::new();
+        let mut date_fmt = Vec::new();
         for check in checks.iter() {
             if let CheckType::Date(df) = &check.check_type {
                 date_fmt = time::format_description::parse(&df.pattern).unwrap_or_default();

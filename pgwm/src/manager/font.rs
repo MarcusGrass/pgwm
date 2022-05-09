@@ -42,21 +42,26 @@ impl<'a> FontDrawer<'a> {
         bg: Color,
         text_color: Color,
     ) -> Result<i16> {
+        pgwm_core::debug!("---\nStarting font draw");
         let encoded = self
             .loaded_render_fonts
             .encode(text, fonts, text_width - text_x);
+        pgwm_core::debug!("Encoded font");
         self.call_wrapper.fill_xrender_rectangle(
             dbw.window.picture,
             bg.as_render_color(),
             fill_area,
         )?;
+        pgwm_core::debug!("Filled background");
         self.call_wrapper.fill_xrender_rectangle(
             dbw.pixmap.picture,
             text_color.as_render_color(),
             Dimensions::new(1, 1, 0, 0),
         )?;
+        pgwm_core::debug!("Filled pen");
         let mut offset = fill_area.x + text_x;
         let mut drawn_width = 0;
+        pgwm_core::debug!("Sending glyph draw");
         for chunk in encoded {
             drawn_width += chunk.width;
             let box_shift = (fill_area.height - chunk.font_height as i16) / 2;
@@ -71,6 +76,8 @@ impl<'a> FontDrawer<'a> {
 
             offset += chunk.width as i16;
         }
+        pgwm_core::debug!("Drew all glyph chunks\n---\n");
+
         Ok(drawn_width)
     }
 }
