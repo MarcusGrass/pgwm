@@ -11,11 +11,11 @@ use crate::x11::call_wrapper::{CallWrapper, FloatIndicators, WindowFloatDeductio
 use crate::x11::client_message::{
     ChangeType, ClientMessage, ClientMessageHandler, PropertyChangeMessage,
 };
-use crate::x11::cookies::TransientConvertCookie;
+use crate::x11::cookies::{FallbackNameConvertCookie, TransientConvertCookie};
 use pgwm_core::config::mouse_map::MouseTarget;
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
-use pgwm_core::config::{Action, APPLICATION_WINDOW_LIMIT, WM_CLASS_NAME_LIMIT};
+use pgwm_core::config::{Action, APPLICATION_WINDOW_LIMIT, WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT};
 use pgwm_core::geometry::draw::Mode;
 use pgwm_core::geometry::layout::Layout;
 use pgwm_core::geometry::Dimensions;
@@ -1084,6 +1084,11 @@ impl<'a> Manager<'a> {
         self.call_wrapper
             .take_focus(state.screen.root, state.screen.root, FocusStyle::Pull)?;
         self.conditional_grab_pointer(state)?;
+        self.update_current_window_title_and_redraw(
+            mon_ind,
+            heapless::String::from("pgwm"),
+            state,
+        )?;
         pgwm_core::debug!("Focused root on mon = {}", mon_ind);
         Ok(())
     }
@@ -1110,15 +1115,22 @@ impl<'a> Manager<'a> {
 
     // Switches focus to a window existing on an mon
     fn focus_window(&self, mon_ind: usize, win: Window, state: &mut State) -> Result<()> {
+        let name_cookie = self.call_wrapper.get_name(win)?;
         if let Some(last_input_focus) = state.input_focus {
             self.restore_normal_border(last_input_focus, state)?;
-            self.do_focus_window(mon_ind, win, state)
+            self.do_focus_window(mon_ind, win, name_cookie, state)
         } else {
-            self.do_focus_window(mon_ind, win, state)
+            self.do_focus_window(mon_ind, win, name_cookie, state)
         }
     }
 
-    fn do_focus_window(&self, mon_ind: usize, win: Window, state: &mut State) -> Result<()> {
+    fn do_focus_window(
+        &self,
+        mon_ind: usize,
+        win: Window,
+        name_cookie: FallbackNameConvertCookie,
+        state: &mut State,
+    ) -> Result<()> {
         if state.drag_window.is_some() {
             // Never refocus and mess with the pointer while dragging
             return Ok(());
@@ -1160,7 +1172,15 @@ impl<'a> Manager<'a> {
         self.call_wrapper
             .take_focus(state.screen.root, win, main_focus_target.focus_style)?;
         self.capture_pointer_if_outside_window(main_focus_target, pointer_pos.reply()?, state)?;
-
+        self.update_current_window_title_and_redraw(
+            mon_ind,
+            name_cookie
+                .await_name()
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| heapless::String::from("pgwm")),
+            state,
+        )?;
         pgwm_core::debug!("Focused {main_focus_target:?} on mon {mon_ind}");
         Ok(())
     }
@@ -1237,8 +1257,8 @@ impl<'a> Manager<'a> {
                 }
                 PropertyChangeMessage::Name((win, cookie)) => {
                     if let Some(focused) = state.find_monitor_focusing_window(win) {
-                        if let Ok(Some(_name)) = cookie.await_name() {
-                            self.bar_manager.set_window_title(focused, state)?;
+                        if let Ok(Some(name)) = cookie.await_name() {
+                            self.update_current_window_title_and_redraw(focused, name, state)?;
                         }
                     }
                 }
@@ -1270,6 +1290,21 @@ impl<'a> Manager<'a> {
 
         Ok(())
     }
+
+    #[allow(clippy::large_types_passed_by_value)]
+    fn update_current_window_title_and_redraw(
+        &self,
+        mon_ind: usize,
+        new_name: heapless::String<WM_NAME_LIMIT>,
+        state: &mut State,
+    ) -> Result<()> {
+        state.monitors[mon_ind]
+            .bar_geometry
+            .window_title_section
+            .display = new_name;
+        self.bar_manager.draw_focused_window_title(mon_ind, state)
+    }
+
     fn manually_remap_win(
         &self,
         win: Window,

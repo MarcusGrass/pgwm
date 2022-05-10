@@ -7,7 +7,6 @@ use crate::manager::Manager;
 use crate::x11::call_wrapper::CallWrapper;
 use crate::x11::client_message::ClientMessageHandler;
 use crate::x11::colors::alloc_colors;
-use crate::Error::FullRestart;
 use pgwm_core::config::{BarCfg, Cfg, Options, Sizing};
 use pgwm_core::render::{RenderVisualInfo, VisualInfo};
 use pgwm_core::state::State;
@@ -171,17 +170,15 @@ pub(crate) fn run_wm() -> Result<()> {
                 }
                 Error::GracefulShutdown => {
                     crate::x11::state_lifecycle::teardown_full_state(&connection, &state, &lf)?;
-                    connection.flush()?;
                     call_wrapper.reset_root_focus(&state)?;
                     connection.flush()?;
                     return Ok(());
                 }
                 Error::FullRestart => {
                     crate::x11::state_lifecycle::teardown_full_state(&connection, &state, &lf)?;
-                    connection.flush()?;
                     call_wrapper.reset_root_focus(&state)?;
                     connection.flush()?;
-                    return Err(FullRestart);
+                    return Err(Error::FullRestart);
                 }
                 _ => {
                     return Err(e);

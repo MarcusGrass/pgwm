@@ -1,4 +1,5 @@
 use crate::config::mouse_map::MouseTarget;
+use crate::config::WM_NAME_LIMIT;
 #[cfg(feature = "status-bar")]
 use crate::config::{
     STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP,
@@ -62,6 +63,7 @@ impl BarGeometry {
                     workspace.position.start + workspace.position.length,
                     title_width,
                 ),
+                display: heapless::String::from("pgwm"),
                 last_draw_width: title_width, // Set last draw to full with so initial draw, paints the entire section
             },
             workspace,
@@ -75,6 +77,7 @@ impl BarGeometry {
 #[derive(Copy, Clone)]
 pub struct WindowTitleSection {
     pub position: Line,
+    pub display: heapless::String<WM_NAME_LIMIT>,
     pub last_draw_width: i16,
 }
 
