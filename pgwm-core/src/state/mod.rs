@@ -58,6 +58,9 @@ impl State {
         let _ = self.sequences_to_ignore.push(sequence);
     }
 
+    /// In libX11 you can drain response-events to some sent events, such as a `MapNotify` after a `MapRequest`
+    /// As far as I know this isn't an option so we have to "blacklist" events that are caused by
+    /// events we produce. It's a coarse way of doing it and can produce bugs.
     pub fn should_ignore_sequence(&mut self, sequence: u16) -> bool {
         let mut should_ignore = false;
         while let Some(to_ignore) = self.sequences_to_ignore.peek() {
@@ -75,6 +78,7 @@ impl State {
         should_ignore
     }
 
+    /// Unless you're using a mad amount of monitors this will be fast
     #[must_use]
     pub fn find_monitor_focusing_window(&self, window: Window) -> Option<usize> {
         for (i, mon) in self.monitors.iter().enumerate() {
@@ -340,6 +344,7 @@ mod tests {
                 },
                 window_title_section: WindowTitleSection {
                     position: Line::new(0, 0),
+                    display: heapless::String::default(),
                     last_draw_width: 0,
                 },
             },
@@ -368,6 +373,7 @@ mod tests {
                 },
                 window_title_section: WindowTitleSection {
                     position: Line::new(0, 0),
+                    display: heapless::String::default(),
                     last_draw_width: 0,
                 },
             },
@@ -448,8 +454,8 @@ mod tests {
             destroy_after: 0,
             kill_after: 0,
             show_bar_initially: true,
-            mouse_mapping: Default::default(),
-            key_mapping: Default::default(),
+            mouse_mapping: std::collections::HashMap::default(),
+            key_mapping: std::collections::HashMap::default(),
         }
     }
 

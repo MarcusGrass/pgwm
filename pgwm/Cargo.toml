@@ -9,7 +9,7 @@ publish = false
 
 [features]
 config-file = ["pgwm-core/config-file"]
-default = ["xinerama", "status-bar", "config-file", "debug"]
+default = ["xinerama", "status-bar", "config-file"]
 debug = ["pgwm-core/debug"]
 xinerama = ["x11rb/xinerama"]
 status-bar = ["pgwm-core/status-bar", "time"]

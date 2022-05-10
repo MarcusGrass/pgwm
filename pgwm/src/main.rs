@@ -26,10 +26,10 @@ use pgwm_core::debug;
 fn main() -> Result<()> {
     debug!("Starting pgwm");
     loop {
-        match run_wm() {
+        return match run_wm() {
             Ok(_) => {
                 debug!("Exiting");
-                return Ok(());
+                Ok(())
             }
             Err(e) => {
                 if let Error::FullRestart = e {
@@ -37,7 +37,8 @@ fn main() -> Result<()> {
                     continue;
                 }
                 debug!("Fatal error {e}");
+                Err(e)
             }
-        }
+        };
     }
 }
