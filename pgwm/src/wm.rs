@@ -15,7 +15,6 @@ use std::time::Duration;
 use x11rb::connection::Connection;
 use x11rb::protocol::render::{PictType, Pictformat, Pictforminfo};
 use x11rb::protocol::xproto::{Screen, Visualid};
-use x11rb::resource_manager::Database;
 use x11rb::rust_connection::RustConnection;
 
 #[allow(clippy::too_many_lines)]
@@ -73,7 +72,7 @@ pub(crate) fn run_wm() -> Result<()> {
     let call_wrapper = CallWrapper::new(&connection)?;
     call_wrapper.try_become_wm(screen)?;
     connection.flush()?;
-    let resource_db = Database::new_from_default(&connection)?;
+    let resource_db = x11rb::resource_manager::new_from_resource_manager(&connection)?.unwrap();
     let cursor_handle = x11rb::cursor::Handle::new(&connection, 0, &resource_db)?;
     let visual = find_render_visual_info(&connection, screen)?;
     let loaded = load_alloc_fonts(&call_wrapper, &visual, &fonts, &char_remap)?;
