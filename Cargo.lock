@@ -274,6 +274,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-source"
+version = "0.1.0"
+
+[[package]]
 name = "fontdue"
 version = "0.7.2"
 source = "git+https://github.com/MarcusGrass/fontdue?branch=rasterize-oneshot#f11491c93bdd013e208e085c54811e0ce1fdd828"
