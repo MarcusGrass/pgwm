@@ -1169,8 +1169,10 @@ impl<'a> Manager<'a> {
             .replace(main_focus_target);
 
         state.input_focus.replace(win);
+        pgwm_core::debug!("Taking focus for {win}");
         self.call_wrapper
             .take_focus(state.screen.root, win, main_focus_target.focus_style)?;
+        pgwm_core::debug!("Getting pointer position");
         self.capture_pointer_if_outside_window(main_focus_target, pointer_pos.reply()?, state)?;
         self.update_current_window_title_and_redraw(
             mon_ind,
