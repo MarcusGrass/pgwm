@@ -24,6 +24,18 @@ use crate::wm::run_wm;
 use pgwm_core::debug;
 
 fn main() -> Result<()> {
+    std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open("/home/gramar/packet_in.txt")
+        .unwrap();
+    std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open("/home/gramar/packet_out.txt")
+        .unwrap();
     debug!("Starting pgwm");
     loop {
         return match run_wm() {
