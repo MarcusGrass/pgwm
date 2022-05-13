@@ -300,12 +300,13 @@ impl<'a> Drawer<'a> {
             let text_dimensions = self
                 .font_manager
                 .text_geometry(name, &self.fonts.tab_bar_section);
-            let text_width = text_dimensions.0 as usize;
-            let center_offset = (split_width as usize - text_width) / 2;
+            let text_width = text_dimensions.0 as i16;
+            let draw_name = if split_width >= text_width { name } else { "" };
+            let center_offset = (split_width - text_width) / 2;
 
             self.font_manager.draw(
                 dbw,
-                name,
+                draw_name,
                 &self.fonts.tab_bar_section,
                 Dimensions::new(split_width, state.tab_bar_height, split_width * i as i16, 0),
                 split_width,

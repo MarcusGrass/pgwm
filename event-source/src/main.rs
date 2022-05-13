@@ -17,7 +17,7 @@ const CLIENT_MESSAGE: &[u8] = b"___CLIENT_OUTGOING___";
 const SERVER_MESSAGE: &[u8] = b"___SERVER_OUTGOING___";
 const PARSEABLE_MESSAGES: [&[u8]; 4] = [CLIENT_MESSAGE, SERVER_MESSAGE, CLIENT_SETUP, SERVER_SETUP];
 
-const PROFILES: &[&str] = &["release"];
+const PROFILES: &[&str] = &["release", "optimized"];
 
 fn main() {
     let long = "event-source/long.log";
@@ -130,6 +130,8 @@ fn start_wm(mutex: Arc<Mutex<()>>, profile: &'static str) -> JoinHandle<std::io:
     std::thread::spawn(move || {
         let mut out = std::process::Command::new("cargo")
             .arg("run")
+            .arg("--target")
+            .arg("x86_64-unknown-linux-musl")
             .arg(format!("--profile={profile}"))
             .arg("--no-default-features")
             .arg("--features")

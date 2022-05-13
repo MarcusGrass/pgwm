@@ -64,8 +64,8 @@ pub(crate) fn run_wm() -> Result<()> {
         #[cfg(feature = "status-bar")]
         status_checks,
     } = bar;
-    let (connection, screen_num) = x11rb::connect(Some(":4"))?;
-    //let (connection, screen_num) = x11rb::connect(None)?;
+    //let (connection, screen_num) = x11rb::connect(Some(":4"))?;
+    let (connection, screen_num) = x11rb::connect(None)?;
     let setup = connection.setup();
     pgwm_core::debug!("Setup formats {:?}", setup.pixmap_formats);
     pgwm_core::debug!("Setup visuals {:?}", setup.roots[0].root_visual);
