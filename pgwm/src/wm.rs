@@ -64,8 +64,8 @@ pub(crate) fn run_wm() -> Result<()> {
         #[cfg(feature = "status-bar")]
         status_checks,
     } = bar;
-    //let (connection, screen_num) = x11rb::connect(Some(":4"))?;
-    let (connection, screen_num) = x11rb::connect(None)?;
+    let (connection, screen_num) = x11rb::connect(Some(":4"))?;
+    //let (connection, screen_num) = x11rb::connect(None)?;
     let setup = connection.setup();
     pgwm_core::debug!("Setup formats {:?}", setup.pixmap_formats);
     pgwm_core::debug!("Setup visuals {:?}", setup.roots[0].root_visual);
@@ -80,8 +80,11 @@ pub(crate) fn run_wm() -> Result<()> {
     let lf = LoadedFonts::new(loaded, &char_remap)?;
 
     let font_drawer = FontDrawer::new(&call_wrapper, &lf);
+    connection.flush()?;
+    pgwm_core::debug!("Allocating colors");
     let colors = alloc_colors(&connection, screen.default_colormap, colors)?;
 
+    pgwm_core::debug!("Creating state");
     let mut state = crate::x11::state_lifecycle::create_state(
         &connection,
         &call_wrapper,
@@ -198,13 +201,13 @@ fn loop_with_status<'a>(
     let mut next_check = std::time::Instant::now();
     // Extremely hot place in the code, should bench the checker
     loop {
-        // Flush events
-        connection.flush()?;
         // Check any events in queue
         while let Some(event) = connection.poll_for_event()? {
             // Handle all
             manager.handle_event(event, state)?;
         }
+        // Flush events
+        connection.flush()?;
         // This looks dumb... Anyway, avoiding an unnecessary poll and going straight to status update
         // if no new events or duration is now.
         let now = std::time::Instant::now();
@@ -233,12 +236,12 @@ fn loop_without_status<'a>(
     // Arbitrarily chosen
     const DEADLINE: Duration = Duration::from_millis(1000);
     loop {
-        // Cleanup
-        connection.flush()?;
         while let Some(event) = connection.poll_for_event()? {
             manager.handle_event(event, state)?;
         }
         manager.destroy_marked(state)?;
+        // Cleanup
+        connection.flush()?;
         // Blocking with a time-out to allow destroying marked even if there are no events
         new_event_within_deadline(connection, std::time::Instant::now(), DEADLINE)?;
     }

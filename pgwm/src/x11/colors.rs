@@ -13,7 +13,6 @@ pub(crate) fn alloc_colors(
     color_map: Colormap,
     colors: pgwm_core::colors::ColorBuilder,
 ) -> Result<Colors> {
-    pgwm_core::debug!("Allocating colors {colors:?}");
     let mut alloc_rgba_cookies: heapless::Vec<
         ((u8, u8, u8, u8), Cookie<RustConnection, AllocColorReply>),
         USED_DIFFERENT_COLOR_SEGMENTS,

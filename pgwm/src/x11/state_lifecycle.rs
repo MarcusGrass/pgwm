@@ -295,10 +295,14 @@ fn do_create_state<'a>(
         };
         monitors.push(new_mon);
     }
+
+    pgwm_core::debug!("Initializing mouse");
     let mouse_mapping = init_mouse(mouse_mappings);
+    pgwm_core::debug!("Initializing keys");
     let key_mapping = init_keys(connection, key_mappings)?;
     grab_keys(connection, &key_mapping, screen.root)?;
     for bar_win in monitors.iter().map(|mon| &mon.bar_win) {
+        pgwm_core::debug!("Grabbing mouse keys on bar_win");
         grab_mouse(
             connection,
             bar_win.window.drawable,
@@ -307,6 +311,7 @@ fn do_create_state<'a>(
         )?;
     }
 
+    pgwm_core::debug!("Creating status bar pixmap");
     #[cfg(feature = "status-bar")]
     let status_pixmap = connection.generate_id()?;
 

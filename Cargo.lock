@@ -276,6 +276,9 @@ dependencies = [
 [[package]]
 name = "event-source"
 version = "0.1.0"
+dependencies = [
+ "x11rb",
+]
 
 [[package]]
 name = "fontdue"
