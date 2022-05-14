@@ -135,8 +135,8 @@ fn start_wm(mutex: Arc<Mutex<()>>, profile: &'static str) -> JoinHandle<std::io:
             .arg("xinerama,config-file")
             .arg("-p")
             .arg("pgwm")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            //.stdout(Stdio::null())
+            //.stderr(Stdio::null())
             .spawn()
             .unwrap();
         let _g = mutex.lock().unwrap();

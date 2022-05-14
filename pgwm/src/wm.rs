@@ -11,12 +11,19 @@ use pgwm_core::config::{BarCfg, Cfg, Options, Sizing};
 use pgwm_core::render::{RenderVisualInfo, VisualInfo};
 use pgwm_core::state::State;
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::time::Duration;
 use x11rb::connection::Connection;
 use x11rb::protocol::render::{PictType, Pictformat, Pictforminfo};
-use x11rb::protocol::xproto::{Screen, Visualid};
+use x11rb::protocol::xproto::{
+    ButtonPressEvent, ButtonReleaseEvent, ClientMessageEvent, ConfigureNotifyEvent,
+    ConfigureRequestEvent, DestroyNotifyEvent, EnterNotifyEvent, KeyPressEvent, MapRequestEvent,
+    MotionNotifyEvent, PropertyNotifyEvent, Screen, UnmapNotifyEvent, VisibilityNotifyEvent,
+    Visualid,
+};
 use x11rb::protocol::Event;
 use x11rb::rust_connection::SingleThreadedRustConnection;
+use x11rb::x11_utils::{TryParse, X11Error};
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
@@ -210,19 +217,88 @@ fn loop_with_status<'a>(
     // Extremely hot place in the code, should bench the checker
     loop {
         // Check any events in queue
-        /*
+
         while let Some(raw) = connection.poll_for_raw_event()? {
-            let response_type = x11rb::reexports::x11rb_protocol::protocol::response_type(&raw)?;
+            let response_type =
+                x11rb::reexports::x11rb_protocol::protocol::response_type(&raw).unwrap();
+            //Event::parse()
             match response_type {
+                x11rb::protocol::xproto::KEY_PRESS_EVENT => {
+                    manager.handle_key_press(KeyPressEvent::try_parse(&raw).unwrap().0, state)?;
+                }
+                x11rb::protocol::xproto::MAP_REQUEST_EVENT => {
+                    manager
+                        .handle_map_request(MapRequestEvent::try_parse(&raw).unwrap().0, state)?;
+                }
+                x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT => {
+                    manager
+                        .handle_unmap_notify(UnmapNotifyEvent::try_parse(&raw).unwrap().0, state)?;
+                }
+                x11rb::protocol::xproto::DESTROY_NOTIFY_EVENT => {
+                    manager.handle_destroy_notify(
+                        DestroyNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::CONFIGURE_NOTIFY_EVENT => {
+                    manager.handle_configure_notify(
+                        ConfigureNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::CONFIGURE_REQUEST_EVENT => {
+                    manager.handle_configure_request(
+                        ConfigureRequestEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::BUTTON_PRESS_EVENT => {
+                    manager
+                        .handle_button_press(ButtonPressEvent::try_parse(&raw).unwrap().0, state)?;
+                }
+                x11rb::protocol::xproto::BUTTON_RELEASE_EVENT => {
+                    manager.handle_button_release(
+                        ButtonReleaseEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::MOTION_NOTIFY_EVENT => {
+                    manager.handle_motion_notify(
+                        MotionNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::ENTER_NOTIFY_EVENT => {
+                    manager.handle_enter(EnterNotifyEvent::try_parse(&raw).unwrap().0, state)?;
+                }
+                x11rb::protocol::xproto::CLIENT_MESSAGE_EVENT => {
+                    manager.handle_client_message(
+                        ClientMessageEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::PROPERTY_NOTIFY_EVENT => {
+                    manager.handle_property_notify(
+                        PropertyNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::VISIBILITY_NOTIFY_EVENT => {
+                    manager.handle_visibility_change(
+                        VisibilityNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
                 _ => {}
             }
         }
-
-         */
+        /*
         while let Some(event) = connection.poll_for_event()? {
             // Handle all
             manager.handle_event(event, state)?;
         }
+
+         */
         // Flush events
         connection.flush()?;
         // This looks dumb... Anyway, avoiding an unnecessary poll and going straight to status update
@@ -253,8 +329,98 @@ fn loop_without_status<'a>(
     // Arbitrarily chosen
     const DEADLINE: Duration = Duration::from_millis(1000);
     loop {
-        while let Some(event) = connection.poll_for_event()? {
-            manager.handle_event(event, state)?;
+        while let Some(raw) = connection.poll_for_raw_event()? {
+            let response_type =
+                x11rb::reexports::x11rb_protocol::protocol::response_type(&raw).unwrap();
+
+            let seq = x11rb::reexports::x11rb_protocol::protocol::sequence_number(&raw).unwrap();
+            /*
+            if state.should_ignore_sequence(seq)
+                && (response_type == x11rb::protocol::xproto::ENTER_NOTIFY_EVENT
+                    || response_type == x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT)
+            {
+                continue;
+            }
+
+             */
+
+            //Event::parse()
+            match response_type {
+                x11rb::protocol::xproto::KEY_PRESS_EVENT => {
+                    manager.handle_key_press(KeyPressEvent::try_parse(&raw).unwrap().0, state)?;
+                }
+                x11rb::protocol::xproto::MAP_REQUEST_EVENT => {
+                    manager
+                        .handle_map_request(MapRequestEvent::try_parse(&raw).unwrap().0, state)?;
+                }
+                x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT => {
+                    let evt = UnmapNotifyEvent::try_parse(&raw).unwrap().0;
+                    if state.should_ignore_sequence(evt.sequence) {
+                        continue;
+                    }
+                    manager.handle_unmap_notify(evt, state)?;
+                }
+                x11rb::protocol::xproto::DESTROY_NOTIFY_EVENT => {
+                    manager.handle_destroy_notify(
+                        DestroyNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::CONFIGURE_NOTIFY_EVENT => {
+                    manager.handle_configure_notify(
+                        ConfigureNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::CONFIGURE_REQUEST_EVENT => {
+                    manager.handle_configure_request(
+                        ConfigureRequestEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::BUTTON_PRESS_EVENT => {
+                    manager
+                        .handle_button_press(ButtonPressEvent::try_parse(&raw).unwrap().0, state)?;
+                }
+                x11rb::protocol::xproto::BUTTON_RELEASE_EVENT => {
+                    manager.handle_button_release(
+                        ButtonReleaseEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::MOTION_NOTIFY_EVENT => {
+                    manager.handle_motion_notify(
+                        MotionNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::ENTER_NOTIFY_EVENT => {
+                    let evt = EnterNotifyEvent::try_parse(&raw).unwrap().0;
+                    if state.should_ignore_sequence(evt.sequence) {
+                        continue;
+                    }
+                    manager.handle_enter(evt, state)?;
+                }
+                x11rb::protocol::xproto::CLIENT_MESSAGE_EVENT => {
+                    manager.handle_client_message(
+                        ClientMessageEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::PROPERTY_NOTIFY_EVENT => {
+                    manager.handle_property_notify(
+                        PropertyNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                x11rb::protocol::xproto::VISIBILITY_NOTIFY_EVENT => {
+                    manager.handle_visibility_change(
+                        VisibilityNotifyEvent::try_parse(&raw).unwrap().0,
+                        state,
+                    )?;
+                }
+                _ => {}
+            }
         }
         manager.destroy_marked(state)?;
         // Cleanup

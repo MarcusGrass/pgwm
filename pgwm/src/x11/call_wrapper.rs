@@ -695,7 +695,7 @@ impl<'a> CallWrapper<'a> {
         state: &mut State,
     ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
         let cookie = self.connection.map_window(window)?;
-        // Doing this to avoid spontaneous refocus
+        // Triggers an enter-notify that needs to be ignored
         state.push_sequence(cookie.sequence_number() as u16);
         Ok(cookie)
     }
@@ -706,6 +706,7 @@ impl<'a> CallWrapper<'a> {
         state: &mut State,
     ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
         let cookie = self.connection.unmap_window(window)?;
+        // Triggers an enter-notify that needs to be ignored, we also don't want to react to an UnmapNotify that we created
         state.push_sequence(cookie.sequence_number() as u16);
         Ok(cookie)
     }
@@ -795,7 +796,7 @@ impl<'a> CallWrapper<'a> {
         state: &mut State,
     ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
         let cookie = self.connection.configure_window(window, cfg)?;
-        // If we don't ignore this it'll cause weird refocusing behaviour
+        // Triggers an enter-notify that needs to be ignored
         state.push_sequence(cookie.sequence_number() as u16);
         Ok(cookie)
     }

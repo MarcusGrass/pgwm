@@ -14,7 +14,7 @@ config-file = ["serde", "heapless/serde", "toml"]
 [dependencies]
 atoi = { version = "1.0.0", default-features = false }
 bstr = { version = "0.2.17", default-features = false }
-heapless = { version = "0.7.10" }
+heapless = { version = "0.7.12" }
 fontdue = { version = "0.7.2", default-features = false, features = ["simd"] }
 toml = {version = "0.5.9", optional = true}
 thiserror = "1.0.30"

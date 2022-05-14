@@ -419,7 +419,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_map_request(&self, event: MapRequestEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_map_request(
+        &self,
+        event: MapRequestEvent,
+        state: &mut State,
+    ) -> Result<()> {
         let attrs = self.call_wrapper.get_window_attributes(event.window)?;
         let hints = self.call_wrapper.get_hints(event.window)?;
         pgwm_core::debug!("Maprequest incoming for sequence {}", event.sequence);
@@ -637,7 +641,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_unmap_notify(&self, event: UnmapNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_unmap_notify(
+        &self,
+        event: UnmapNotifyEvent,
+        state: &mut State,
+    ) -> Result<()> {
         // Is a managed window, manually unmapped windows are not removed
         if state
             .workspaces
@@ -668,7 +676,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_destroy_notify(&self, event: DestroyNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_destroy_notify(
+        &self,
+        event: DestroyNotifyEvent,
+        state: &mut State,
+    ) -> Result<()> {
         self.unmanage(event.window, state)?;
         if let Some(pos) = state
             .dying_windows
@@ -680,7 +692,7 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_configure_notify(
+    pub(crate) fn handle_configure_notify(
         &self,
         event: ConfigureNotifyEvent,
         state: &mut State,
@@ -695,7 +707,7 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_configure_request(
+    pub(crate) fn handle_configure_request(
         &self,
         event: ConfigureRequestEvent,
         state: &mut State,
@@ -707,7 +719,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_button_press(&self, event: ButtonPressEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_button_press(
+        &self,
+        event: ButtonPressEvent,
+        state: &mut State,
+    ) -> Result<()> {
         let mon_ind = state
             .find_monitor_at((event.root_x, event.root_y))
             .unwrap_or(0);
@@ -805,7 +821,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_button_release(&self, event: ButtonReleaseEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_button_release(
+        &self,
+        event: ButtonReleaseEvent,
+        state: &mut State,
+    ) -> Result<()> {
         if let Some((win, _drag)) = state.drag_window.take() {
             let win_dims = self.call_wrapper.get_dimensions(win)?;
             pgwm_core::debug!("Got button release and removed drag window {win}");
@@ -833,7 +853,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_motion_notify(&self, event: MotionNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_motion_notify(
+        &self,
+        event: MotionNotifyEvent,
+        state: &mut State,
+    ) -> Result<()> {
         if let Some((win, drag_pos)) = &state.drag_window {
             let (x, y) = drag_pos.current_position(event.event_x, event.event_y);
             // Sigh, X11 and its mixing up i16 and i32
@@ -867,7 +891,7 @@ impl<'a> Manager<'a> {
         Only method that blindly refocuses, won't refocus on root because it feels strange as a user
         if using the mouse between windows with padding
     **/
-    fn handle_enter(&self, event: EnterNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_enter(&self, event: EnterNotifyEvent, state: &mut State) -> Result<()> {
         if event.event != state.screen.root && event.mode != NotifyMode::GRAB {
             self.try_focus_window(event.event, state)?;
         }
@@ -875,7 +899,7 @@ impl<'a> Manager<'a> {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn handle_client_message(
+    pub(crate) fn handle_client_message(
         &self,
         event: x11rb::protocol::xproto::ClientMessageEvent,
         state: &mut State,
@@ -1243,7 +1267,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_property_notify(&self, event: PropertyNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_property_notify(
+        &self,
+        event: PropertyNotifyEvent,
+        state: &mut State,
+    ) -> Result<()> {
         // Wm's own events
         if event.window == state.screen.root {
             return Ok(());
@@ -1336,7 +1364,7 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_visibility_change(
+    pub(crate) fn handle_visibility_change(
         &self,
         event: VisibilityNotifyEvent,
         state: &mut State,
