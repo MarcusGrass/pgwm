@@ -8,7 +8,7 @@ use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::state::State;
 use x11rb::cookie::VoidCookie;
-use x11rb::rust_connection::RustConnection;
+use x11rb::rust_connection::SingleThreadedRustConnection;
 
 pub(crate) struct BarManager<'a> {
     call_wrapper: &'a CallWrapper<'a>,
@@ -303,7 +303,7 @@ impl<'a> BarManager<'a> {
         &self,
         mon_ind: usize,
         state: &mut State,
-    ) -> Result<Option<VoidCookie<RustConnection>>> {
+    ) -> Result<Option<VoidCookie<SingleThreadedRustConnection>>> {
         if state.monitors[mon_ind].show_bar {
             state.monitors[mon_ind].show_bar = false;
             self.call_wrapper

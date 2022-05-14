@@ -1,16 +1,12 @@
-use std::alloc::System;
-use std::fmt::format;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixListener;
 use std::path::Path;
 use std::process::Stdio;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::SystemTime;
-use x11rb::protocol::{Event, Reply, Request};
-use x11rb::x11_utils::{
-    parse_request_header, BigRequests, ExtInfoProvider, ExtensionInformation, TryParse,
-};
+use x11rb::protocol::Event;
+use x11rb::x11_utils::{ExtInfoProvider, ExtensionInformation, TryParse};
 const CLIENT_SETUP: &[u8] = b"___CLIENT_SETUP___";
 const SERVER_SETUP: &[u8] = b"___SERVER_SETUP___";
 const CLIENT_MESSAGE: &[u8] = b"___CLIENT_OUTGOING___";
@@ -28,6 +24,7 @@ fn main() {
 fn run(path: impl AsRef<Path>, count: usize) {
     let messages = parse_log(path);
     let mut csv_out = "profile,runs,messages,run_average_nanos,run_median_nanos,latency_average_nanos,latency_median_nanos\n".to_owned();
+    let _ = std::fs::remove_file("/tmp/.X11-unix/X4");
     eprintln!("Running {} messages", messages.len());
     let sock = UnixListener::bind("/tmp/.X11-unix/X4").unwrap();
     let lock = Arc::new(Mutex::new(()));
@@ -130,8 +127,8 @@ fn start_wm(mutex: Arc<Mutex<()>>, profile: &'static str) -> JoinHandle<std::io:
     std::thread::spawn(move || {
         let mut out = std::process::Command::new("cargo")
             .arg("run")
-            .arg("--target")
-            .arg("x86_64-unknown-linux-musl")
+            //.arg("--target")
+            //.arg("x86_64-unknown-linux-musl")
             .arg(format!("--profile={profile}"))
             .arg("--no-default-features")
             .arg("--features")

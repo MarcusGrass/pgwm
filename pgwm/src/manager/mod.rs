@@ -33,7 +33,7 @@ use x11rb::protocol::xproto::{
     UnmapNotifyEvent, Visibility, VisibilityNotifyEvent, Window,
 };
 use x11rb::protocol::Event;
-use x11rb::rust_connection::RustConnection;
+use x11rb::rust_connection::SingleThreadedRustConnection;
 
 pub(crate) struct Manager<'a> {
     call_wrapper: &'a CallWrapper<'a>,
@@ -98,11 +98,11 @@ impl<'a> Manager<'a> {
             )?;
         }
         let mut transients: heapless::Vec<
-            (Window, WmHintsCookie<'a, RustConnection>),
+            (Window, WmHintsCookie<'a, SingleThreadedRustConnection>),
             APPLICATION_WINDOW_LIMIT,
         > = heapless::Vec::new();
         let mut non_transients: heapless::Vec<
-            (Window, WmHintsCookie<'a, RustConnection>),
+            (Window, WmHintsCookie<'a, SingleThreadedRustConnection>),
             APPLICATION_WINDOW_LIMIT,
         > = heapless::Vec::new();
         for ScanProperties {
@@ -182,7 +182,7 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_key_press(&self, event: KeyPressEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_key_press(&self, event: KeyPressEvent, state: &mut State) -> Result<()> {
         if let Some(action) = state.get_key_action(event.detail, event.state) {
             self.exec_action(event.event, InputSource::Keyboard, action.clone(), state)?;
         }
@@ -441,7 +441,7 @@ impl<'a> Manager<'a> {
     fn manage_window(
         &self,
         win: Window,
-        hints: WmHintsCookie<'a, RustConnection>,
+        hints: WmHintsCookie<'a, SingleThreadedRustConnection>,
         state: &mut State,
     ) -> Result<()> {
         self.call_wrapper.set_base_client_event_mask(win)?;
@@ -485,7 +485,7 @@ impl<'a> Manager<'a> {
         attached_to: Option<Window>,
         ws_ind: usize,
         draw_on_mon: Option<usize>,
-        hints_cookie: WmHintsCookie<'a, RustConnection>,
+        hints_cookie: WmHintsCookie<'a, SingleThreadedRustConnection>,
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Managing tiled {win} attached to {attached_to:?}");
@@ -541,7 +541,7 @@ impl<'a> Manager<'a> {
         mon_ind: usize,
         ws_ind: usize,
         dimensions: Dimensions,
-        hints_cookie: WmHintsCookie<'a, RustConnection>,
+        hints_cookie: WmHintsCookie<'a, SingleThreadedRustConnection>,
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Managing floating {win} attached to {attached_to:?}");
@@ -1620,10 +1620,10 @@ fn toggle_tabbed(mon_ind: usize, ws_ind: usize, state: &mut State) -> Result<boo
 
 struct ScanProperties<'a> {
     window: Window,
-    attributes: Cookie<'a, RustConnection, GetWindowAttributesReply>,
+    attributes: Cookie<'a, SingleThreadedRustConnection, GetWindowAttributesReply>,
     transient_cookie: TransientConvertCookie<'a>,
     wm_state: Option<WmState>,
-    hints: WmHintsCookie<'a, RustConnection>,
+    hints: WmHintsCookie<'a, SingleThreadedRustConnection>,
 }
 
 fn calculate_relative_placement(

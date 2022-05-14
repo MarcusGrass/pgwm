@@ -15,7 +15,8 @@ use std::time::Duration;
 use x11rb::connection::Connection;
 use x11rb::protocol::render::{PictType, Pictformat, Pictforminfo};
 use x11rb::protocol::xproto::{Screen, Visualid};
-use x11rb::rust_connection::RustConnection;
+use x11rb::protocol::Event;
+use x11rb::rust_connection::SingleThreadedRustConnection;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
@@ -64,8 +65,9 @@ pub(crate) fn run_wm() -> Result<()> {
         #[cfg(feature = "status-bar")]
         status_checks,
     } = bar;
-    //let (connection, screen_num) = x11rb::connect(Some(":4"))?;
-    let (connection, screen_num) = x11rb::connect(None)?;
+
+    let (connection, screen_num) = SingleThreadedRustConnection::connect(Some(":4"))?;
+    //let (connection, screen_num) = x11rb::connect(None)?;
     let setup = connection.setup();
     pgwm_core::debug!("Setup formats {:?}", setup.pixmap_formats);
     pgwm_core::debug!("Setup visuals {:?}", setup.roots[0].root_visual);
@@ -74,6 +76,12 @@ pub(crate) fn run_wm() -> Result<()> {
     call_wrapper.try_become_wm(screen)?;
     connection.flush()?;
     let resource_db = x11rb::resource_manager::new_from_resource_manager(&connection)?.unwrap();
+    /*
+    let resource_db = x11rb::resource_manager::Database::new_from_resource_manager(&connection)
+        .unwrap()
+        .unwrap();
+
+     */
     let cursor_handle = x11rb::cursor::Handle::new(&connection, 0, &resource_db)?;
     let visual = find_render_visual_info(&connection, screen)?;
     let loaded = load_alloc_fonts(&call_wrapper, &visual, &fonts, &char_remap)?;
@@ -193,7 +201,7 @@ pub(crate) fn run_wm() -> Result<()> {
 
 #[cfg(feature = "status-bar")]
 fn loop_with_status<'a>(
-    connection: &RustConnection,
+    connection: &SingleThreadedRustConnection,
     manager: &Manager<'a>,
     checker: &mut pgwm_core::status::checker::Checker,
     state: &mut State,
@@ -202,6 +210,15 @@ fn loop_with_status<'a>(
     // Extremely hot place in the code, should bench the checker
     loop {
         // Check any events in queue
+        /*
+        while let Some(raw) = connection.poll_for_raw_event()? {
+            let response_type = x11rb::reexports::x11rb_protocol::protocol::response_type(&raw)?;
+            match response_type {
+                _ => {}
+            }
+        }
+
+         */
         while let Some(event) = connection.poll_for_event()? {
             // Handle all
             manager.handle_event(event, state)?;
@@ -229,7 +246,7 @@ fn loop_with_status<'a>(
 }
 
 fn loop_without_status<'a>(
-    connection: &'a RustConnection,
+    connection: &'a SingleThreadedRustConnection,
     manager: &'a Manager<'a>,
     state: &mut State,
 ) -> Result<()> {
@@ -248,7 +265,7 @@ fn loop_without_status<'a>(
 }
 
 fn new_event_within_deadline(
-    connection: &RustConnection,
+    connection: &SingleThreadedRustConnection,
     start_instant: std::time::Instant,
     deadline: Duration,
 ) -> Result<bool> {
@@ -288,7 +305,7 @@ fn new_event_within_deadline(
 }
 
 fn find_render_visual_info(
-    connection: &RustConnection,
+    connection: &SingleThreadedRustConnection,
     screen: &Screen,
 ) -> Result<RenderVisualInfo> {
     Ok(RenderVisualInfo {
@@ -298,7 +315,7 @@ fn find_render_visual_info(
 }
 
 fn find_appropriate_visual(
-    connection: &RustConnection,
+    connection: &SingleThreadedRustConnection,
     depth: u8,
     match_visual_id: Option<Visualid>,
 ) -> Result<VisualInfo> {
