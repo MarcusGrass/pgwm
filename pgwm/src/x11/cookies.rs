@@ -1,14 +1,14 @@
 use crate::error::Result;
+use crate::wm::XorgConnection;
 use pgwm_core::config::{APPLICATION_WINDOW_LIMIT, WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT};
 use pgwm_core::geometry::Dimensions;
 use x11rb::{
     cookie::Cookie,
     protocol::xproto::{GetGeometryReply, GetPropertyReply, QueryTreeReply, Window},
-    rust_connection::SingleThreadedRustConnection,
 };
 
 pub(crate) struct QueryTreeCookie<'a> {
-    pub(crate) inner: Cookie<'a, SingleThreadedRustConnection, QueryTreeReply>,
+    pub(crate) inner: Cookie<'a, XorgConnection, QueryTreeReply>,
 }
 
 impl<'a> QueryTreeCookie<'a> {
@@ -20,7 +20,7 @@ impl<'a> QueryTreeCookie<'a> {
 }
 
 pub(crate) struct DimensionsCookie<'a> {
-    pub(crate) inner: Cookie<'a, SingleThreadedRustConnection, GetGeometryReply>,
+    pub(crate) inner: Cookie<'a, XorgConnection, GetGeometryReply>,
 }
 
 impl<'a> DimensionsCookie<'a> {
@@ -36,7 +36,7 @@ impl<'a> DimensionsCookie<'a> {
 }
 
 pub(crate) struct ClassConvertCookie<'a> {
-    pub(crate) inner: Cookie<'a, SingleThreadedRustConnection, GetPropertyReply>,
+    pub(crate) inner: Cookie<'a, XorgConnection, GetPropertyReply>,
 }
 
 impl<'a> ClassConvertCookie<'a> {
@@ -67,8 +67,8 @@ fn extract_wm_class(
 }
 
 pub(crate) struct FallbackNameConvertCookie<'a> {
-    pub(crate) wm_inner: Cookie<'a, SingleThreadedRustConnection, GetPropertyReply>,
-    pub(crate) ewmh_inner: Cookie<'a, SingleThreadedRustConnection, GetPropertyReply>,
+    pub(crate) wm_inner: Cookie<'a, XorgConnection, GetPropertyReply>,
+    pub(crate) ewmh_inner: Cookie<'a, XorgConnection, GetPropertyReply>,
 }
 
 impl<'a> FallbackNameConvertCookie<'a> {
@@ -101,7 +101,7 @@ fn utf8_heapless<const N: usize>(bytes: Vec<u8>) -> Result<Option<heapless::Stri
 }
 
 pub(crate) struct TransientConvertCookie<'a> {
-    pub(crate) inner: Cookie<'a, SingleThreadedRustConnection, GetPropertyReply>,
+    pub(crate) inner: Cookie<'a, XorgConnection, GetPropertyReply>,
 }
 
 impl<'a> TransientConvertCookie<'a> {

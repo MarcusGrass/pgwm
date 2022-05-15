@@ -20,7 +20,8 @@ use x11rb::protocol::xproto::{
     MotionNotifyEvent, PropertyNotifyEvent, Screen, UnmapNotifyEvent, VisibilityNotifyEvent,
     Visualid,
 };
-use x11rb::rust_connection::SingleThreadedRustConnection;
+pub type XorgConnection = x11rb::rust_connection::SingleThreadedRustConnection;
+
 use x11rb::x11_utils::TryParse;
 
 #[allow(clippy::too_many_lines)]
@@ -74,7 +75,7 @@ pub(crate) fn run_wm() -> Result<()> {
     let dpy = Some(":4");
     #[cfg(not(feature = "perf-test"))]
     let dpy = None;
-    let (connection, screen_num) = SingleThreadedRustConnection::connect(dpy)?;
+    let (connection, screen_num) = XorgConnection::connect(dpy)?;
     let setup = connection.setup();
     pgwm_core::debug!("Setup formats {:?}", setup.pixmap_formats);
     pgwm_core::debug!("Setup visuals {:?}", setup.roots[0].root_visual);
@@ -207,7 +208,7 @@ pub(crate) fn run_wm() -> Result<()> {
 
 #[cfg(feature = "status-bar")]
 fn loop_with_status<'a>(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     manager: &Manager<'a>,
     checker: &mut pgwm_core::status::checker::Checker,
     state: &mut State,
@@ -240,7 +241,7 @@ fn loop_with_status<'a>(
 }
 
 fn loop_without_status<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     manager: &'a Manager<'a>,
     state: &mut State,
 ) -> Result<()> {
@@ -258,7 +259,7 @@ fn loop_without_status<'a>(
 
 #[inline]
 fn drain_events<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     manager: &'a Manager<'a>,
     state: &mut State,
 ) -> Result<()> {
@@ -340,7 +341,7 @@ fn drain_events<'a>(
 }
 
 fn new_event_within_deadline(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     start_instant: std::time::Instant,
     deadline: Duration,
 ) -> Result<bool> {
@@ -380,7 +381,7 @@ fn new_event_within_deadline(
 }
 
 fn find_render_visual_info(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     screen: &Screen,
 ) -> Result<RenderVisualInfo> {
     Ok(RenderVisualInfo {
@@ -390,7 +391,7 @@ fn find_render_visual_info(
 }
 
 fn find_appropriate_visual(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     depth: u8,
     match_visual_id: Option<Visualid>,
 ) -> Result<VisualInfo> {

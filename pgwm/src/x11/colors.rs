@@ -4,20 +4,17 @@ use pgwm_core::config::USED_DIFFERENT_COLOR_SEGMENTS;
 use pgwm_core::push_heapless;
 use x11rb::cookie::Cookie;
 
+use crate::wm::XorgConnection;
 use x11rb::protocol::xproto::{AllocColorReply, Colormap, ConnectionExt};
-use x11rb::rust_connection::SingleThreadedRustConnection;
 
 #[allow(clippy::type_complexity)]
 pub(crate) fn alloc_colors(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     color_map: Colormap,
     colors: pgwm_core::colors::ColorBuilder,
 ) -> Result<Colors> {
     let mut alloc_rgba_cookies: heapless::Vec<
-        (
-            (u8, u8, u8, u8),
-            Cookie<SingleThreadedRustConnection, AllocColorReply>,
-        ),
+        ((u8, u8, u8, u8), Cookie<XorgConnection, AllocColorReply>),
         USED_DIFFERENT_COLOR_SEGMENTS,
     > = heapless::Vec::new();
     for color in colors.get_all().iter() {

@@ -12,10 +12,11 @@ use x11rb::protocol::xproto::{
     GrabMode, InputFocus, InternAtomReply, PropMode, QueryPointerReply, Screen, StackMode, Window,
 };
 use x11rb::protocol::ErrorKind;
-use x11rb::rust_connection::{ReplyError, SingleThreadedRustConnection};
+use x11rb::rust_connection::ReplyError;
 use x11rb::{CURRENT_TIME, NONE};
 
 use crate::error::Error::GlyphMismatch;
+use crate::wm::XorgConnection;
 use pgwm_core::config::{WINDOW_MANAGER_NAME, WINDOW_MANAGER_NAME_BUF_SIZE};
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
@@ -40,10 +41,10 @@ macro_rules! impl_atoms {
             $enum_name,
         )*
             }
-            fn init_maps(connection: &SingleThreadedRustConnection) -> Result<(FnvIndexMap<&'static [u8], ResolvedAtom, 32>, FnvIndexMap<Atom, ResolvedAtom, 32>)> {
+            fn init_maps(connection: &XorgConnection) -> Result<(FnvIndexMap<&'static [u8], ResolvedAtom, 32>, FnvIndexMap<Atom, ResolvedAtom, 32>)> {
                     let mut name_to_atom = FnvIndexMap::new();
                     let mut atom_to_resolved = FnvIndexMap::new();
-                    let mut cookies = heapless::Deque::<Cookie<SingleThreadedRustConnection, InternAtomReply>, 32>::new();
+                    let mut cookies = heapless::Deque::<Cookie<XorgConnection, InternAtomReply>, 32>::new();
         $(
                     cookies.push_back(connection.intern_atom(false, $const_name)?)
                     .expect("Not enough space for intern atoms");
@@ -180,7 +181,7 @@ pub(crate) struct ResolvedAtom {
 }
 
 pub(crate) struct CallWrapper<'a> {
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     name_to_atom: FnvIndexMap<&'static [u8], ResolvedAtom, 32>,
     atom_to_resolved: FnvIndexMap<Atom, ResolvedAtom, 32>,
 }
@@ -328,7 +329,7 @@ impl<'a> CallWrapper<'a> {
     pub(crate) fn set_base_client_event_mask(
         &self,
         window: Window,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cw = ChangeWindowAttributesAux::new().event_mask(
             EventMask::ENTER_WINDOW
                 | EventMask::FOCUS_CHANGE
@@ -356,7 +357,7 @@ impl<'a> CallWrapper<'a> {
         &self,
         managed: &[Window],
         state: &State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         Ok(x11rb::wrapper::ConnectionExt::change_property32(
             self.connection,
             PropMode::REPLACE,
@@ -367,10 +368,7 @@ impl<'a> CallWrapper<'a> {
         )?)
     }
 
-    pub(crate) fn get_hints(
-        &self,
-        window: Window,
-    ) -> Result<WmHintsCookie<'a, SingleThreadedRustConnection>> {
+    pub(crate) fn get_hints(&self, window: Window) -> Result<WmHintsCookie<'a, XorgConnection>> {
         Ok(WmHints::get(self.connection, window)?)
     }
 
@@ -383,7 +381,7 @@ impl<'a> CallWrapper<'a> {
     pub(crate) fn query_pointer(
         &self,
         state: &State,
-    ) -> Result<Cookie<'a, SingleThreadedRustConnection, QueryPointerReply>> {
+    ) -> Result<Cookie<'a, XorgConnection, QueryPointerReply>> {
         Ok(self.connection.query_pointer(state.screen.root)?)
     }
 
@@ -396,7 +394,7 @@ impl<'a> CallWrapper<'a> {
     pub(crate) fn get_window_attributes(
         &self,
         window: Window,
-    ) -> Result<Cookie<'a, SingleThreadedRustConnection, GetWindowAttributesReply>> {
+    ) -> Result<Cookie<'a, XorgConnection, GetWindowAttributesReply>> {
         Ok(self.connection.get_window_attributes(window)?)
     }
 
@@ -521,7 +519,7 @@ impl<'a> CallWrapper<'a> {
         &self,
         win: Window,
         state: WmState,
-    ) -> Result<VoidCookie<SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<XorgConnection>> {
         Ok(x11rb::wrapper::ConnectionExt::change_property32(
             self.connection,
             PropMode::REPLACE,
@@ -556,7 +554,7 @@ impl<'a> CallWrapper<'a> {
         &self,
         cursor_handle: &x11rb::cursor::Handle,
         state: &State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let change_attrs_aux = ChangeWindowAttributesAux::new()
             .event_mask(
                 EventMask::SUBSTRUCTURE_REDIRECT
@@ -639,10 +637,7 @@ impl<'a> CallWrapper<'a> {
         Ok(())
     }
 
-    pub(crate) fn reset_root_focus(
-        &self,
-        state: &State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    pub(crate) fn reset_root_focus(&self, state: &State) -> Result<VoidCookie<'a, XorgConnection>> {
         self.connection.delete_property(
             state.screen.root,
             self.name_to_atom[_NET_ACTIVE_WINDOW].value,
@@ -654,7 +649,7 @@ impl<'a> CallWrapper<'a> {
         )?)
     }
 
-    fn send_take_focus(&self, win: Window) -> Result<VoidCookie<SingleThreadedRustConnection>> {
+    fn send_take_focus(&self, win: Window) -> Result<VoidCookie<XorgConnection>> {
         let event = ClientMessageEvent::new(
             32,
             win,
@@ -673,10 +668,7 @@ impl<'a> CallWrapper<'a> {
             .send_event(false, win, EventMask::NO_EVENT, &event)?)
     }
 
-    pub(crate) fn send_delete(
-        &self,
-        win: Window,
-    ) -> Result<VoidCookie<SingleThreadedRustConnection>> {
+    pub(crate) fn send_delete(&self, win: Window) -> Result<VoidCookie<XorgConnection>> {
         let event = ClientMessageEvent::new(
             32,
             win,
@@ -693,7 +685,7 @@ impl<'a> CallWrapper<'a> {
         &self,
         window: Window,
         state: &mut State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cookie = self.connection.map_window(window)?;
         // Triggers an enter-notify that needs to be ignored
         state.push_sequence(cookie.sequence_number() as u16);
@@ -704,24 +696,18 @@ impl<'a> CallWrapper<'a> {
         &self,
         window: Window,
         state: &mut State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cookie = self.connection.unmap_window(window)?;
         // Triggers an enter-notify that needs to be ignored, we also don't want to react to an UnmapNotify that we created
         state.push_sequence(cookie.sequence_number() as u16);
         Ok(cookie)
     }
 
-    pub(crate) fn destroy_window(
-        &self,
-        window: Window,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    pub(crate) fn destroy_window(&self, window: Window) -> Result<VoidCookie<'a, XorgConnection>> {
         Ok(self.connection.destroy_window(window)?)
     }
 
-    pub(crate) fn kill_client(
-        &self,
-        window: Window,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    pub(crate) fn kill_client(&self, window: Window) -> Result<VoidCookie<'a, XorgConnection>> {
         Ok(self.connection.kill_client(window)?)
     }
 
@@ -729,7 +715,7 @@ impl<'a> CallWrapper<'a> {
         &self,
         window: Window,
         state: &mut State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cfg = ConfigureWindowAux::new().stack_mode(StackMode::ABOVE);
         self.do_configure(window, &cfg, state)
     }
@@ -740,7 +726,7 @@ impl<'a> CallWrapper<'a> {
         dimension: Dimensions,
         border_width: u32,
         state: &mut State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cfg = ConfigureWindowAux::new()
             .x(dimension.x as i32)
             .y(dimension.y as i32)
@@ -756,7 +742,7 @@ impl<'a> CallWrapper<'a> {
     pub(crate) fn configure_from_request(
         &self,
         event: &ConfigureRequestEvent,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cfg = ConfigureWindowAux::from_configure_request(event);
         if let Some(border_width) = cfg.border_width {
             self.set_extents(event.window, border_width)?;
@@ -770,7 +756,7 @@ impl<'a> CallWrapper<'a> {
         x: i32,
         y: i32,
         state: &mut State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cfg = ConfigureWindowAux::new()
             .x(x)
             .y(y)
@@ -784,7 +770,7 @@ impl<'a> CallWrapper<'a> {
         height: u32,
         width: u32,
         state: &mut State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cfg = ConfigureWindowAux::new().height(height).width(width);
         self.do_configure(window, &cfg, state)
     }
@@ -794,7 +780,7 @@ impl<'a> CallWrapper<'a> {
         window: Window,
         cfg: &ConfigureWindowAux,
         state: &mut State,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cookie = self.connection.configure_window(window, cfg)?;
         // Triggers an enter-notify that needs to be ignored
         state.push_sequence(cookie.sequence_number() as u16);
@@ -805,7 +791,7 @@ impl<'a> CallWrapper<'a> {
         &self,
         window: Window,
         pixel: u32,
-    ) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+    ) -> Result<VoidCookie<'a, XorgConnection>> {
         let cw = ChangeWindowAttributesAux::new().border_pixel(pixel);
         Ok(self.connection.change_window_attributes(window, &cw)?)
     }
@@ -933,7 +919,7 @@ impl<'a> CallWrapper<'a> {
         self.atom_to_resolved.get(&atom).copied()
     }
 
-    pub fn new(connection: &'a SingleThreadedRustConnection) -> Result<Self> {
+    pub fn new(connection: &'a XorgConnection) -> Result<Self> {
         let (name_to_atom, atom_to_resolved) = init_maps(connection)?;
         Ok(CallWrapper {
             connection,
@@ -973,10 +959,10 @@ impl WmState {
 
 pub(crate) struct FloatDeductionCookie<'a> {
     call_wrapper: &'a CallWrapper<'a>,
-    size_hints: WmSizeHintsCookie<'a, SingleThreadedRustConnection>,
-    transient_convert: Cookie<'a, SingleThreadedRustConnection, GetPropertyReply>,
-    ewmh_state_convert: Cookie<'a, SingleThreadedRustConnection, GetPropertyReply>,
-    ewmh_window_type_convert: Cookie<'a, SingleThreadedRustConnection, GetPropertyReply>,
+    size_hints: WmSizeHintsCookie<'a, XorgConnection>,
+    transient_convert: Cookie<'a, XorgConnection, GetPropertyReply>,
+    ewmh_state_convert: Cookie<'a, XorgConnection, GetPropertyReply>,
+    ewmh_window_type_convert: Cookie<'a, XorgConnection, GetPropertyReply>,
 }
 
 impl<'a> FloatDeductionCookie<'a> {

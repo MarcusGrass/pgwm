@@ -1,11 +1,11 @@
 use crate::error::Result;
 use pgwm_core::push_heapless;
 
+use crate::wm::XorgConnection;
 use x11rb::properties::WmHintsCookie;
 use x11rb::{
     properties::WmHints,
     protocol::xproto::{ClientMessageEvent, PropertyNotifyEvent, Window},
-    rust_connection::SingleThreadedRustConnection,
 };
 
 use crate::x11::call_wrapper::{SupportedAtom, WmState};
@@ -16,7 +16,7 @@ use super::{
 };
 
 pub(crate) struct ClientMessageHandler<'a> {
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     call_wrapper: &'a CallWrapper<'a>,
 }
 
@@ -138,10 +138,7 @@ impl<'a> ClientMessageHandler<'a> {
     }
 
     #[must_use]
-    pub(crate) fn new(
-        connection: &'a SingleThreadedRustConnection,
-        call_wrapper: &'a CallWrapper<'a>,
-    ) -> Self {
+    pub(crate) fn new(connection: &'a XorgConnection, call_wrapper: &'a CallWrapper<'a>) -> Self {
         Self {
             connection,
             call_wrapper,
@@ -158,7 +155,7 @@ pub(crate) enum ClientMessage {
 }
 
 pub(crate) enum PropertyChangeMessage<'a> {
-    Hints((Window, WmHintsCookie<'a, SingleThreadedRustConnection>)),
+    Hints((Window, WmHintsCookie<'a, XorgConnection>)),
     ClassName((Window, ClassConvertCookie<'a>)),
     Name((Window, FallbackNameConvertCookie<'a>)),
     WmStateChange((Window, Option<WmState>)),

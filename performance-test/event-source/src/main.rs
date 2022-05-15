@@ -42,7 +42,7 @@ struct Scenario {
 }
 
 fn main() {
-    run_scenario(LONG_RUN_SCENARIO, 10);
+    run_scenario(LONG_RUN_SCENARIO, 1000);
 }
 
 fn run_scenario(scenario: Scenario, count: usize) {
@@ -72,7 +72,7 @@ fn run_scenario(scenario: Scenario, count: usize) {
     let mut post_results = vec![];
     for profile in PROFILES {
         let binary = produce_binary(profile).unwrap();
-        for _ in 0..count {
+        for i in 0..count {
             // There's actually a race condition below, starting the WM before listening
             // but non-problematic atm
             let handle = start_wm(binary.clone());
@@ -82,7 +82,7 @@ fn run_scenario(scenario: Scenario, count: usize) {
             let post_result = time_chunk(post_start, &merged_post, &mut stream);
             post_results.push(post_result);
             handle.join().unwrap().unwrap();
-            //eprintln!("Completed pass {i} for profile {profile:?}");
+            eprintln!("Completed pass {i} for profile {profile:?}");
         }
         let startup_avg = average_results(std::mem::take(&mut startup_results));
         let post_avg = average_results(std::mem::take(&mut post_results));
@@ -154,7 +154,7 @@ fn average_results(results: Vec<RunResult>) -> AveragedResults {
         run_time: total_run / count,
         latency_nanos: total_avg_lat / count,
         latency_med_nanos: total_med_lat / count,
-        msgs_per_sec: total_tp / count * 1_000_000f64,
+        msgs_per_sec: total_tp / count,
     }
 }
 
@@ -243,7 +243,7 @@ fn produce_binary(profile: Profile) -> std::io::Result<PathBuf> {
 }
 
 fn run_build(profile: &str) -> std::io::Result<()> {
-    let out = std::process::Command::new("cargo")
+    let _out = std::process::Command::new("cargo")
         .arg("b")
         //.arg("--target")
         //.arg("x86_64-unknown-linux-musl")

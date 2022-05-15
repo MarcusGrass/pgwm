@@ -32,14 +32,14 @@ use x11rb::protocol::xproto::{
     ButtonIndex, CapStyle, ConnectionExt, CreateGCAux, CreateWindowAux, EventMask, Gcontext,
     GrabMode, JoinStyle, LineStyle, Pixmap, Screen, Window, WindowClass,
 };
-use x11rb::rust_connection::SingleThreadedRustConnection;
 use x11rb::COPY_DEPTH_FROM_PARENT;
 
 use crate::manager::font::{FontDrawer, LoadedFonts};
+use crate::wm::XorgConnection;
 use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) fn create_state<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     call_wrapper: &'a CallWrapper<'a>,
     font_manager: &'a FontDrawer<'a>,
     visual: RenderVisualInfo,
@@ -106,7 +106,7 @@ pub(crate) fn create_state<'a>(
 }
 
 pub(crate) fn reinit_state<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     call_wrapper: &'a CallWrapper<'a>,
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
@@ -153,10 +153,7 @@ pub(crate) fn reinit_state<'a>(
     )
 }
 
-pub(crate) fn teardown_dynamic_state(
-    connection: &SingleThreadedRustConnection,
-    state: &State,
-) -> Result<()> {
+pub(crate) fn teardown_dynamic_state(connection: &XorgConnection, state: &State) -> Result<()> {
     for mon in &state.monitors {
         connection.destroy_window(mon.bar_win.window.drawable)?;
         x11rb::protocol::render::free_picture(connection, mon.bar_win.window.picture)?;
@@ -167,7 +164,7 @@ pub(crate) fn teardown_dynamic_state(
 }
 
 pub(crate) fn teardown_full_state(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     state: &State,
     loaded_fonts: &LoadedFonts,
 ) -> Result<()> {
@@ -182,7 +179,7 @@ pub(crate) fn teardown_full_state(
 #[allow(clippy::fn_params_excessive_bools)]
 #[allow(clippy::too_many_lines)]
 fn do_create_state<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     call_wrapper: &'a CallWrapper<'a>,
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
@@ -210,7 +207,7 @@ fn do_create_state<'a>(
     key_mappings: &[SimpleKeyMapping],
     mouse_mappings: &[SimpleMouseMapping],
     #[cfg(feature = "status-bar")] checks: &[Check],
-    mut cookie_container: heapless::Vec<VoidCookie<'a, SingleThreadedRustConnection>, 32>,
+    mut cookie_container: heapless::Vec<VoidCookie<'a, XorgConnection>, 32>,
 ) -> Result<State> {
     let screen_dimensions = get_screen_dimensions(connection, &screen)?;
     let mut monitors = Vec::with_capacity(8);
@@ -363,11 +360,11 @@ fn do_create_state<'a>(
 }
 
 fn create_static_state<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     screen: &'a Screen,
     colors: &Colors,
     tab_bar_height: u16,
-    cookie_container: &mut heapless::Vec<VoidCookie<'a, SingleThreadedRustConnection>, 32>,
+    cookie_container: &mut heapless::Vec<VoidCookie<'a, XorgConnection>, 32>,
 ) -> Result<StaticState> {
     let mut intern_created_windows = FnvIndexSet::new();
     let mut gcs = create_gcs(connection, screen, colors)?;
@@ -404,12 +401,12 @@ struct StaticState {
 }
 
 fn create_tab_bar_win<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     screen: &Screen,
     tab_bar_win: Window,
     dimensions: Dimensions,
     tab_bar_height: i16,
-) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+) -> Result<VoidCookie<'a, XorgConnection>> {
     let create_win = CreateWindowAux::new()
         .event_mask(EventMask::BUTTON_PRESS)
         .background_pixel(0);
@@ -429,12 +426,12 @@ fn create_tab_bar_win<'a>(
 }
 
 fn create_workspace_bar_win<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     screen: &Screen,
     ws_bar_win: Window,
     dimensions: Dimensions,
     status_bar_height: u16,
-) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+) -> Result<VoidCookie<'a, XorgConnection>> {
     let cw = CreateWindowAux::new()
         .background_pixel(screen.black_pixel)
         .event_mask(
@@ -460,12 +457,12 @@ fn create_workspace_bar_win<'a>(
 }
 
 fn create_workspace_bar_pixmap<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     screen: &Screen,
     bar_pixmap: Pixmap,
     dimensions: Dimensions,
     status_bar_height: u16,
-) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+) -> Result<VoidCookie<'a, XorgConnection>> {
     Ok(connection.create_pixmap(
         screen.root_depth,
         bar_pixmap,
@@ -476,10 +473,10 @@ fn create_workspace_bar_pixmap<'a>(
 }
 
 fn create_wm_check_win<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     screen: &'a Screen,
     check_win: Window,
-) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+) -> Result<VoidCookie<'a, XorgConnection>> {
     let cw = CreateWindowAux::new()
         .event_mask(EventMask::NO_EVENT)
         .background_pixel(0);
@@ -499,10 +496,10 @@ fn create_wm_check_win<'a>(
 }
 
 fn create_gcs<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     screen: &'a Screen,
     colors: &Colors,
-) -> Result<FnvIndexMap<u32, (Gcontext, VoidCookie<'a, SingleThreadedRustConnection>), 8>> {
+) -> Result<FnvIndexMap<u32, (Gcontext, VoidCookie<'a, XorgConnection>), 8>> {
     let mut map = FnvIndexMap::new();
     let colors_needing_gcs = [
         colors.tab_bar_focused_tab_background().pixel,
@@ -525,10 +522,10 @@ fn create_gcs<'a>(
     Ok(map)
 }
 fn create_background_gc(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     win: Window,
     pixel: u32,
-) -> Result<(Gcontext, VoidCookie<SingleThreadedRustConnection>)> {
+) -> Result<(Gcontext, VoidCookie<XorgConnection>)> {
     let gc = connection.generate_id()?;
     let gc_aux = CreateGCAux::new()
         .graphics_exposures(0)
@@ -544,7 +541,7 @@ fn create_background_gc(
 #[cfg(not(feature = "xinerama"))]
 #[allow(clippy::unnecessary_wraps)]
 fn get_screen_dimensions<'a>(
-    _connection: &'a SingleThreadedRustConnection,
+    _connection: &'a XorgConnection,
     screen: &'a Screen,
 ) -> Result<Vec<Dimensions>> {
     Ok(vec![Dimensions::new(
@@ -557,7 +554,7 @@ fn get_screen_dimensions<'a>(
 
 #[cfg(feature = "xinerama")]
 fn get_screen_dimensions<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     _screen: &'a Screen,
 ) -> Result<Vec<Dimensions>> {
     Ok(x11rb::protocol::xinerama::query_screens(connection)?
@@ -576,11 +573,11 @@ fn get_screen_dimensions<'a>(
 }
 
 fn create_tab_pixmap<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     screen: &'a Screen,
     pixmap: Pixmap,
     tab_bar_height: u16,
-) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+) -> Result<VoidCookie<'a, XorgConnection>> {
     Ok(connection.create_pixmap(
         screen.root_depth,
         pixmap,
@@ -591,12 +588,12 @@ fn create_tab_pixmap<'a>(
 }
 #[cfg(feature = "status-bar")]
 fn create_status_bar_pixmap<'a>(
-    connection: &'a SingleThreadedRustConnection,
+    connection: &'a XorgConnection,
     screen: &Screen,
     pixmap: Pixmap,
     max_bar_width: u16,
     status_bar_height: u16,
-) -> Result<VoidCookie<'a, SingleThreadedRustConnection>> {
+) -> Result<VoidCookie<'a, XorgConnection>> {
     Ok(connection.create_pixmap(
         screen.root_depth,
         pixmap,
@@ -790,7 +787,7 @@ fn create_fixed_components<It: Iterator<Item = String>>(
 }
 
 fn init_keys(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     simple_key_mappings: &[SimpleKeyMapping],
 ) -> Result<HashMap<KeyBoardMappingKey, Action>> {
     let setup = connection.setup();
@@ -820,7 +817,7 @@ fn init_keys(
 }
 
 fn grab_keys(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     key_map: &HashMap<KeyBoardMappingKey, Action>,
     root_win: Window,
 ) -> Result<()> {
@@ -858,7 +855,7 @@ fn init_mouse(simple_mouse_mappings: &[SimpleMouseMapping]) -> HashMap<MouseActi
 }
 
 fn grab_mouse(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     bar_win: Window,
     root_win: Window,
     mouse_map: &HashMap<MouseActionKey, Action>,
@@ -880,7 +877,7 @@ fn grab_mouse(
 }
 
 fn init_xrender_double_buffered(
-    connection: &SingleThreadedRustConnection,
+    connection: &XorgConnection,
     call_wrapper: &CallWrapper,
     root: Window,
     window: Window,
