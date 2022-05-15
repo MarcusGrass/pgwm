@@ -15,14 +15,22 @@ enum Profile {
     Optimized,
 }
 
+#[derive(Copy, Clone, Debug)]
+enum RunPart {
+    Start,
+    Post,
+}
+
+#[allow(dead_code)]
 const STARTUP_SCENARIO: Scenario = Scenario {
-    name: "Start WM",
+    name: "startup-short",
     file: "performance-test/event-source/startup-scenario.log",
     last_client_msg_pre_startup: 621,
 };
 
+#[allow(dead_code)]
 const LONG_RUN_SCENARIO: Scenario = Scenario {
-    name: "Run long",
+    name: "run-long",
     file: "performance-test/event-source/long-run-scenario.log",
     last_client_msg_pre_startup: 652,
 };
@@ -56,7 +64,7 @@ fn run_scenario(scenario: Scenario, count: usize) {
     let merged_startup = merge_messages(startup);
     let post_start = &messages.as_slice()[startup_checkpoint.unwrap() + 1..];
     let merged_post = merge_messages(post_start);
-    let mut csv_out = "profile,runs,messages,run_average_nanos,run_median_nanos,latency_average_nanos,latency_median_nanos\n".to_owned();
+    let mut csv_out = "profile,part,runs,messages,run_average_nanos,messages_per_second,latency_average_nanos,latency_median_nanos\n".to_owned();
     let _ = std::fs::remove_file("/tmp/.X11-unix/X4");
     eprintln!("Running {} messages", messages.len());
     let sock = UnixListener::bind("/tmp/.X11-unix/X4").unwrap();
@@ -64,7 +72,7 @@ fn run_scenario(scenario: Scenario, count: usize) {
     let mut post_results = vec![];
     for profile in PROFILES {
         let binary = produce_binary(profile).unwrap();
-        for i in 0..count {
+        for _ in 0..count {
             // There's actually a race condition below, starting the WM before listening
             // but non-problematic atm
             let handle = start_wm(binary.clone());
@@ -76,16 +84,19 @@ fn run_scenario(scenario: Scenario, count: usize) {
             handle.join().unwrap().unwrap();
             //eprintln!("Completed pass {i} for profile {profile:?}");
         }
+        let startup_avg = average_results(std::mem::take(&mut startup_results));
+        let post_avg = average_results(std::mem::take(&mut post_results));
+        csv_out = format!(
+            "{csv_out}{}{}",
+            result_to_csv_line(&startup_avg, RunPart::Start, profile, count, startup.len()),
+            result_to_csv_line(&post_avg, RunPart::Post, profile, count, post_start.len())
+        );
         eprintln!(
             "{}",
-            fmt_results(
-                profile,
-                std::mem::take(&mut startup_results),
-                std::mem::take(&mut post_results),
-                messages.len()
-            )
+            fmt_results(profile, &startup_avg, &post_avg, messages.len())
         );
     }
+    dump_csv(scenario, csv_out);
 }
 
 #[allow(clippy::uninit_vec)]
@@ -108,7 +119,7 @@ fn time_chunk(
                 }
             }
             SockOp::Write(buf) => {
-                stream.write_all(&buf).unwrap();
+                stream.write_all(buf).unwrap();
                 latency_timer = Some(SystemTime::now());
             }
         }
@@ -127,10 +138,43 @@ fn time_chunk(
     }
 }
 
+fn average_results(results: Vec<RunResult>) -> AveragedResults {
+    let count = results.len() as f64;
+    let mut total_run = 0f64;
+    let mut total_tp = 0f64;
+    let mut total_avg_lat = 0f64;
+    let mut total_med_lat = 0f64;
+    for res in results {
+        total_run += res.run_time_nanos as f64;
+        total_tp += res.throughput;
+        total_avg_lat += res.avg_latency_nanos as f64;
+        total_med_lat += res.median_latency_nanos as f64;
+    }
+    AveragedResults {
+        run_time: total_run / count,
+        latency_nanos: total_avg_lat / count,
+        latency_med_nanos: total_med_lat / count,
+        msgs_per_sec: total_tp / count * 1_000_000f64,
+    }
+}
+
+fn result_to_csv_line(
+    results: &AveragedResults,
+    part: RunPart,
+    profile: Profile,
+    run_count: usize,
+    messages: usize,
+) -> String {
+    format!(
+        "{profile:?},{part:?},{run_count},{messages},{},{},{},{}\n",
+        results.run_time, results.msgs_per_sec, results.latency_nanos, results.latency_med_nanos
+    )
+}
+
 fn fmt_results(
     profile: Profile,
-    startup: Vec<RunResult>,
-    post: Vec<RunResult>,
+    startup: &AveragedResults,
+    post: &AveragedResults,
     messages: usize,
 ) -> String {
     format!(
@@ -141,18 +185,7 @@ fn fmt_results(
     )
 }
 
-fn fmt_single(run_results: Vec<RunResult>) -> String {
-    let count = run_results.len();
-    let mut total_run = 0;
-    let mut total_tp = 0f64;
-    let mut total_avg_lat = 0;
-    let mut total_med_lat = 0;
-    for res in run_results {
-        total_run += res.run_time_nanos;
-        total_tp += res.throughput;
-        total_avg_lat += res.avg_latency_nanos;
-        total_med_lat += res.median_latency_nanos;
-    }
+fn fmt_single(run_results: &AveragedResults) -> String {
     format!(
         "\tAverage run time nanos:\n\
     \t\t{}\n\
@@ -162,11 +195,22 @@ fn fmt_single(run_results: Vec<RunResult>) -> String {
     \t\t{}\n\
     \tAverage median latency:\n\
     \t\t{}",
-        total_run / count as u128,
-        total_tp / count as f64,
-        total_avg_lat / count as u128,
-        total_med_lat / count as u128
+        run_results.run_time,
+        run_results.msgs_per_sec,
+        run_results.latency_nanos,
+        run_results.latency_med_nanos
     )
+}
+
+fn dump_csv(scenario: Scenario, csv_lines: String) {
+    for i in 0..999 {
+        let check = format!("target/{}{i}.csv", scenario.name);
+        if std::fs::metadata(&check).is_err() {
+            eprintln!("Dumping run results to {check}");
+            std::fs::write(check, csv_lines).unwrap();
+            break;
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -175,6 +219,14 @@ struct RunResult {
     avg_latency_nanos: u128,
     median_latency_nanos: u128,
     throughput: f64,
+}
+
+#[derive(Debug)]
+struct AveragedResults {
+    run_time: f64,
+    latency_nanos: f64,
+    latency_med_nanos: f64,
+    msgs_per_sec: f64,
 }
 
 fn produce_binary(profile: Profile) -> std::io::Result<PathBuf> {
