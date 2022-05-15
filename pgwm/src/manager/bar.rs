@@ -23,9 +23,8 @@ impl<'a> BarManager<'a> {
         state: &mut State,
     ) -> Result<()> {
         let mon = &state.monitors[mon_ind];
-        let section = mon.bar_geometry.window_title_section;
+        let section = &mon.bar_geometry.window_title_section;
         let title_position = section.position;
-        let mon = &mut state.monitors[mon_ind];
         pgwm_core::debug!("Starting window title draw");
         let draw_width = self.font_drawer.draw(
             &mon.bar_win,
@@ -43,8 +42,10 @@ impl<'a> BarManager<'a> {
             state.colors.workspace_bar_current_window_title_background,
             state.colors.workspace_bar_current_window_title_text,
         )?;
-        mon.bar_geometry.window_title_section.last_draw_width =
-            draw_width + state.workspace_bar_window_name_padding as i16;
+        state.monitors[mon_ind]
+            .bar_geometry
+            .window_title_section
+            .last_draw_width = draw_width + state.workspace_bar_window_name_padding as i16;
         Ok(())
     }
 
@@ -208,7 +209,7 @@ impl<'a> BarManager<'a> {
             let (content, pos) = state.monitors[mon_ind]
                 .bar_geometry
                 .status
-                .update_and_get_section_line(content, content_ind);
+                .update_and_get_section_line(content.clone(), content_ind);
             let src_y = state.monitors[mon_ind].dimensions.y;
             self.font_drawer.draw(
                 &state.monitors[mon_ind].bar_win,

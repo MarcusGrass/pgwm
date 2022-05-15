@@ -79,7 +79,7 @@ pub(crate) fn create_state<'a>(
         visual,
         screen.clone(),
         static_state.intern_created_windows,
-        &heapless::CopyVec::new(),
+        heapless::Vec::new(),
         Workspaces::create_empty(init_workspaces, tiling_modifiers)?,
         colors,
         static_state.wm_check_win,
@@ -127,7 +127,7 @@ pub(crate) fn reinit_state<'a>(
         visual,
         state.screen.clone(),
         state.intern_created_windows,
-        &state.dying_windows,
+        state.dying_windows,
         state.workspaces,
         state.colors,
         state.wm_check_win,
@@ -189,7 +189,7 @@ fn do_create_state<'a>(
     vis_info: RenderVisualInfo,
     screen: Screen,
     mut intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
-    dying_windows: &heapless::CopyVec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
+    dying_windows: heapless::Vec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
     workspaces: Workspaces,
     colors: Colors,
     wm_check_win: Window,
@@ -340,7 +340,7 @@ fn do_create_state<'a>(
         focused_mon: 0,
         input_focus: None,
         screen: screen.clone(),
-        dying_windows: *dying_windows,
+        dying_windows,
         wm_check_win,
         sequences_to_ignore,
         monitors,
@@ -384,7 +384,7 @@ fn create_static_state<'a>(
         cookie_container,
         create_wm_check_win(connection, screen, check_win)?
     )?;
-    let keys = gcs.keys().copied().collect::<heapless::CopyVec<u32, 8>>();
+    let keys = gcs.keys().copied().collect::<heapless::Vec<u32, 8>>();
     for key in keys {
         let (_, cookie) = gcs.remove(&key).unwrap();
         push_heapless!(cookie_container, cookie)?;
@@ -650,12 +650,12 @@ fn create_status_section_geometry<'a>(
     shortcut_width: i16,
     checks: &[Check],
 ) -> StatusSection {
-    let mut check_lengths: heapless::CopyVec<
+    let mut check_lengths: heapless::Vec<
         i16,
         { pgwm_core::config::STATUS_BAR_UNIQUE_CHECK_LIMIT },
-    > = heapless::CopyVec::new();
+    > = heapless::Vec::new();
     for check in checks {
-        let length = match check.check_type {
+        let length = match &check.check_type {
             CheckType::Battery(bc) => bc
                 .iter()
                 .map(|bc| {

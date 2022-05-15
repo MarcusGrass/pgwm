@@ -28,8 +28,8 @@ pub(crate) fn alloc_colors(
             (color, connection.alloc_color(color_map, r, g, b)?)
         )?;
     }
-    let mut allocated_colors: heapless::CopyVec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
-        heapless::CopyVec::new();
+    let mut allocated_colors: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
+        heapless::Vec::new();
     for ((r, g, b, a), cookie) in alloc_rgba_cookies {
         push_heapless!(
             allocated_colors,

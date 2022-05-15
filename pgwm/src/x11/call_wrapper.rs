@@ -216,7 +216,7 @@ impl<'a> CallWrapper<'a> {
                 .iter()
                 .filter(|supported| supported.1.ewmh)
                 .map(|val| val.1.value)
-                .collect::<heapless::CopyVec<u32, 32>>()
+                .collect::<heapless::Vec<u32, 32>>()
                 .as_slice(),
         )?;
         x11rb::wrapper::ConnectionExt::change_property32(
@@ -239,7 +239,7 @@ impl<'a> CallWrapper<'a> {
             .chars()
             .chain(std::iter::once('\u{0}'))
             .map(|ch| ch as u32)
-            .collect::<heapless::CopyVec<u32, WINDOW_MANAGER_NAME_BUF_SIZE>>();
+            .collect::<heapless::Vec<u32, WINDOW_MANAGER_NAME_BUF_SIZE>>();
         x11rb::wrapper::ConnectionExt::change_property32(
             self.connection,
             PropMode::REPLACE,
@@ -485,7 +485,7 @@ impl<'a> CallWrapper<'a> {
         })
     }
 
-    fn convert_atom_vector(&self, reply: GetPropertyReply) -> heapless::CopyVec<SupportedAtom, 16> {
+    fn convert_atom_vector(&self, reply: GetPropertyReply) -> heapless::Vec<SupportedAtom, 16> {
         reply
             .value32()
             .into_iter()

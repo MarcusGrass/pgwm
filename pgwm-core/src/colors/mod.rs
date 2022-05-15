@@ -75,8 +75,8 @@ macro_rules! impl_colors {
                 }
             }
             #[must_use]
-            pub fn get_all(&self) -> heapless::CopyVec<&(u8, u8, u8, u8), USED_DIFFERENT_COLOR_SEGMENTS> {
-                let mut all = heapless::CopyVec::new();
+            pub fn get_all(&self) -> heapless::Vec<&(u8, u8, u8, u8), USED_DIFFERENT_COLOR_SEGMENTS> {
+                let mut all = heapless::Vec::new();
                 $(
                     let _ = all.push(&self.$color_name);
                 )*
@@ -91,7 +91,7 @@ macro_rules! impl_colors {
         }
         impl Colors {
             #[must_use]
-            pub fn from_vec(source: heapless::CopyVec<Color, USED_DIFFERENT_COLOR_SEGMENTS>) -> Self {
+            pub fn from_vec(source: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS>) -> Self {
                 Self {
                     $(
                     $color_name: source[$index],
@@ -106,8 +106,8 @@ macro_rules! impl_colors {
             )*
 
             #[must_use]
-            pub fn get_all(&self) -> heapless::CopyVec<Color, USED_DIFFERENT_COLOR_SEGMENTS> {
-                let mut all = heapless::CopyVec::new();
+            pub fn get_all(&self) -> heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> {
+                let mut all = heapless::Vec::new();
                 $(
                     let _ = all.push(self.$color_name);
                 )*

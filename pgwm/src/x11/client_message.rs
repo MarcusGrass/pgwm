@@ -88,7 +88,7 @@ impl<'a> ClientMessageHandler<'a> {
 
     fn interpret_state(&self, event: ClientMessageEvent) -> Result<Option<ClientMessage>> {
         let parts = event.data.as_data32();
-        let mut state_changes: heapless::CopyVec<ChangeAction, 3> = heapless::CopyVec::new();
+        let mut state_changes: heapless::Vec<ChangeAction, 3> = heapless::Vec::new();
         let action = parts[0];
         let change_type = ChangeType::from_number(action);
         // Last one is the source indication
@@ -154,7 +154,7 @@ pub(crate) enum ClientMessage {
     RequestActiveWindow(Window),
     RequestSetExtents(Window),
     CloseWindow(Window),
-    StateChange((Window, heapless::CopyVec<ChangeAction, 3>)),
+    StateChange((Window, heapless::Vec<ChangeAction, 3>)),
 }
 
 pub(crate) enum PropertyChangeMessage<'a> {

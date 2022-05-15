@@ -6,7 +6,7 @@ use crate::format_heapless;
 use crate::status::cpu::LoadChecker;
 use crate::status::sys::mem::Data;
 use heapless::binary_heap::Min;
-use heapless::{BinaryHeap, CopyVec, String};
+use heapless::{BinaryHeap, String};
 use std::cmp::Ordering;
 use std::ops::Add;
 use std::time::{Duration, Instant};
@@ -16,7 +16,7 @@ use time::{OffsetDateTime, UtcOffset};
 use crate::status::net::{ThroughputChecker, ThroughputPerSec};
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Check {
     pub interval: u64,
     pub check_type: CheckType,
@@ -24,9 +24,9 @@ pub struct Check {
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[cfg_attr(feature = "config-file", serde(tag = "kind", content = "args"))]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum CheckType {
-    Battery(CopyVec<BatFormat, STATUS_BAR_BAT_SEGMENT_LIMIT>),
+    Battery(heapless::Vec<BatFormat, STATUS_BAR_BAT_SEGMENT_LIMIT>),
     Cpu(CpuFormat),
     Net(NetFormat),
     Mem(MemFormat),
@@ -34,7 +34,7 @@ pub enum CheckType {
 }
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BatFormat {
     pub(crate) above: u8,
     pub(crate) icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
@@ -61,7 +61,7 @@ impl BatFormat {
 }
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CpuFormat {
     icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
     decimals: usize,
@@ -106,7 +106,7 @@ impl CpuFormat {
 }
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NetFormat {
     icon_up: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
     icon_down: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
@@ -184,7 +184,7 @@ fn compress_to_display(val: f64) -> (&'static str, f64) {
 }
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MemFormat {
     icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
     decimals: usize,
@@ -232,7 +232,7 @@ impl MemFormat {
 }
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DateFormat {
     icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
     pub pattern: String<STATUS_BAR_DATE_PATTERN_LIMIT>,
@@ -379,7 +379,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub fn new(checks: &'a mut CopyVec<Check, STATUS_BAR_UNIQUE_CHECK_LIMIT>) -> Self {
+    pub fn new(checks: &'a mut heapless::Vec<Check, STATUS_BAR_UNIQUE_CHECK_LIMIT>) -> Self {
         assert!(!checks.is_empty(), "No checks, still tried to init");
         for check in checks.iter_mut() {
             if let CheckType::Battery(bf) = &mut check.check_type {
@@ -422,12 +422,12 @@ mod checker_tests {
     #[test]
     #[should_panic]
     fn immediate_panic_on_no_checks() {
-        Checker::new(&mut heapless::CopyVec::new());
+        Checker::new(&mut heapless::Vec::new());
     }
 
     #[test]
     fn can_dry_run_checks() {
-        let mut checks = heapless::CopyVec::new();
+        let mut checks = heapless::Vec::new();
 
         let interval = Duration::from_millis(10_000);
         let _ = checks.push(Check {
@@ -449,7 +449,7 @@ mod checker_tests {
     // Risk for flakiness
     #[test]
     fn can_dry_run_kept_in_sync() {
-        let mut checks = heapless::CopyVec::new();
+        let mut checks = heapless::Vec::new();
 
         // Need some primes with no overlap on doubling/tripling within a chosen low range
         let three = Duration::from_millis(3);
@@ -529,7 +529,7 @@ mod checker_tests {
     #[test]
     #[cfg(unix)]
     fn can_real_run_checks() {
-        let mut checks = heapless::CopyVec::new();
+        let mut checks = heapless::Vec::new();
 
         let interval = Duration::from_millis(10_000);
         let _ = checks.push(Check {

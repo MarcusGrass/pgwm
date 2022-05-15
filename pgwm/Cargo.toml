@@ -13,6 +13,7 @@ default = ["xinerama", "status-bar", "config-file"]
 debug = ["pgwm-core/debug"]
 xinerama = ["x11rb/xinerama"]
 status-bar = ["pgwm-core/status-bar", "time"]
+perf-test = []
 
 [dependencies]
 heapless = "0.7.12"

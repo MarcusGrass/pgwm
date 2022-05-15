@@ -1,12 +1,10 @@
 pub(crate) mod bar;
 pub(crate) mod draw;
 pub(crate) mod font;
-mod spawn;
 
 use crate::error::{Error, Result};
 use crate::manager::bar::BarManager;
 use crate::manager::draw::Drawer;
-use crate::manager::spawn::spawn;
 use crate::x11::call_wrapper::{CallWrapper, FloatIndicators, WindowFloatDeduction, WmState};
 use crate::x11::client_message::{
     ChangeType, ClientMessage, ClientMessageHandler, PropertyChangeMessage,
@@ -32,7 +30,6 @@ use x11rb::protocol::xproto::{
     MapState, MotionNotifyEvent, NotifyMode, PropertyNotifyEvent, QueryPointerReply,
     UnmapNotifyEvent, Visibility, VisibilityNotifyEvent, Window,
 };
-use x11rb::protocol::Event;
 use x11rb::rust_connection::SingleThreadedRustConnection;
 
 pub(crate) struct Manager<'a> {
@@ -149,39 +146,6 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    /// Handle the given event
-    pub(crate) fn handle_event(&self, event: Event, state: &mut State) -> Result<()> {
-        // Maybe rip this out of hot path and find some other way of handling ignoring WM-caused events
-        // Reconfigure/map/unmap causes cascading enters which switches focus.
-        // Xlib has functions to drain Events by mask but xcb doesn't.
-        if event
-            .wire_sequence_number()
-            .map_or(false, |seq| state.should_ignore_sequence(seq))
-            && (matches!(event, Event::EnterNotify(_)) || matches!(event, Event::UnmapNotify(_)))
-        {
-            return Ok(());
-        }
-        pgwm_core::debug!("---------->Got event {:?}", event);
-
-        match event {
-            Event::KeyPress(event) => self.handle_key_press(event, state)?,
-            Event::MapRequest(event) => self.handle_map_request(event, state)?,
-            Event::UnmapNotify(event) => self.handle_unmap_notify(event, state)?,
-            Event::DestroyNotify(event) => self.handle_destroy_notify(event, state)?,
-            Event::ConfigureNotify(event) => self.handle_configure_notify(event, state)?,
-            Event::ConfigureRequest(event) => self.handle_configure_request(event, state)?,
-            Event::ButtonPress(event) => self.handle_button_press(event, state)?,
-            Event::ButtonRelease(event) => self.handle_button_release(event, state)?,
-            Event::MotionNotify(event) => self.handle_motion_notify(event, state)?,
-            Event::EnterNotify(event) => self.handle_enter(event, state)?,
-            Event::ClientMessage(event) => self.handle_client_message(event, state)?,
-            Event::PropertyNotify(event) => self.handle_property_notify(event, state)?,
-            Event::VisibilityNotify(event) => self.handle_visibility_change(event, state)?,
-            _ => {}
-        }
-        Ok(())
-    }
-
     pub(crate) fn handle_key_press(&self, event: KeyPressEvent, state: &mut State) -> Result<()> {
         if let Some(action) = state.get_key_action(event.detail, event.state) {
             self.exec_action(event.event, InputSource::Keyboard, action.clone(), state)?;
@@ -207,7 +171,14 @@ impl<'a> Manager<'a> {
                 return Err(Error::GracefulShutdown);
             }
             Action::Spawn(cmd, args) => {
-                spawn(&cmd, &args)?;
+                pgwm_core::debug!("Spawning {} with args {:?}", cmd, args);
+                #[cfg(not(feature = "perf-test"))]
+                std::process::Command::new(cmd)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .args(args)
+                    .spawn()?;
             }
             Action::Close => {
                 let win = focus_fallback_origin(origin, state);
@@ -1338,12 +1309,12 @@ impl<'a> Manager<'a> {
     fn manually_remap_win(
         &self,
         win: Window,
-        class_names: &heapless::CopyVec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>,
+        class_names: &heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>,
         state: &mut State,
     ) -> Result<()> {
         if let Some(mapped) = state.workspaces.find_ws_containing_window(win) {
-            for class in *class_names {
-                if let Some(ind) = state.workspaces.find_ws_for_window_class_name(&class) {
+            for class in class_names {
+                if let Some(ind) = state.workspaces.find_ws_for_window_class_name(class) {
                     if mapped != ind {
                         pgwm_core::debug!("Remapping from {} to {} on prop change", mapped, ind);
                         let focus_style = self

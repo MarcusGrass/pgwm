@@ -1,5 +1,5 @@
 [workspace]
-members = ["event-source" ,"pgwm", "pgwm-core"]
+members = ["performance-test/event-collection", "performance-test/event-source", "performance-test/event-lib", "pgwm", "pgwm-core"]
 
 [patch.crates-io]
 fontdue = { git = "https://github.com/MarcusGrass/fontdue", branch = "rasterize-oneshot" }

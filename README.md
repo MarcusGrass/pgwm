@@ -237,4 +237,7 @@ this WM binary could be perfectly efficient but slamming the x11 server with req
 Although I have not noticed any such behaviour.
 
 # Licensing
-This project is licensed under [GPL v3](LICENSE).
+This project is licensed under [GPL v3](LICENSE). With the exception of [event-collection](performance-test/event-collection) which is 
+a copy of [xtrace-example](https://github.com/psychon/x11rb/tree/master/xtrace-example) from x11rb with an MIT license 
+found [here at the point of copying](https://github.com/psychon/x11rb/commit/b746ec7ba0687661c2d15c799b6be7b84ea7686e) and also 
+[here](performance-test/event-collection/XTRACE_EXAMPLE_LICENSE) in the repo.

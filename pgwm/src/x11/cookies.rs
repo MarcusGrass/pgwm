@@ -12,14 +12,10 @@ pub(crate) struct QueryTreeCookie<'a> {
 }
 
 impl<'a> QueryTreeCookie<'a> {
-    pub(crate) fn await_children(
-        self,
-    ) -> Result<heapless::CopyVec<Window, APPLICATION_WINDOW_LIMIT>> {
+    pub(crate) fn await_children(self) -> Result<heapless::Vec<Window, APPLICATION_WINDOW_LIMIT>> {
         let tree_reply = self.inner.reply()?;
-        Ok(
-            heapless::CopyVec::from_slice(tree_reply.children.as_slice())
-                .map_err(|_| pgwm_core::error::Error::HeaplessInstantiate)?,
-        )
+        Ok(heapless::Vec::from_slice(tree_reply.children.as_slice())
+            .map_err(|_| pgwm_core::error::Error::HeaplessInstantiate)?)
     }
 }
 
@@ -46,14 +42,14 @@ pub(crate) struct ClassConvertCookie<'a> {
 impl<'a> ClassConvertCookie<'a> {
     pub(crate) fn await_class_names(
         self,
-    ) -> Result<Option<heapless::CopyVec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>> {
+    ) -> Result<Option<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>> {
         Ok(extract_wm_class(self.inner.reply()?))
     }
 }
 
 fn extract_wm_class(
     class_response: GetPropertyReply,
-) -> Option<heapless::CopyVec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>> {
+) -> Option<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>> {
     // Already allocated vec
     let raw_utf8 = String::from_utf8(class_response.value);
     if let Ok(raw_utf8) = &raw_utf8 {
@@ -62,7 +58,7 @@ fn extract_wm_class(
             .filter(|s| !s.is_empty())
             .map(heapless::String::from)
             // Avoiding another alloc here
-            .collect::<heapless::CopyVec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>();
+            .collect::<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>();
         Some(complete_names)
     } else {
         pgwm_core::debug!("Failed to parse class response value as utf-8");

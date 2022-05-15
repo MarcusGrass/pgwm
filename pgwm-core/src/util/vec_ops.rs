@@ -2,10 +2,7 @@ use crate::error::Result;
 use crate::push_heapless;
 
 #[inline]
-pub fn push_to_front<T: Copy, const N: usize>(
-    target: &mut heapless::CopyVec<T, N>,
-    item: T,
-) -> Result<()> {
+pub fn push_to_front<T, const N: usize>(target: &mut heapless::Vec<T, N>, item: T) -> Result<()> {
     push_heapless!(target, item)?;
     for i in (1..target.len()).rev() {
         target.swap(i, i - 1);
@@ -14,7 +11,7 @@ pub fn push_to_front<T: Copy, const N: usize>(
 }
 
 #[inline]
-pub fn remove<T: Copy, const N: usize>(target: &mut heapless::CopyVec<T, N>, ind: usize) -> T {
+pub fn remove<T, const N: usize>(target: &mut heapless::Vec<T, N>, ind: usize) -> T {
     let prev_len = target.len();
     let out = target.swap_remove(ind);
     if prev_len > 2 {
@@ -32,7 +29,7 @@ mod tests {
 
     #[test]
     fn push_to_front_test() {
-        let mut heapless_vec: heapless::CopyVec<i32, 4> = heapless::CopyVec::new();
+        let mut heapless_vec: heapless::Vec<i32, 4> = heapless::Vec::new();
         let _ = heapless_vec.push(0);
         let _ = heapless_vec.push(1);
         let _ = heapless_vec.push(2);
@@ -45,7 +42,7 @@ mod tests {
 
     #[test]
     fn remove_test() {
-        let mut heapless_vec: heapless::CopyVec<i32, 4> = heapless::CopyVec::new();
+        let mut heapless_vec: heapless::Vec<i32, 4> = heapless::Vec::new();
         let _ = heapless_vec.push(0);
         let _ = heapless_vec.push(1);
         let _ = heapless_vec.push(2);
