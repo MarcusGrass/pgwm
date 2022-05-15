@@ -48,17 +48,17 @@ impl<'a> FontDrawer<'a> {
             .encode(text, fonts, text_width - text_x);
         pgwm_core::debug!("Encoded font");
         self.call_wrapper.fill_xrender_rectangle(
-            dbw.window.picture,
-            bg.as_render_color(),
-            fill_area,
-        )?;
-        pgwm_core::debug!("Filled background");
-        self.call_wrapper.fill_xrender_rectangle(
             dbw.pixmap.picture,
             text_color.as_render_color(),
             Dimensions::new(1, 1, 0, 0),
         )?;
         pgwm_core::debug!("Filled pen");
+        self.call_wrapper.fill_xrender_rectangle(
+            dbw.window.picture,
+            bg.as_render_color(),
+            fill_area,
+        )?;
+        pgwm_core::debug!("Filled background");
         let mut offset = fill_area.x + text_x;
         let mut drawn_width = 0;
         pgwm_core::debug!("Sending glyph draw");
