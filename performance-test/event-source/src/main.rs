@@ -1,19 +1,11 @@
 use event_lib::{parse_messages, MessageKind, ReconstructedMessage};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::{Path, PathBuf};
-use std::process::{Output, Stdio};
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::process::Stdio;
 use std::thread::JoinHandle;
 use std::time::SystemTime;
-use x11rb::protocol::Event;
-use x11rb::x11_utils::{ExtInfoProvider, ExtensionInformation, TryParse};
-
-const CLIENT_SETUP: &[u8] = b"___CLIENT_SETUP___";
-const SERVER_SETUP: &[u8] = b"___SERVER_SETUP___";
-const CLIENT_MESSAGE: &[u8] = b"___CLIENT_OUTGOING___";
-const SERVER_MESSAGE: &[u8] = b"___SERVER_OUTGOING___";
-const PARSEABLE_MESSAGES: [&[u8]; 4] = [CLIENT_MESSAGE, SERVER_MESSAGE, CLIENT_SETUP, SERVER_SETUP];
+use x11rb::x11_utils::{ExtInfoProvider, ExtensionInformation};
 
 const PROFILES: [Profile; 2] = [Profile::Release, Profile::Optimized];
 
@@ -25,8 +17,14 @@ enum Profile {
 
 const STARTUP_SCENARIO: Scenario = Scenario {
     name: "Start WM",
-    file: "performance-test/event-source/startup_scenario_evts.log",
+    file: "performance-test/event-source/startup-scenario.log",
     last_client_msg_pre_startup: 621,
+};
+
+const LONG_RUN_SCENARIO: Scenario = Scenario {
+    name: "Run long",
+    file: "performance-test/event-source/long-run-scenario.log",
+    last_client_msg_pre_startup: 652,
 };
 
 struct Scenario {
@@ -36,9 +34,7 @@ struct Scenario {
 }
 
 fn main() {
-    let long = "event-source/short_scenario.log";
-    //run(long, 1000);
-    run_scenario(STARTUP_SCENARIO, 10);
+    run_scenario(LONG_RUN_SCENARIO, 10);
 }
 
 fn run_scenario(scenario: Scenario, count: usize) {
@@ -78,6 +74,7 @@ fn run_scenario(scenario: Scenario, count: usize) {
             let post_result = time_chunk(post_start, &merged_post, &mut stream);
             post_results.push(post_result);
             handle.join().unwrap().unwrap();
+            //eprintln!("Completed pass {i} for profile {profile:?}");
         }
         eprintln!(
             "{}",
@@ -116,15 +113,14 @@ fn time_chunk(
             }
         }
     }
-    let end = SystemTime::now().duration_since(start).unwrap().as_nanos();
+    let run_time_nanos = SystemTime::now().duration_since(start).unwrap().as_nanos();
     let med_ind = latency.len() / 2;
     let med_latency = latency[med_ind];
     let latency_len = latency.len();
     let avg_latency = latency.into_iter().sum::<u128>() / latency_len as u128;
-    let tp = messages.len() as f64 / end as f64 * 1_000_000_000f64;
+    let tp = messages.len() as f64 / run_time_nanos as f64 * 1_000_000_000f64;
     RunResult {
-        messages: messages.len(),
-        run_time_nanos: end,
+        run_time_nanos,
         avg_latency_nanos: avg_latency,
         median_latency_nanos: med_latency,
         throughput: tp,
@@ -175,7 +171,6 @@ fn fmt_single(run_results: Vec<RunResult>) -> String {
 
 #[derive(Debug)]
 struct RunResult {
-    messages: usize,
     run_time_nanos: u128,
     avg_latency_nanos: u128,
     median_latency_nanos: u128,
@@ -213,48 +208,6 @@ fn run_build(profile: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-struct TotalRunResults {
-    profile: Profile,
-    runs: usize,
-    messages: usize,
-    run_time_nanos: Vec<u128>,
-    latency_nanos: Vec<u128>,
-}
-
-impl TotalRunResults {
-    fn format(&self) -> String {
-        let (run_avg, run_median) = calc_avg_median(&self.run_time_nanos);
-        let (lat_avg, lat_median) = calc_avg_median(&self.latency_nanos);
-        let msgs_per_sec = self.messages as f64 / run_avg as f64 * 1_000_000_000f64;
-        format!(
-            "----\nProfile {:?}, {} runs, {} messages per run\n\tThroughput:\n\
-        \t\tAverage run time: {} millis.\n\
-        \t\tMedian run time: {} millis.\n\
-        \t\tAverage messages per second: {}\n\
-        \tLatency:\n\
-        \t\tAverage latency: {} millis\n\
-        \t\tMedian latency: {} millis\n\
-        ",
-            self.profile,
-            self.runs,
-            self.messages,
-            run_avg as f64 / 1_000_000f64,
-            run_median as f64 / 1_000_000f64,
-            msgs_per_sec,
-            lat_avg as f64 / 1_000_000f64,
-            lat_median as f64 / 1_000_000f64
-        )
-    }
-    fn format_csv(&self) -> String {
-        let (run_avg, run_median) = calc_avg_median(&self.run_time_nanos);
-        let (lat_avg, lat_median) = calc_avg_median(&self.latency_nanos);
-        format!(
-            "{:?},{},{},{run_avg},{run_median},{lat_avg},{lat_median}",
-            self.profile, self.runs, self.messages
-        )
-    }
-}
-
 fn start_wm(binary: PathBuf) -> JoinHandle<std::io::Result<()>> {
     std::thread::spawn(move || {
         let out = std::process::Command::new(binary)
@@ -266,13 +219,6 @@ fn start_wm(binary: PathBuf) -> JoinHandle<std::io::Result<()>> {
         }
         Ok(())
     })
-}
-
-fn calc_avg_median(res: &[u128]) -> (u128, u128) {
-    let sum = res.iter().sum::<u128>();
-    let avg = sum / res.len() as u128;
-    let median_ind = res.len() / 2;
-    (avg, res[median_ind])
 }
 
 // Used for "chunking" basically if we're doing repeated reads/write we just merge them
