@@ -1,6 +1,6 @@
 use event_lib::{parse_messages, MessageKind, ReconstructedMessage};
 use std::io::{Read, Write};
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::sync::{Arc, Mutex};
@@ -25,82 +25,161 @@ enum Profile {
 
 const STARTUP_SCENARIO: Scenario = Scenario {
     name: "Start WM",
-    file: "performance-test/event-source/ser_events1.log",
+    file: "performance-test/event-source/startup_scenario_evts.log",
+    last_client_msg_pre_startup: 621,
 };
 
 struct Scenario {
     name: &'static str,
     file: &'static str,
+    last_client_msg_pre_startup: usize,
 }
 
 fn main() {
     let long = "event-source/short_scenario.log";
     //run(long, 1000);
-    run_scenario(STARTUP_SCENARIO, 100);
+    run_scenario(STARTUP_SCENARIO, 10);
 }
 
-#[allow(clippy::uninit_vec)]
 fn run_scenario(scenario: Scenario, count: usize) {
     let raw = std::fs::read(scenario.file).unwrap();
     let messages = parse_messages(&raw);
-    eprintln!("{}", messages.len());
-    eprintln!("{:?}", messages[0]);
-    eprintln!("{:?}", messages[1]);
-    let merged = merge_messages(messages.clone());
-    eprintln!("{}", merged.len());
+    let mut cl_msgs = 0;
+    let mut startup_checkpoint = None;
+    for (ind, msg) in messages.iter().enumerate() {
+        if msg.metadata.kind == MessageKind::ClientSetup
+            || msg.metadata.kind == MessageKind::ClientMessage
+        {
+            cl_msgs += 1;
+            if cl_msgs == scenario.last_client_msg_pre_startup {
+                startup_checkpoint = Some(ind);
+            }
+        }
+    }
+    let startup = &messages.as_slice()[..startup_checkpoint.unwrap() + 1];
+    let merged_startup = merge_messages(startup);
+    let post_start = &messages.as_slice()[startup_checkpoint.unwrap() + 1..];
+    let merged_post = merge_messages(post_start);
     let mut csv_out = "profile,runs,messages,run_average_nanos,run_median_nanos,latency_average_nanos,latency_median_nanos\n".to_owned();
     let _ = std::fs::remove_file("/tmp/.X11-unix/X4");
     eprintln!("Running {} messages", messages.len());
     let sock = UnixListener::bind("/tmp/.X11-unix/X4").unwrap();
+    let mut startup_results = vec![];
+    let mut post_results = vec![];
     for profile in PROFILES {
         let binary = produce_binary(profile).unwrap();
-        let mut results = TotalRunResults {
-            profile,
-            runs: count,
-            messages: messages.len(), // I just happen to know
-            run_time_nanos: vec![],
-            latency_nanos: vec![],
-        };
         for i in 0..count {
             // There's actually a race condition below, starting the WM before listening
             // but non-problematic atm
             let handle = start_wm(binary.clone());
             let (mut stream, _addr) = sock.accept().unwrap();
-            let use_msgs = messages.clone();
-            let ops = merge_messages(use_msgs);
-            eprintln!("Starting run {} for profile {:?}", i, profile);
-            let start = SystemTime::now();
-            let mut latency_timer = None;
-            for op in ops.into_iter() {
-                match op {
-                    SockOp::Read(n) => {
-                        let mut buf = Vec::with_capacity(n);
-                        unsafe { buf.set_len(n) };
-                        stream.read_exact(&mut buf).unwrap();
-                        if let Some(lt) = latency_timer {
-                            results
-                                .latency_nanos
-                                .push(SystemTime::now().duration_since(lt).unwrap().as_nanos());
-                        }
-                    }
-                    SockOp::Write(buf) => {
-                        stream.write_all(&buf).unwrap();
-                        latency_timer = Some(SystemTime::now());
-                    }
-                }
-            }
-            let end = SystemTime::now().duration_since(start).unwrap().as_nanos();
-            results.run_time_nanos.push(end);
+            let startup_result = time_chunk(startup, &merged_startup, &mut stream);
+            startup_results.push(startup_result);
+            let post_result = time_chunk(post_start, &merged_post, &mut stream);
+            post_results.push(post_result);
             handle.join().unwrap().unwrap();
         }
-        eprintln!("{}", results.format());
-        csv_out.push_str(&format!("{}\n", results.format_csv()));
+        eprintln!(
+            "{}",
+            fmt_results(
+                profile,
+                std::mem::take(&mut startup_results),
+                std::mem::take(&mut post_results),
+                messages.len()
+            )
+        );
     }
-    std::fs::write(
-        "/home/gramar/code/rust/pgwm/target/out.csv",
-        csv_out.as_bytes(),
+}
+
+#[allow(clippy::uninit_vec)]
+fn time_chunk(
+    messages: &[ReconstructedMessage],
+    ops: &[SockOp],
+    stream: &mut UnixStream,
+) -> RunResult {
+    let mut latency_timer = None;
+    let mut latency = vec![];
+    let start = SystemTime::now();
+    for op in ops {
+        match op {
+            SockOp::Read(n) => {
+                let mut buf = Vec::with_capacity(*n);
+                unsafe { buf.set_len(*n) };
+                stream.read_exact(&mut buf).unwrap();
+                if let Some(lt) = latency_timer {
+                    latency.push(SystemTime::now().duration_since(lt).unwrap().as_nanos());
+                }
+            }
+            SockOp::Write(buf) => {
+                stream.write_all(&buf).unwrap();
+                latency_timer = Some(SystemTime::now());
+            }
+        }
+    }
+    let end = SystemTime::now().duration_since(start).unwrap().as_nanos();
+    let med_ind = latency.len() / 2;
+    let med_latency = latency[med_ind];
+    let latency_len = latency.len();
+    let avg_latency = latency.into_iter().sum::<u128>() / latency_len as u128;
+    let tp = messages.len() as f64 / end as f64 * 1_000_000_000f64;
+    RunResult {
+        messages: messages.len(),
+        run_time_nanos: end,
+        avg_latency_nanos: avg_latency,
+        median_latency_nanos: med_latency,
+        throughput: tp,
+    }
+}
+
+fn fmt_results(
+    profile: Profile,
+    startup: Vec<RunResult>,
+    post: Vec<RunResult>,
+    messages: usize,
+) -> String {
+    format!(
+        "Finished proccessing {messages} messages for profile {profile:?}\n\
+        Startup results: \n{}\nPost start results: \n{}\n",
+        fmt_single(startup),
+        fmt_single(post)
     )
-    .unwrap();
+}
+
+fn fmt_single(run_results: Vec<RunResult>) -> String {
+    let count = run_results.len();
+    let mut total_run = 0;
+    let mut total_tp = 0f64;
+    let mut total_avg_lat = 0;
+    let mut total_med_lat = 0;
+    for res in run_results {
+        total_run += res.run_time_nanos;
+        total_tp += res.throughput;
+        total_avg_lat += res.avg_latency_nanos;
+        total_med_lat += res.median_latency_nanos;
+    }
+    format!(
+        "\tAverage run time nanos:\n\
+    \t\t{}\n\
+    \tAverage messages per second:\n\
+    \t\t{}\n\
+    \tAverage latency:\n\
+    \t\t{}\n\
+    \tAverage median latency:\n\
+    \t\t{}",
+        total_run / count as u128,
+        total_tp / count as f64,
+        total_avg_lat / count as u128,
+        total_med_lat / count as u128
+    )
+}
+
+#[derive(Debug)]
+struct RunResult {
+    messages: usize,
+    run_time_nanos: u128,
+    avg_latency_nanos: u128,
+    median_latency_nanos: u128,
+    throughput: f64,
 }
 
 fn produce_binary(profile: Profile) -> std::io::Result<PathBuf> {
@@ -117,7 +196,7 @@ fn produce_binary(profile: Profile) -> std::io::Result<PathBuf> {
 }
 
 fn run_build(profile: &str) -> std::io::Result<()> {
-    let mut out = std::process::Command::new("cargo")
+    let out = std::process::Command::new("cargo")
         .arg("b")
         //.arg("--target")
         //.arg("x86_64-unknown-linux-musl")
@@ -179,8 +258,8 @@ impl TotalRunResults {
 fn start_wm(binary: PathBuf) -> JoinHandle<std::io::Result<()>> {
     std::thread::spawn(move || {
         let out = std::process::Command::new(binary)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            //.stdout(Stdio::null())
+            //.stderr(Stdio::null())
             .output()?;
         if !out.status.success() {
             panic!("Unsuccessful run")
@@ -202,7 +281,7 @@ enum SockOp {
     Write(Vec<u8>),
 }
 
-fn merge_messages(messages: Vec<ReconstructedMessage>) -> Vec<SockOp> {
+fn merge_messages(messages: &[ReconstructedMessage]) -> Vec<SockOp> {
     let mut reading = false;
     let mut cur_read = 0;
     let mut cur_buf = vec![];
