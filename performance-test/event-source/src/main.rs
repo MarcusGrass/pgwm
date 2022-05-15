@@ -3,36 +3,50 @@ use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::str::FromStr;
 use std::thread::JoinHandle;
 use std::time::SystemTime;
 use x11rb::x11_utils::{ExtInfoProvider, ExtensionInformation};
 
 const PROFILES: [Profile; 2] = [Profile::Release, Profile::Optimized];
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum Profile {
     Release,
     Optimized,
 }
 
-#[derive(Copy, Clone, Debug)]
+impl Profile {
+    fn from_str(content: &str) -> Self {
+        match content {
+            "Release" => Profile::Release,
+            "Optimized" => Profile::Optimized,
+            _ => panic!("Unrecognized profile {content}"),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum RunPart {
     Start,
     Post,
 }
 
-#[allow(dead_code)]
-const STARTUP_SCENARIO: Scenario = Scenario {
-    name: "startup-short",
-    file: "performance-test/event-source/startup-scenario.log",
-    last_client_msg_pre_startup: 621,
-};
+impl RunPart {
+    fn from_str(content: &str) -> Self {
+        match content {
+            "Start" => RunPart::Start,
+            "Post" => RunPart::Post,
+            _ => panic!("Unrecognized part {content}"),
+        }
+    }
+}
 
 #[allow(dead_code)]
 const LONG_RUN_SCENARIO: Scenario = Scenario {
     name: "run-long",
-    file: "performance-test/event-source/long-run-scenario.log",
-    last_client_msg_pre_startup: 652,
+    file: "performance-test/event-source/long-run.log",
+    last_client_msg_pre_startup: 680,
 };
 
 struct Scenario {
@@ -96,7 +110,7 @@ fn run_scenario(scenario: Scenario, count: usize) {
             fmt_results(profile, &startup_avg, &post_avg, messages.len())
         );
     }
-    dump_csv(scenario, csv_out);
+    dump_cmp_results(scenario, &csv_out);
 }
 
 #[allow(clippy::uninit_vec)]
@@ -202,15 +216,70 @@ fn fmt_single(run_results: &AveragedResults) -> String {
     )
 }
 
-fn dump_csv(scenario: Scenario, csv_lines: String) {
+fn dump_cmp_results(scenario: Scenario, csv_lines: &str) {
+    let mut prev = None;
     for i in 0..999 {
         let check = format!("target/{}{i}.csv", scenario.name);
         if std::fs::metadata(&check).is_err() {
             eprintln!("Dumping run results to {check}");
             std::fs::write(check, csv_lines).unwrap();
             break;
+        } else {
+            prev = Some(i);
         }
     }
+    if let Some(i) = prev {
+        let old = std::fs::read_to_string(format!("target/{}{i}.csv", scenario.name)).unwrap();
+        let old_parsed = parse_csv(&old);
+        let new = parse_csv(csv_lines);
+        for crr in &new {
+            for o_crr in &old_parsed {
+                if crr.part == o_crr.part && crr.profile == o_crr.profile {
+                    let throughput_change = (crr.msgs_per_sec / o_crr.msgs_per_sec - 1f64) * 100f64;
+                    let latency_change =
+                        (crr.latency_millis / o_crr.latency_millis - 1f64) * 100f64;
+                    eprintln!(
+                        "Profile {:?}, Part {:?}\n\tthroughput change {:.4}% {} -> {}\n\tlatency change {:.4}% {} -> {}",
+                        crr.profile, crr.part, throughput_change, o_crr.msgs_per_sec, crr.msgs_per_sec, latency_change, o_crr.latency_millis, crr.latency_millis
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn parse_csv(csv_content: &str) -> Vec<CollectedRunResults> {
+    let mut collected = vec![];
+    for line in csv_content.lines().skip(1) {
+        let mut profile = None;
+        let mut part = None;
+        let mut msgs_per_sec = 0f64;
+        let mut latency = 0f64;
+        for (ind, val) in line.split(",").enumerate() {
+            match ind {
+                0 => profile = Some(Profile::from_str(val)),
+                1 => part = Some(RunPart::from_str(val)),
+                5 => msgs_per_sec = f64::from_str(val).unwrap(),
+                6 => latency = f64::from_str(val).unwrap() / 1_000_000f64,
+                _ => {}
+            }
+        }
+        assert!(profile.is_some() && part.is_some() && msgs_per_sec != 0f64 && latency != 0f64);
+        collected.push(CollectedRunResults {
+            part: part.unwrap(),
+            profile: profile.unwrap(),
+            msgs_per_sec,
+            latency_millis: latency,
+        })
+    }
+    collected
+}
+
+struct CollectedRunResults {
+    part: RunPart,
+    profile: Profile,
+    msgs_per_sec: f64,
+    latency_millis: f64,
 }
 
 #[derive(Debug)]
