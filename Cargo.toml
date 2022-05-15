@@ -3,3 +3,4 @@ members = ["performance-test/event-collection", "performance-test/event-source",
 
 [patch.crates-io]
 fontdue = { git = "https://github.com/MarcusGrass/fontdue", branch = "rasterize-oneshot" }
+# x11rb = { git = "https://github.com/psychon/x11rb", rev = "6e9bc347b4cb7afe757596986c6f6deb9e4cc3b4"}

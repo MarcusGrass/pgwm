@@ -885,7 +885,7 @@ impl<'a> CallWrapper<'a> {
         y: i16,
         glyphs: Glyphset,
         dbw: &DoubleBufferedRenderPicture,
-        glyph_ids: &[u32],
+        glyph_ids: &[u16],
     ) -> Result<()> {
         let mut buf = Vec::with_capacity(glyph_ids.len());
         let render = if glyph_ids.len() > 254 {
@@ -901,7 +901,7 @@ impl<'a> CallWrapper<'a> {
         for glyph in render {
             buf.extend_from_slice(&glyph.to_ne_bytes()); // Dump to u8s
         }
-        x11rb::protocol::render::composite_glyphs32(
+        x11rb::protocol::render::composite_glyphs16(
             self.connection,
             PictOp::OVER,
             dbw.pixmap.picture,

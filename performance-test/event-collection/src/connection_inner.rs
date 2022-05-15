@@ -334,9 +334,7 @@ impl Default for Recorder {
     fn default() -> Self {
         let mut binary_file = None;
         for i in 0..999 {
-            let check = format!(
-                "/home/gramar/code/rust/pgwm/performance-test/event-source/ser_events{i}.log"
-            );
+            let check = format!("performance-test/event-source/ser_events{i}.log");
             if std::fs::metadata(&check).is_err() {
                 binary_file = Some(
                     std::fs::OpenOptions::new()
@@ -350,9 +348,7 @@ impl Default for Recorder {
         }
         let mut log_file = None;
         for i in 0..999 {
-            let check = format!(
-                "/home/gramar/code/rust/pgwm/performance-test/event-source/dbg_events{i}.log"
-            );
+            let check = format!("performance-test/event-source/dbg_events{i}.log");
             if std::fs::metadata(&check).is_err() {
                 log_file = Some(
                     std::fs::OpenOptions::new()

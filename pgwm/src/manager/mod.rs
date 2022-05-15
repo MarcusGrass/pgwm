@@ -170,6 +170,7 @@ impl<'a> Manager<'a> {
                 self.cleanup(state)?;
                 return Err(Error::GracefulShutdown);
             }
+            #[cfg_attr(feature = "perf-test", allow(unused_variables))]
             Action::Spawn(cmd, args) => {
                 pgwm_core::debug!("Spawning {} with args {:?}", cmd, args);
                 #[cfg(not(feature = "perf-test"))]

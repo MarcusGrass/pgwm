@@ -20,7 +20,7 @@ heapless = "0.7.12"
 fontdue = { version = "0.7.2", default-features = false, features = ["simd"] }
 pgwm-core = { path = "../pgwm-core" }
 x11-keysyms = { git = "https://github.com/MarcusGrass/x11-keysyms", rev = "4b0f0e3516100666d18df4b6e8eb520b318e1dc9", features = ["miscellany", "latin1"] }
-nix = { version = "0.24.1" }
+nix = { version = "0.22.3" }
 thiserror = "1.0.31"
 time = { version = "0.3.9", optional = true, default-features = false, features = ["formatting", "local-offset"] }
-x11rb = { path = "../../x11rb/x11rb", default-features = false, features = ["cursor", "render"]}
+x11rb = { version = "0.9.0", default-features = false, features = ["cursor", "render"]}

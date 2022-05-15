@@ -20,7 +20,7 @@ use x11rb::protocol::xproto::{
     MotionNotifyEvent, PropertyNotifyEvent, Screen, UnmapNotifyEvent, VisibilityNotifyEvent,
     Visualid,
 };
-pub type XorgConnection = x11rb::rust_connection::SingleThreadedRustConnection;
+pub type XorgConnection = x11rb::rust_connection::RustConnection;
 
 use x11rb::x11_utils::TryParse;
 
@@ -83,13 +83,10 @@ pub(crate) fn run_wm() -> Result<()> {
     let call_wrapper = CallWrapper::new(&connection)?;
     call_wrapper.try_become_wm(screen)?;
     connection.flush()?;
-    let resource_db = x11rb::resource_manager::new_from_resource_manager(&connection)?.unwrap();
-    /*
-    let resource_db = x11rb::resource_manager::Database::new_from_resource_manager(&connection)
-        .unwrap()
-        .unwrap();
-
-     */
+    //let resource_db = x11rb::resource_manager::new_from_resource_manager(&connection)?
+    //    .ok_or(Error::X11OpenDefaultDb)?;
+    let resource_db = x11rb::resource_manager::Database::new_from_resource_manager(&connection)?
+        .ok_or(Error::X11OpenDefaultDb)?;
     let cursor_handle = x11rb::cursor::Handle::new(&connection, 0, &resource_db)?;
     let visual = find_render_visual_info(&connection, screen)?;
     let loaded = load_alloc_fonts(&call_wrapper, &visual, &fonts, &char_remap)?;
@@ -264,10 +261,13 @@ fn drain_events<'a>(
     state: &mut State,
 ) -> Result<()> {
     while let Some(raw) = connection.poll_for_raw_event()? {
-        let response_type =
-            x11rb::reexports::x11rb_protocol::protocol::response_type(&raw).unwrap();
+        // Ripped from x11rb_protocol, non-public small parsing functions
+        let response_type = raw.get(0).map(|x| x & 0x7f).ok_or(Error::X11EventParse)?;
+        let seq = raw
+            .get(2..4)
+            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .ok_or(Error::X11EventParse)?;
 
-        let seq = x11rb::reexports::x11rb_protocol::protocol::sequence_number(&raw).unwrap();
         if state.should_ignore_sequence(seq)
             && (response_type == x11rb::protocol::xproto::ENTER_NOTIFY_EVENT
                 || response_type == x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT)
@@ -275,7 +275,6 @@ fn drain_events<'a>(
             continue;
         }
 
-        //Event::parse()
         match response_type {
             x11rb::protocol::xproto::KEY_PRESS_EVENT => {
                 manager.handle_key_press(KeyPressEvent::try_parse(&raw).unwrap().0, state)?;

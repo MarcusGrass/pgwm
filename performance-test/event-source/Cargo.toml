@@ -2,9 +2,11 @@
 name = "event-source"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-3.0"
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 event-lib = { path = "../event-lib" }
-x11rb = { path = "../../../x11rb/x11rb", default-features = false, features = ["cursor", "render"]}
+x11rb = { version = "0.9.0", default-features = false, features = ["cursor", "render"]}

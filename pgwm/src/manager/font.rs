@@ -99,6 +99,7 @@ pub(crate) fn load_alloc_fonts<'a>(
         .chain(char_remap.values())
     {
         // Ugly and kind of dumb
+        let mut id = 0;
         if let Entry::Vacant(v) = map.entry(f_cfg) {
             let data = std::fs::read(&f_cfg.path)?;
 
@@ -119,7 +120,6 @@ pub(crate) fn load_alloc_fonts<'a>(
             )
             .map_err(Error::FontLoad)?;
             for data in rasterized.data {
-                ids.push(data.ch as u32);
                 for byte in data.buf {
                     raw_data.extend_from_slice(&[byte, byte, byte, byte]);
                 }
@@ -134,15 +134,17 @@ pub(crate) fn load_alloc_fonts<'a>(
                     x_off: horizontal_space,
                     y_off: data.metrics.advance_height.ceil() as i16,
                 };
+                ids.push(id as u32);
                 infos.push(glyph_info);
                 char_map.insert(
                     data.ch,
                     CharInfo {
-                        glyph_id: data.ch as u32,
+                        glyph_id: id,
                         horizontal_space,
                         height: data.metrics.height as u16,
                     },
                 );
+                id += 1;
             }
             call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
             v.insert(LoadedFont {
@@ -326,7 +328,7 @@ pub struct FontEncodedChunk {
     width: i16,
     font_height: i16,
     glyph_set: Glyphset,
-    glyph_ids: Vec<u32>,
+    glyph_ids: Vec<u16>,
 }
 
 #[allow(clippy::module_name_repetitions)]
@@ -338,7 +340,7 @@ pub struct LoadedFont {
 
 #[derive(Debug, Copy, Clone)]
 pub struct CharInfo {
-    pub glyph_id: u32,
+    pub glyph_id: u16,
     pub horizontal_space: i16,
     pub height: u16,
 }

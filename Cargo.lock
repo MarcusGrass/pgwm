@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "event-collection"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "event-lib",
  "futures-io",
@@ -670,11 +670,12 @@ checksum = "546c37ac5d9e56f55e73b677106873d9d9f5190605e41a856503623648488cae"
 
 [[package]]
 name = "nix"
-version = "0.24.1"
+version = "0.22.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f17df307904acd05aa8e32e97bb20f2a0df1728bbc2d771ae8f9a90463441e9"
+checksum = "e4916f159ed8e5de0082076562152a76b7a1f64a01fd9d1e0fea002c37624faf"
 dependencies = [
  "bitflags",
+ "cc",
  "cfg-if",
  "libc",
  "memoffset",
@@ -1313,17 +1314,11 @@ source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=4b0f0e3516100666d18
 [[package]]
 name = "x11rb"
 version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e99be55648b3ae2a52342f9a870c0e138709a3493261ce9b469afe6e4df6d8a"
 dependencies = [
  "gethostname",
  "nix",
  "winapi",
  "winapi-wsapoll",
- "x11rb-protocol",
-]
-
-[[package]]
-name = "x11rb-protocol"
-version = "0.9.0"
-dependencies = [
- "nix",
 ]
