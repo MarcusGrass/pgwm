@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Added
  - Reloading configuration without having to kill the WM
+ - Event sourcing for debugging
 
 ### Changed
  - Fonts are now rasterized using [Fontdue](https://github.com/mooman219/fontdue).
