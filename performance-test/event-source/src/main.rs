@@ -255,7 +255,7 @@ fn parse_csv(csv_content: &str) -> Vec<CollectedRunResults> {
         let mut part = None;
         let mut msgs_per_sec = 0f64;
         let mut latency = 0f64;
-        for (ind, val) in line.split(",").enumerate() {
+        for (ind, val) in line.split(',').enumerate() {
             match ind {
                 0 => profile = Some(Profile::from_str(val)),
                 1 => part = Some(RunPart::from_str(val)),
