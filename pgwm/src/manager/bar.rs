@@ -1,5 +1,6 @@
 use crate::error::Result;
 use crate::manager::font::FontDrawer;
+use crate::wm::XorgConnection;
 use crate::x11::call_wrapper::CallWrapper;
 use pgwm_core::colors::Color;
 use pgwm_core::config::Fonts;
@@ -8,7 +9,6 @@ use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::state::State;
 use x11rb::cookie::VoidCookie;
-use x11rb::rust_connection::RustConnection;
 
 pub(crate) struct BarManager<'a> {
     call_wrapper: &'a CallWrapper<'a>,
@@ -23,9 +23,8 @@ impl<'a> BarManager<'a> {
         state: &mut State,
     ) -> Result<()> {
         let mon = &state.monitors[mon_ind];
-        let section = mon.bar_geometry.window_title_section;
+        let section = &mon.bar_geometry.window_title_section;
         let title_position = section.position;
-        let mon = &mut state.monitors[mon_ind];
         pgwm_core::debug!("Starting window title draw");
         let draw_width = self.font_drawer.draw(
             &mon.bar_win,
@@ -43,8 +42,10 @@ impl<'a> BarManager<'a> {
             state.colors.workspace_bar_current_window_title_background,
             state.colors.workspace_bar_current_window_title_text,
         )?;
-        mon.bar_geometry.window_title_section.last_draw_width =
-            draw_width + state.workspace_bar_window_name_padding as i16;
+        state.monitors[mon_ind]
+            .bar_geometry
+            .window_title_section
+            .last_draw_width = draw_width + state.workspace_bar_window_name_padding as i16;
         Ok(())
     }
 
@@ -208,7 +209,7 @@ impl<'a> BarManager<'a> {
             let (content, pos) = state.monitors[mon_ind]
                 .bar_geometry
                 .status
-                .update_and_get_section_line(content, content_ind);
+                .update_and_get_section_line(content.clone(), content_ind);
             let src_y = state.monitors[mon_ind].dimensions.y;
             self.font_drawer.draw(
                 &state.monitors[mon_ind].bar_win,
@@ -303,7 +304,7 @@ impl<'a> BarManager<'a> {
         &self,
         mon_ind: usize,
         state: &mut State,
-    ) -> Result<Option<VoidCookie<RustConnection>>> {
+    ) -> Result<Option<VoidCookie<XorgConnection>>> {
         if state.monitors[mon_ind].show_bar {
             state.monitors[mon_ind].show_bar = false;
             self.call_wrapper

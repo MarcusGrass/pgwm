@@ -4,18 +4,17 @@ use pgwm_core::config::USED_DIFFERENT_COLOR_SEGMENTS;
 use pgwm_core::push_heapless;
 use x11rb::cookie::Cookie;
 
+use crate::wm::XorgConnection;
 use x11rb::protocol::xproto::{AllocColorReply, Colormap, ConnectionExt};
-use x11rb::rust_connection::RustConnection;
 
 #[allow(clippy::type_complexity)]
 pub(crate) fn alloc_colors(
-    connection: &RustConnection,
+    connection: &XorgConnection,
     color_map: Colormap,
     colors: pgwm_core::colors::ColorBuilder,
 ) -> Result<Colors> {
-    pgwm_core::debug!("Allocating colors {colors:?}");
     let mut alloc_rgba_cookies: heapless::Vec<
-        ((u8, u8, u8, u8), Cookie<RustConnection, AllocColorReply>),
+        ((u8, u8, u8, u8), Cookie<XorgConnection, AllocColorReply>),
         USED_DIFFERENT_COLOR_SEGMENTS,
     > = heapless::Vec::new();
     for color in colors.get_all().iter() {
@@ -26,8 +25,8 @@ pub(crate) fn alloc_colors(
             (color, connection.alloc_color(color_map, r, g, b)?)
         )?;
     }
-    let mut allocated_colors: heapless::CopyVec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
-        heapless::CopyVec::new();
+    let mut allocated_colors: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
+        heapless::Vec::new();
     for ((r, g, b, a), cookie) in alloc_rgba_cookies {
         push_heapless!(
             allocated_colors,

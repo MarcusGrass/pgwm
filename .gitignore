@@ -1,7 +1,6 @@
 /target
 /.idea
 *.iml
-*.log
 perf.*
 flamegraph.*
 stack.txt

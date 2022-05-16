@@ -32,7 +32,7 @@ impl Layout {
         size_modifiers: &[f32],
         left_leader_base_modifier: f32,
         center_leader_base_modifier: f32,
-    ) -> Result<heapless::CopyVec<Dimensions, WS_WINDOW_LIMIT>> {
+    ) -> Result<heapless::Vec<Dimensions, WS_WINDOW_LIMIT>> {
         let default_y_offset = status_bar_height;
         let border_len = border_width as i16;
         let monitor_height = monitor_height as i16 - status_bar_height;
@@ -63,11 +63,11 @@ impl Layout {
                         left_leader_base_modifier,
                     )
                 } else {
-                    let mut dims = heapless::CopyVec::new();
+                    let mut dims = heapless::Vec::new();
 
                     // Center modifier is the only one that can be expanded, and is expanded horizontally
-                    let horisontal_win_modifiers: heapless::CopyVec<f32, 3> =
-                        heapless::CopyVec::from_slice(&[1.0, center_leader_base_modifier, 1.0])
+                    let horisontal_win_modifiers: heapless::Vec<f32, 3> =
+                        heapless::Vec::from_slice(&[1.0, center_leader_base_modifier, 1.0])
                             .map_err(|_| crate::error::Error::HeaplessInstantiate)?;
                     let horisontal_x_offset_and_widths = calculate_offset_and_lengths(
                         monitor_width,
@@ -75,14 +75,10 @@ impl Layout {
                         border_len,
                         horisontal_win_modifiers,
                     )?;
-                    let mut left_aligned_modifiers: heapless::CopyVec<
-                        f32,
-                        { WS_WINDOW_LIMIT / 2 },
-                    > = heapless::CopyVec::new();
-                    let mut right_aligned_modifiers: heapless::CopyVec<
-                        f32,
-                        { WS_WINDOW_LIMIT / 2 },
-                    > = heapless::CopyVec::new();
+                    let mut left_aligned_modifiers: heapless::Vec<f32, { WS_WINDOW_LIMIT / 2 }> =
+                        heapless::Vec::new();
+                    let mut right_aligned_modifiers: heapless::Vec<f32, { WS_WINDOW_LIMIT / 2 }> =
+                        heapless::Vec::new();
                     for i in 1..num_windows {
                         if i % 2 == 0 {
                             push_heapless!(left_aligned_modifiers, size_modifiers[i - 1])?;
@@ -159,8 +155,8 @@ fn calculate_normal_dimensions(
     num_windows: usize,
     size_modifiers: &[f32],
     left_leader_base_modifier: f32,
-) -> Result<heapless::CopyVec<Dimensions, WS_WINDOW_LIMIT>> {
-    let mut dims = heapless::CopyVec::new();
+) -> Result<heapless::Vec<Dimensions, WS_WINDOW_LIMIT>> {
+    let mut dims = heapless::Vec::new();
     if num_windows == 1 {
         push_heapless!(
             dims,
@@ -174,8 +170,8 @@ fn calculate_normal_dimensions(
             )
         )?;
     } else {
-        let horizontal_win_modifiers: heapless::CopyVec<f32, 2> =
-            heapless::CopyVec::from_slice(&[left_leader_base_modifier, 1.0])
+        let horizontal_win_modifiers: heapless::Vec<f32, 2> =
+            heapless::Vec::from_slice(&[left_leader_base_modifier, 1.0])
                 .map_err(|_| crate::error::Error::HeaplessInstantiate)?;
         let horisontal_offset_and_lengths = calculate_offset_and_lengths(
             monitor_width,
@@ -183,8 +179,8 @@ fn calculate_normal_dimensions(
             border_len,
             horizontal_win_modifiers,
         )?;
-        let mut right_side_win_modifiers: heapless::CopyVec<f32, WS_WINDOW_LIMIT> =
-            heapless::CopyVec::new();
+        let mut right_side_win_modifiers: heapless::Vec<f32, WS_WINDOW_LIMIT> =
+            heapless::Vec::new();
         for i in 1..num_windows {
             push_heapless!(right_side_win_modifiers, size_modifiers[i - 1])?;
         }
@@ -283,8 +279,8 @@ fn calculate_offset_and_lengths<const N: usize>(
     total_space: i16,
     pad_len: i16,
     border_len: i16,
-    size_modifiers: heapless::CopyVec<f32, N>,
-) -> Result<heapless::CopyVec<(i16, i16), N>> {
+    size_modifiers: heapless::Vec<f32, N>,
+) -> Result<heapless::Vec<(i16, i16), N>> {
     let available_space = calculate_available_space(
         total_space,
         size_modifiers.len() as i16,
@@ -293,7 +289,7 @@ fn calculate_offset_and_lengths<const N: usize>(
     );
     let sum_modifiers: f32 = size_modifiers.iter().sum();
     let fit_modifier = 1f32 / sum_modifiers;
-    let mut window_widths: heapless::CopyVec<i16, N> = size_modifiers
+    let mut window_widths: heapless::Vec<i16, N> = size_modifiers
         .into_iter()
         .map(|modifier| (modifier * fit_modifier * available_space as f32) as i16)
         .collect();
@@ -301,7 +297,7 @@ fn calculate_offset_and_lengths<const N: usize>(
     for i in 0..(available_space - sum_lengths) as usize {
         window_widths[i] += 1;
     }
-    let mut offset_and_lengths = heapless::CopyVec::new();
+    let mut offset_and_lengths = heapless::Vec::new();
     let mut prev_placed_window_lengths = 0;
     for (i, width) in window_widths.into_iter().enumerate() {
         let offset =
@@ -410,7 +406,7 @@ mod tests {
     fn calculate_dimensions(
         num_windows: usize,
         pad_on_single: bool,
-    ) -> heapless::CopyVec<Dimensions, WS_WINDOW_LIMIT> {
+    ) -> heapless::Vec<Dimensions, WS_WINDOW_LIMIT> {
         let size_modifiers = &[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
         Layout::LeftLeader
             .calculate_dimensions(

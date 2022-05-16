@@ -19,7 +19,7 @@ pub(crate) struct Drawer<'a> {
 impl<'a> Drawer<'a> {
     pub(crate) fn send_floating_to_top(
         &self,
-        floating: heapless::CopyVec<Window, WS_WINDOW_LIMIT>,
+        floating: heapless::Vec<Window, WS_WINDOW_LIMIT>,
         state: &mut State,
     ) -> Result<()> {
         for win in floating {
@@ -55,8 +55,8 @@ impl<'a> Drawer<'a> {
     ) -> Result<()> {
         let ws_ind = state.monitors[mon_ind].hosted_workspace;
         let windows_in_ws = state.workspaces.get_all_windows_in_ws(ws_ind);
-        let mut tiled = heapless::CopyVec::<ManagedWindow, WS_WINDOW_LIMIT>::new();
-        let mut floating = heapless::CopyVec::<ManagedWindow, WS_WINDOW_LIMIT>::new();
+        let mut tiled = heapless::Vec::<ManagedWindow, WS_WINDOW_LIMIT>::new();
+        let mut floating = heapless::Vec::<ManagedWindow, WS_WINDOW_LIMIT>::new();
         for mw in windows_in_ws {
             if mw.arrange == ArrangeKind::NoFloat {
                 push_heapless!(tiled, mw)?;
@@ -94,8 +94,8 @@ impl<'a> Drawer<'a> {
     fn draw(
         &self,
         mon_ind: usize,
-        targets: heapless::CopyVec<Drawtarget, WS_WINDOW_LIMIT>,
-        windows: &heapless::CopyVec<ManagedWindow, WS_WINDOW_LIMIT>,
+        targets: heapless::Vec<Drawtarget, WS_WINDOW_LIMIT>,
+        windows: &heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>,
         state: &mut State,
     ) -> Result<()> {
         if targets.is_empty() {
@@ -139,8 +139,8 @@ impl<'a> Drawer<'a> {
         &self,
         mon_ind: usize,
         ws_ind: usize,
-        windows: &heapless::CopyVec<ManagedWindow, WS_WINDOW_LIMIT>,
-        targets: heapless::CopyVec<Drawtarget, WS_WINDOW_LIMIT>,
+        windows: &heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>,
+        targets: heapless::Vec<Drawtarget, WS_WINDOW_LIMIT>,
         layout: Layout,
         state: &mut State,
     ) -> Result<()> {
@@ -196,7 +196,7 @@ impl<'a> Drawer<'a> {
     fn draw_tabbed(
         &self,
         mon_ind: usize,
-        targets: heapless::CopyVec<Drawtarget, WS_WINDOW_LIMIT>,
+        targets: heapless::Vec<Drawtarget, WS_WINDOW_LIMIT>,
         target: usize,
         state: &mut State,
     ) -> Result<()> {
@@ -300,12 +300,13 @@ impl<'a> Drawer<'a> {
             let text_dimensions = self
                 .font_manager
                 .text_geometry(name, &self.fonts.tab_bar_section);
-            let text_width = text_dimensions.0 as usize;
-            let center_offset = (split_width as usize - text_width) / 2;
+            let text_width = text_dimensions.0 as i16;
+            let draw_name = if split_width >= text_width { name } else { "" };
+            let center_offset = (split_width - text_width) / 2;
 
             self.font_manager.draw(
                 dbw,
-                name,
+                draw_name,
                 &self.fonts.tab_bar_section,
                 Dimensions::new(split_width, state.tab_bar_height, split_width * i as i16, 0),
                 split_width,

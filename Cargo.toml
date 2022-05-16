@@ -1,6 +1,6 @@
 [workspace]
-members = ["pgwm", "pgwm-core"]
+members = ["performance-test/event-collection", "performance-test/event-source", "performance-test/event-lib", "pgwm", "pgwm-core"]
 
 [patch.crates-io]
-heapless = { git = "https://github.com/MarcusGrass/heapless", rev = "7bf327b6a37c703691700da67fcccaa2c245e76c" }
 fontdue = { git = "https://github.com/MarcusGrass/fontdue", branch = "rasterize-oneshot" }
+# x11rb = { git = "https://github.com/psychon/x11rb", rev = "6e9bc347b4cb7afe757596986c6f6deb9e4cc3b4"}

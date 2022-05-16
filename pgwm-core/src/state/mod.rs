@@ -29,7 +29,7 @@ use crate::{
 pub struct State {
     pub wm_check_win: Window,
     pub intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
-    pub dying_windows: heapless::CopyVec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
+    pub dying_windows: heapless::Vec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
     pub drag_window: Option<(Window, DragPosition)>,
     pub focused_mon: usize,
     pub input_focus: Option<Window>,
@@ -340,7 +340,7 @@ mod tests {
                     position: Line::new(0, 0),
                     first_sep_len: 0,
                     sep_len: 0,
-                    components: heapless::CopyVec::default(),
+                    components: heapless::Vec::default(),
                 },
                 window_title_section: WindowTitleSection {
                     position: Line::new(0, 0),
@@ -369,7 +369,7 @@ mod tests {
                     position: Line::new(0, 0),
                     first_sep_len: 0,
                     sep_len: 0,
-                    components: heapless::CopyVec::default(),
+                    components: heapless::Vec::default(),
                 },
                 window_title_section: WindowTitleSection {
                     position: Line::new(0, 0),
@@ -407,7 +407,7 @@ mod tests {
             show_bar: false,
             window_title_display: heapless::String::default(),
         };
-        let pixels: heapless::CopyVec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
+        let pixels: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
             std::iter::repeat_with(|| Color {
                 pixel: 0,
                 bgra8: [0, 0, 0, 0],
@@ -417,7 +417,7 @@ mod tests {
         State {
             wm_check_win: 0,
             intern_created_windows: heapless::IndexSet::default(),
-            dying_windows: heapless::CopyVec::default(),
+            dying_windows: heapless::Vec::default(),
             drag_window: None,
             focused_mon: 0,
             input_focus: None,

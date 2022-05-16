@@ -1,30 +1,26 @@
 use crate::error::Result;
+use crate::wm::XorgConnection;
 use pgwm_core::config::{APPLICATION_WINDOW_LIMIT, WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT};
 use pgwm_core::geometry::Dimensions;
 use x11rb::{
     cookie::Cookie,
     protocol::xproto::{GetGeometryReply, GetPropertyReply, QueryTreeReply, Window},
-    rust_connection::RustConnection,
 };
 
 pub(crate) struct QueryTreeCookie<'a> {
-    pub(crate) inner: Cookie<'a, RustConnection, QueryTreeReply>,
+    pub(crate) inner: Cookie<'a, XorgConnection, QueryTreeReply>,
 }
 
 impl<'a> QueryTreeCookie<'a> {
-    pub(crate) fn await_children(
-        self,
-    ) -> Result<heapless::CopyVec<Window, APPLICATION_WINDOW_LIMIT>> {
+    pub(crate) fn await_children(self) -> Result<heapless::Vec<Window, APPLICATION_WINDOW_LIMIT>> {
         let tree_reply = self.inner.reply()?;
-        Ok(
-            heapless::CopyVec::from_slice(tree_reply.children.as_slice())
-                .map_err(|_| pgwm_core::error::Error::HeaplessInstantiate)?,
-        )
+        Ok(heapless::Vec::from_slice(tree_reply.children.as_slice())
+            .map_err(|_| pgwm_core::error::Error::HeaplessInstantiate)?)
     }
 }
 
 pub(crate) struct DimensionsCookie<'a> {
-    pub(crate) inner: Cookie<'a, RustConnection, GetGeometryReply>,
+    pub(crate) inner: Cookie<'a, XorgConnection, GetGeometryReply>,
 }
 
 impl<'a> DimensionsCookie<'a> {
@@ -40,20 +36,20 @@ impl<'a> DimensionsCookie<'a> {
 }
 
 pub(crate) struct ClassConvertCookie<'a> {
-    pub(crate) inner: Cookie<'a, RustConnection, GetPropertyReply>,
+    pub(crate) inner: Cookie<'a, XorgConnection, GetPropertyReply>,
 }
 
 impl<'a> ClassConvertCookie<'a> {
     pub(crate) fn await_class_names(
         self,
-    ) -> Result<Option<heapless::CopyVec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>> {
+    ) -> Result<Option<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>> {
         Ok(extract_wm_class(self.inner.reply()?))
     }
 }
 
 fn extract_wm_class(
     class_response: GetPropertyReply,
-) -> Option<heapless::CopyVec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>> {
+) -> Option<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>> {
     // Already allocated vec
     let raw_utf8 = String::from_utf8(class_response.value);
     if let Ok(raw_utf8) = &raw_utf8 {
@@ -62,7 +58,7 @@ fn extract_wm_class(
             .filter(|s| !s.is_empty())
             .map(heapless::String::from)
             // Avoiding another alloc here
-            .collect::<heapless::CopyVec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>();
+            .collect::<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>();
         Some(complete_names)
     } else {
         pgwm_core::debug!("Failed to parse class response value as utf-8");
@@ -71,8 +67,8 @@ fn extract_wm_class(
 }
 
 pub(crate) struct FallbackNameConvertCookie<'a> {
-    pub(crate) wm_inner: Cookie<'a, RustConnection, GetPropertyReply>,
-    pub(crate) ewmh_inner: Cookie<'a, RustConnection, GetPropertyReply>,
+    pub(crate) wm_inner: Cookie<'a, XorgConnection, GetPropertyReply>,
+    pub(crate) ewmh_inner: Cookie<'a, XorgConnection, GetPropertyReply>,
 }
 
 impl<'a> FallbackNameConvertCookie<'a> {
@@ -105,7 +101,7 @@ fn utf8_heapless<const N: usize>(bytes: Vec<u8>) -> Result<Option<heapless::Stri
 }
 
 pub(crate) struct TransientConvertCookie<'a> {
-    pub(crate) inner: Cookie<'a, RustConnection, GetPropertyReply>,
+    pub(crate) inner: Cookie<'a, XorgConnection, GetPropertyReply>,
 }
 
 impl<'a> TransientConvertCookie<'a> {

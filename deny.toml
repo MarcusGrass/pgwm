@@ -28,7 +28,6 @@ skip = [
 
 [sources]
 allow-git = [
-    "https://github.com/MarcusGrass/heapless",
     "https://github.com/MarcusGrass/x11-keysyms",
     "https://github.com/MarcusGrass/fontdue",
 ]
@@ -46,4 +45,7 @@ allow = [
 exceptions = [
     { name = "pgwm", allow = ["GPL-3.0"] },
     { name = "pgwm-core", allow = ["GPL-3.0"] },
+    { name = "event-collection", allow = ["GPL-3.0"] },
+    { name = "event-source", allow = ["GPL-3.0"] },
+    { name = "event-lib", allow = ["GPL-3.0"] },
 ]

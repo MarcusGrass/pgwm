@@ -1,12 +1,12 @@
 use crate::error::Result;
 use pgwm_core::push_heapless;
 
+use crate::wm::XorgConnection;
+use x11rb::properties::WmHintsCookie;
 use x11rb::{
     properties::WmHints,
     protocol::xproto::{ClientMessageEvent, PropertyNotifyEvent, Window},
-    rust_connection::RustConnection,
 };
-use x11rb::properties::WmHintsCookie;
 
 use crate::x11::call_wrapper::{SupportedAtom, WmState};
 
@@ -16,7 +16,7 @@ use super::{
 };
 
 pub(crate) struct ClientMessageHandler<'a> {
-    connection: &'a RustConnection,
+    connection: &'a XorgConnection,
     call_wrapper: &'a CallWrapper<'a>,
 }
 
@@ -88,7 +88,7 @@ impl<'a> ClientMessageHandler<'a> {
 
     fn interpret_state(&self, event: ClientMessageEvent) -> Result<Option<ClientMessage>> {
         let parts = event.data.as_data32();
-        let mut state_changes: heapless::CopyVec<ChangeAction, 3> = heapless::CopyVec::new();
+        let mut state_changes: heapless::Vec<ChangeAction, 3> = heapless::Vec::new();
         let action = parts[0];
         let change_type = ChangeType::from_number(action);
         // Last one is the source indication
@@ -138,7 +138,7 @@ impl<'a> ClientMessageHandler<'a> {
     }
 
     #[must_use]
-    pub(crate) fn new(connection: &'a RustConnection, call_wrapper: &'a CallWrapper<'a>) -> Self {
+    pub(crate) fn new(connection: &'a XorgConnection, call_wrapper: &'a CallWrapper<'a>) -> Self {
         Self {
             connection,
             call_wrapper,
@@ -151,11 +151,11 @@ pub(crate) enum ClientMessage {
     RequestActiveWindow(Window),
     RequestSetExtents(Window),
     CloseWindow(Window),
-    StateChange((Window, heapless::CopyVec<ChangeAction, 3>)),
+    StateChange((Window, heapless::Vec<ChangeAction, 3>)),
 }
 
 pub(crate) enum PropertyChangeMessage<'a> {
-    Hints((Window, WmHintsCookie<'a, RustConnection>)),
+    Hints((Window, WmHintsCookie<'a, XorgConnection>)),
     ClassName((Window, ClassConvertCookie<'a>)),
     Name((Window, FallbackNameConvertCookie<'a>)),
     WmStateChange((Window, Option<WmState>)),

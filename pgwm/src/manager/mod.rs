@@ -1,12 +1,11 @@
 pub(crate) mod bar;
 pub(crate) mod draw;
 pub(crate) mod font;
-mod spawn;
 
 use crate::error::{Error, Result};
 use crate::manager::bar::BarManager;
 use crate::manager::draw::Drawer;
-use crate::manager::spawn::spawn;
+use crate::wm::XorgConnection;
 use crate::x11::call_wrapper::{CallWrapper, FloatIndicators, WindowFloatDeduction, WmState};
 use crate::x11::client_message::{
     ChangeType, ClientMessage, ClientMessageHandler, PropertyChangeMessage,
@@ -32,8 +31,6 @@ use x11rb::protocol::xproto::{
     MapState, MotionNotifyEvent, NotifyMode, PropertyNotifyEvent, QueryPointerReply,
     UnmapNotifyEvent, Visibility, VisibilityNotifyEvent, Window,
 };
-use x11rb::protocol::Event;
-use x11rb::rust_connection::RustConnection;
 
 pub(crate) struct Manager<'a> {
     call_wrapper: &'a CallWrapper<'a>,
@@ -98,11 +95,11 @@ impl<'a> Manager<'a> {
             )?;
         }
         let mut transients: heapless::Vec<
-            (Window, WmHintsCookie<'a, RustConnection>),
+            (Window, WmHintsCookie<'a, XorgConnection>),
             APPLICATION_WINDOW_LIMIT,
         > = heapless::Vec::new();
         let mut non_transients: heapless::Vec<
-            (Window, WmHintsCookie<'a, RustConnection>),
+            (Window, WmHintsCookie<'a, XorgConnection>),
             APPLICATION_WINDOW_LIMIT,
         > = heapless::Vec::new();
         for ScanProperties {
@@ -149,40 +146,7 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    /// Handle the given event
-    pub(crate) fn handle_event(&self, event: Event, state: &mut State) -> Result<()> {
-        // Maybe rip this out of hot path and find some other way of handling ignoring WM-caused events
-        // Reconfigure/map/unmap causes cascading enters which switches focus.
-        // Xlib has functions to drain Events by mask but xcb doesn't.
-        if event
-            .wire_sequence_number()
-            .map_or(false, |seq| state.should_ignore_sequence(seq))
-            && (matches!(event, Event::EnterNotify(_)) || matches!(event, Event::UnmapNotify(_)))
-        {
-            return Ok(());
-        }
-        pgwm_core::debug!("---------->Got event {:?}", event);
-
-        match event {
-            Event::KeyPress(event) => self.handle_key_press(event, state)?,
-            Event::MapRequest(event) => self.handle_map_request(event, state)?,
-            Event::UnmapNotify(event) => self.handle_unmap_notify(event, state)?,
-            Event::DestroyNotify(event) => self.handle_destroy_notify(event, state)?,
-            Event::ConfigureNotify(event) => self.handle_configure_notify(event, state)?,
-            Event::ConfigureRequest(event) => self.handle_configure_request(event, state)?,
-            Event::ButtonPress(event) => self.handle_button_press(event, state)?,
-            Event::ButtonRelease(event) => self.handle_button_release(event, state)?,
-            Event::MotionNotify(event) => self.handle_motion_notify(event, state)?,
-            Event::EnterNotify(event) => self.handle_enter(event, state)?,
-            Event::ClientMessage(event) => self.handle_client_message(event, state)?,
-            Event::PropertyNotify(event) => self.handle_property_notify(event, state)?,
-            Event::VisibilityNotify(event) => self.handle_visibility_change(event, state)?,
-            _ => {}
-        }
-        Ok(())
-    }
-
-    fn handle_key_press(&self, event: KeyPressEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_key_press(&self, event: KeyPressEvent, state: &mut State) -> Result<()> {
         if let Some(action) = state.get_key_action(event.detail, event.state) {
             self.exec_action(event.event, InputSource::Keyboard, action.clone(), state)?;
         }
@@ -206,8 +170,16 @@ impl<'a> Manager<'a> {
                 self.cleanup(state)?;
                 return Err(Error::GracefulShutdown);
             }
+            #[cfg_attr(feature = "perf-test", allow(unused_variables))]
             Action::Spawn(cmd, args) => {
-                spawn(&cmd, &args)?;
+                pgwm_core::debug!("Spawning {} with args {:?}", cmd, args);
+                #[cfg(not(feature = "perf-test"))]
+                std::process::Command::new(cmd)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .args(args)
+                    .spawn()?;
             }
             Action::Close => {
                 let win = focus_fallback_origin(origin, state);
@@ -419,7 +391,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_map_request(&self, event: MapRequestEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_map_request(
+        &self,
+        event: MapRequestEvent,
+        state: &mut State,
+    ) -> Result<()> {
         let attrs = self.call_wrapper.get_window_attributes(event.window)?;
         let hints = self.call_wrapper.get_hints(event.window)?;
         pgwm_core::debug!("Maprequest incoming for sequence {}", event.sequence);
@@ -441,7 +417,7 @@ impl<'a> Manager<'a> {
     fn manage_window(
         &self,
         win: Window,
-        hints: WmHintsCookie<'a, RustConnection>,
+        hints: WmHintsCookie<'a, XorgConnection>,
         state: &mut State,
     ) -> Result<()> {
         self.call_wrapper.set_base_client_event_mask(win)?;
@@ -485,7 +461,7 @@ impl<'a> Manager<'a> {
         attached_to: Option<Window>,
         ws_ind: usize,
         draw_on_mon: Option<usize>,
-        hints_cookie: WmHintsCookie<'a, RustConnection>,
+        hints_cookie: WmHintsCookie<'a, XorgConnection>,
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Managing tiled {win} attached to {attached_to:?}");
@@ -541,7 +517,7 @@ impl<'a> Manager<'a> {
         mon_ind: usize,
         ws_ind: usize,
         dimensions: Dimensions,
-        hints_cookie: WmHintsCookie<'a, RustConnection>,
+        hints_cookie: WmHintsCookie<'a, XorgConnection>,
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Managing floating {win} attached to {attached_to:?}");
@@ -637,7 +613,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_unmap_notify(&self, event: UnmapNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_unmap_notify(
+        &self,
+        event: UnmapNotifyEvent,
+        state: &mut State,
+    ) -> Result<()> {
         // Is a managed window, manually unmapped windows are not removed
         if state
             .workspaces
@@ -668,7 +648,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_destroy_notify(&self, event: DestroyNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_destroy_notify(
+        &self,
+        event: DestroyNotifyEvent,
+        state: &mut State,
+    ) -> Result<()> {
         self.unmanage(event.window, state)?;
         if let Some(pos) = state
             .dying_windows
@@ -680,7 +664,7 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_configure_notify(
+    pub(crate) fn handle_configure_notify(
         &self,
         event: ConfigureNotifyEvent,
         state: &mut State,
@@ -695,7 +679,7 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_configure_request(
+    pub(crate) fn handle_configure_request(
         &self,
         event: ConfigureRequestEvent,
         state: &mut State,
@@ -707,7 +691,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_button_press(&self, event: ButtonPressEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_button_press(
+        &self,
+        event: ButtonPressEvent,
+        state: &mut State,
+    ) -> Result<()> {
         let mon_ind = state
             .find_monitor_at((event.root_x, event.root_y))
             .unwrap_or(0);
@@ -805,7 +793,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_button_release(&self, event: ButtonReleaseEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_button_release(
+        &self,
+        event: ButtonReleaseEvent,
+        state: &mut State,
+    ) -> Result<()> {
         if let Some((win, _drag)) = state.drag_window.take() {
             let win_dims = self.call_wrapper.get_dimensions(win)?;
             pgwm_core::debug!("Got button release and removed drag window {win}");
@@ -833,7 +825,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_motion_notify(&self, event: MotionNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_motion_notify(
+        &self,
+        event: MotionNotifyEvent,
+        state: &mut State,
+    ) -> Result<()> {
         if let Some((win, drag_pos)) = &state.drag_window {
             let (x, y) = drag_pos.current_position(event.event_x, event.event_y);
             // Sigh, X11 and its mixing up i16 and i32
@@ -867,7 +863,7 @@ impl<'a> Manager<'a> {
         Only method that blindly refocuses, won't refocus on root because it feels strange as a user
         if using the mouse between windows with padding
     **/
-    fn handle_enter(&self, event: EnterNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_enter(&self, event: EnterNotifyEvent, state: &mut State) -> Result<()> {
         if event.event != state.screen.root && event.mode != NotifyMode::GRAB {
             self.try_focus_window(event.event, state)?;
         }
@@ -875,7 +871,7 @@ impl<'a> Manager<'a> {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn handle_client_message(
+    pub(crate) fn handle_client_message(
         &self,
         event: x11rb::protocol::xproto::ClientMessageEvent,
         state: &mut State,
@@ -1243,7 +1239,11 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_property_notify(&self, event: PropertyNotifyEvent, state: &mut State) -> Result<()> {
+    pub(crate) fn handle_property_notify(
+        &self,
+        event: PropertyNotifyEvent,
+        state: &mut State,
+    ) -> Result<()> {
         // Wm's own events
         if event.window == state.screen.root {
             return Ok(());
@@ -1310,12 +1310,12 @@ impl<'a> Manager<'a> {
     fn manually_remap_win(
         &self,
         win: Window,
-        class_names: &heapless::CopyVec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>,
+        class_names: &heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>,
         state: &mut State,
     ) -> Result<()> {
         if let Some(mapped) = state.workspaces.find_ws_containing_window(win) {
-            for class in *class_names {
-                if let Some(ind) = state.workspaces.find_ws_for_window_class_name(&class) {
+            for class in class_names {
+                if let Some(ind) = state.workspaces.find_ws_for_window_class_name(class) {
                     if mapped != ind {
                         pgwm_core::debug!("Remapping from {} to {} on prop change", mapped, ind);
                         let focus_style = self
@@ -1336,7 +1336,7 @@ impl<'a> Manager<'a> {
         Ok(())
     }
 
-    fn handle_visibility_change(
+    pub(crate) fn handle_visibility_change(
         &self,
         event: VisibilityNotifyEvent,
         state: &mut State,
@@ -1620,10 +1620,10 @@ fn toggle_tabbed(mon_ind: usize, ws_ind: usize, state: &mut State) -> Result<boo
 
 struct ScanProperties<'a> {
     window: Window,
-    attributes: Cookie<'a, RustConnection, GetWindowAttributesReply>,
+    attributes: Cookie<'a, XorgConnection, GetWindowAttributesReply>,
     transient_cookie: TransientConvertCookie<'a>,
     wm_state: Option<WmState>,
-    hints: WmHintsCookie<'a, RustConnection>,
+    hints: WmHintsCookie<'a, XorgConnection>,
 }
 
 fn calculate_relative_placement(

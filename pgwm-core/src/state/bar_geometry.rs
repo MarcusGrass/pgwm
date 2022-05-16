@@ -74,7 +74,7 @@ impl BarGeometry {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct WindowTitleSection {
     pub position: Line,
     pub display: heapless::String<WM_NAME_LIMIT>,
@@ -115,7 +115,7 @@ pub struct StatusSection {
     pub position: Line,
     pub first_sep_len: i16,
     pub sep_len: i16,
-    pub components: heapless::CopyVec<StatusComponent, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
+    pub components: heapless::Vec<StatusComponent, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
 }
 
 #[cfg(feature = "status-bar")]
@@ -129,8 +129,8 @@ impl StatusSection {
         first_sep_len: i16,
     ) -> Self {
         let mut total_length = 0;
-        let mut corrected_lengths: heapless::CopyVec<i16, STATUS_BAR_UNIQUE_CHECK_LIMIT> =
-            heapless::CopyVec::new();
+        let mut corrected_lengths: heapless::Vec<i16, STATUS_BAR_UNIQUE_CHECK_LIMIT> =
+            heapless::Vec::new();
         for (ind, check) in check_lengths.iter().enumerate() {
             let mut cur_length = 0;
             if ind == 0 {
@@ -143,7 +143,7 @@ impl StatusSection {
             let _ = corrected_lengths.push(cur_length);
             total_length += cur_length;
         }
-        let mut components = heapless::CopyVec::new();
+        let mut components = heapless::Vec::new();
         let start = mon_width - right_offset - total_length;
         let mut offset = 0;
         for length in corrected_lengths {
@@ -181,7 +181,7 @@ impl StatusSection {
             crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}")
         };
         let component = &mut self.components[new_component_ind];
-        component.display = content;
+        component.display = content.clone();
         (content, component.position)
     }
 
@@ -213,7 +213,7 @@ impl StatusSection {
 }
 
 #[cfg(feature = "status-bar")]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct StatusComponent {
     pub position: Line,
     pub display: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,

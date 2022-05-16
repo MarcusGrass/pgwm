@@ -11,12 +11,12 @@ macro_rules! push_heapless {
 macro_rules! hvec {
     () => {
         {
-            Ok::<_, $crate::error::Error>(heapless::CopyVec::new())
+            Ok::<_, $crate::error::Error>(heapless::Vec::new())
         }
     };
     ( $( $x: expr),*) => {
         {
-            let mut heapless_vec = heapless::CopyVec::new();
+            let mut heapless_vec = heapless::Vec::new();
             let mut any_err = false;
             $(
                 if heapless_vec.push($x).is_err() {
@@ -32,7 +32,7 @@ macro_rules! hvec {
     };
     ($elem: expr ; $n : expr) => {
         {
-            let mut heapless_vec = heapless::CopyVec::new();
+            let mut heapless_vec = heapless::Vec::new();
             let mut any_err = false;
             for _ in 0..$n {
                 if heapless_vec.push($elem).is_err() {

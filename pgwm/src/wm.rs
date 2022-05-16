@@ -14,9 +14,15 @@ use std::collections::HashMap;
 use std::time::Duration;
 use x11rb::connection::Connection;
 use x11rb::protocol::render::{PictType, Pictformat, Pictforminfo};
-use x11rb::protocol::xproto::{Screen, Visualid};
-use x11rb::resource_manager::Database;
-use x11rb::rust_connection::RustConnection;
+use x11rb::protocol::xproto::{
+    ButtonPressEvent, ButtonReleaseEvent, ClientMessageEvent, ConfigureNotifyEvent,
+    ConfigureRequestEvent, DestroyNotifyEvent, EnterNotifyEvent, KeyPressEvent, MapRequestEvent,
+    MotionNotifyEvent, PropertyNotifyEvent, Screen, UnmapNotifyEvent, VisibilityNotifyEvent,
+    Visualid,
+};
+pub type XorgConnection = x11rb::rust_connection::RustConnection;
+
+use x11rb::x11_utils::TryParse;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
@@ -65,7 +71,11 @@ pub(crate) fn run_wm() -> Result<()> {
         #[cfg(feature = "status-bar")]
         status_checks,
     } = bar;
-    let (connection, screen_num) = x11rb::connect(None)?;
+    #[cfg(feature = "perf-test")]
+    let dpy = Some(":4");
+    #[cfg(not(feature = "perf-test"))]
+    let dpy = None;
+    let (connection, screen_num) = XorgConnection::connect(dpy)?;
     let setup = connection.setup();
     pgwm_core::debug!("Setup formats {:?}", setup.pixmap_formats);
     pgwm_core::debug!("Setup visuals {:?}", setup.roots[0].root_visual);
@@ -73,15 +83,20 @@ pub(crate) fn run_wm() -> Result<()> {
     let call_wrapper = CallWrapper::new(&connection)?;
     call_wrapper.try_become_wm(screen)?;
     connection.flush()?;
-    let resource_db = Database::new_from_default(&connection)?;
+    //let resource_db = x11rb::resource_manager::new_from_resource_manager(&connection)?
+    //    .ok_or(Error::X11OpenDefaultDb)?;
+    let resource_db = x11rb::resource_manager::Database::new_from_resource_manager(&connection)?
+        .ok_or(Error::X11OpenDefaultDb)?;
     let cursor_handle = x11rb::cursor::Handle::new(&connection, 0, &resource_db)?;
     let visual = find_render_visual_info(&connection, screen)?;
     let loaded = load_alloc_fonts(&call_wrapper, &visual, &fonts, &char_remap)?;
     let lf = LoadedFonts::new(loaded, &char_remap)?;
 
     let font_drawer = FontDrawer::new(&call_wrapper, &lf);
+    pgwm_core::debug!("Allocating colors");
     let colors = alloc_colors(&connection, screen.default_colormap, colors)?;
 
+    pgwm_core::debug!("Creating state");
     let mut state = crate::x11::state_lifecycle::create_state(
         &connection,
         &call_wrapper,
@@ -129,14 +144,14 @@ pub(crate) fn run_wm() -> Result<()> {
     let should_check = !status_checks.is_empty();
 
     #[cfg(feature = "status-bar")]
-    let mut mut_checks = status_checks;
+    let mut mut_checks = status_checks.clone();
     #[cfg(feature = "status-bar")]
     let mut checker = pgwm_core::status::checker::Checker::new(&mut mut_checks);
     crate::debug!("Initialized Checker");
     manager.init(&mut state)?;
     crate::debug!("Initialized manager state");
-    connection.flush()?;
     manager.scan(&mut state)?;
+    connection.flush()?;
     crate::debug!("Initialized, starting loop");
     loop {
         #[cfg(feature = "status-bar")]
@@ -190,7 +205,7 @@ pub(crate) fn run_wm() -> Result<()> {
 
 #[cfg(feature = "status-bar")]
 fn loop_with_status<'a>(
-    connection: &RustConnection,
+    connection: &XorgConnection,
     manager: &Manager<'a>,
     checker: &mut pgwm_core::status::checker::Checker,
     state: &mut State,
@@ -198,13 +213,10 @@ fn loop_with_status<'a>(
     let mut next_check = std::time::Instant::now();
     // Extremely hot place in the code, should bench the checker
     loop {
+        // Handle any events currently in queue
+        drain_events(connection, manager, state)?;
         // Flush events
         connection.flush()?;
-        // Check any events in queue
-        while let Some(event) = connection.poll_for_event()? {
-            // Handle all
-            manager.handle_event(event, state)?;
-        }
         // This looks dumb... Anyway, avoiding an unnecessary poll and going straight to status update
         // if no new events or duration is now.
         let now = std::time::Instant::now();
@@ -226,26 +238,109 @@ fn loop_with_status<'a>(
 }
 
 fn loop_without_status<'a>(
-    connection: &'a RustConnection,
+    connection: &'a XorgConnection,
     manager: &'a Manager<'a>,
     state: &mut State,
 ) -> Result<()> {
     // Arbitrarily chosen
     const DEADLINE: Duration = Duration::from_millis(1000);
     loop {
+        drain_events(connection, manager, state)?;
+        manager.destroy_marked(state)?;
         // Cleanup
         connection.flush()?;
-        while let Some(event) = connection.poll_for_event()? {
-            manager.handle_event(event, state)?;
-        }
-        manager.destroy_marked(state)?;
         // Blocking with a time-out to allow destroying marked even if there are no events
         new_event_within_deadline(connection, std::time::Instant::now(), DEADLINE)?;
     }
 }
 
+#[inline]
+fn drain_events<'a>(
+    connection: &'a XorgConnection,
+    manager: &'a Manager<'a>,
+    state: &mut State,
+) -> Result<()> {
+    while let Some(raw) = connection.poll_for_raw_event()? {
+        // Ripped from x11rb_protocol, non-public small parsing functions
+        let response_type = raw.get(0).map(|x| x & 0x7f).ok_or(Error::X11EventParse)?;
+        let seq = raw
+            .get(2..4)
+            .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
+            .ok_or(Error::X11EventParse)?;
+
+        if state.should_ignore_sequence(seq)
+            && (response_type == x11rb::protocol::xproto::ENTER_NOTIFY_EVENT
+                || response_type == x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT)
+        {
+            continue;
+        }
+
+        match response_type {
+            x11rb::protocol::xproto::KEY_PRESS_EVENT => {
+                manager.handle_key_press(KeyPressEvent::try_parse(&raw).unwrap().0, state)?;
+            }
+            x11rb::protocol::xproto::MAP_REQUEST_EVENT => {
+                manager.handle_map_request(MapRequestEvent::try_parse(&raw).unwrap().0, state)?;
+            }
+            x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT => {
+                let evt = UnmapNotifyEvent::try_parse(&raw).unwrap().0;
+                manager.handle_unmap_notify(evt, state)?;
+            }
+            x11rb::protocol::xproto::DESTROY_NOTIFY_EVENT => {
+                manager
+                    .handle_destroy_notify(DestroyNotifyEvent::try_parse(&raw).unwrap().0, state)?;
+            }
+            x11rb::protocol::xproto::CONFIGURE_NOTIFY_EVENT => {
+                manager.handle_configure_notify(
+                    ConfigureNotifyEvent::try_parse(&raw).unwrap().0,
+                    state,
+                )?;
+            }
+            x11rb::protocol::xproto::CONFIGURE_REQUEST_EVENT => {
+                manager.handle_configure_request(
+                    ConfigureRequestEvent::try_parse(&raw).unwrap().0,
+                    state,
+                )?;
+            }
+            x11rb::protocol::xproto::BUTTON_PRESS_EVENT => {
+                manager.handle_button_press(ButtonPressEvent::try_parse(&raw).unwrap().0, state)?;
+            }
+            x11rb::protocol::xproto::BUTTON_RELEASE_EVENT => {
+                manager
+                    .handle_button_release(ButtonReleaseEvent::try_parse(&raw).unwrap().0, state)?;
+            }
+            x11rb::protocol::xproto::MOTION_NOTIFY_EVENT => {
+                manager
+                    .handle_motion_notify(MotionNotifyEvent::try_parse(&raw).unwrap().0, state)?;
+            }
+            x11rb::protocol::xproto::ENTER_NOTIFY_EVENT => {
+                let evt = EnterNotifyEvent::try_parse(&raw).unwrap().0;
+                manager.handle_enter(evt, state)?;
+            }
+            x11rb::protocol::xproto::CLIENT_MESSAGE_EVENT => {
+                manager
+                    .handle_client_message(ClientMessageEvent::try_parse(&raw).unwrap().0, state)?;
+            }
+            x11rb::protocol::xproto::PROPERTY_NOTIFY_EVENT => {
+                manager.handle_property_notify(
+                    PropertyNotifyEvent::try_parse(&raw).unwrap().0,
+                    state,
+                )?;
+            }
+            x11rb::protocol::xproto::VISIBILITY_NOTIFY_EVENT => {
+                manager.handle_visibility_change(
+                    VisibilityNotifyEvent::try_parse(&raw).unwrap().0,
+                    state,
+                )?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 fn new_event_within_deadline(
-    connection: &RustConnection,
+    connection: &XorgConnection,
     start_instant: std::time::Instant,
     deadline: Duration,
 ) -> Result<bool> {
@@ -285,7 +380,7 @@ fn new_event_within_deadline(
 }
 
 fn find_render_visual_info(
-    connection: &RustConnection,
+    connection: &XorgConnection,
     screen: &Screen,
 ) -> Result<RenderVisualInfo> {
     Ok(RenderVisualInfo {
@@ -295,7 +390,7 @@ fn find_render_visual_info(
 }
 
 fn find_appropriate_visual(
-    connection: &RustConnection,
+    connection: &XorgConnection,
     depth: u8,
     match_visual_id: Option<Visualid>,
 ) -> Result<VisualInfo> {

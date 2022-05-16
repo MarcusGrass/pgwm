@@ -35,7 +35,7 @@ impl Workspaces {
                     DefaultDraw::Tabbed => Mode::Tabbed(0),
                 },
                 name: ws.name.clone(),
-                children: heapless::CopyVec::new(), // Realloc is what's going to take time here
+                children: heapless::Vec::new(), // Realloc is what's going to take time here
                 tiling_modifiers: tiling_modifiers.clone(),
             });
             for mapped in &ws.mapped_class_names {
@@ -51,7 +51,7 @@ impl Workspaces {
     }
 
     #[must_use]
-    pub fn get_all_managed_windows(&self) -> heapless::CopyVec<Window, APPLICATION_WINDOW_LIMIT> {
+    pub fn get_all_managed_windows(&self) -> heapless::Vec<Window, APPLICATION_WINDOW_LIMIT> {
         self.win_to_ws.keys().copied().collect()
     }
 
@@ -59,7 +59,7 @@ impl Workspaces {
     pub fn get_all_windows_in_ws(
         &self,
         ws_ind: usize,
-    ) -> heapless::CopyVec<ManagedWindow, WS_WINDOW_LIMIT> {
+    ) -> heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT> {
         self.spaces[ws_ind]
             .get_all_windows()
             .iter()
@@ -254,7 +254,7 @@ impl Workspaces {
     pub fn find_all_attached(
         &self,
         parent: Window,
-    ) -> Option<&heapless::CopyVec<ManagedWindow, WS_WINDOW_LIMIT>> {
+    ) -> Option<&heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>> {
         self.win_to_ws
             .get(&parent)
             .and_then(|ws| self.spaces[*ws].find_all_attached(parent))
@@ -330,7 +330,7 @@ impl Workspaces {
     pub fn get_all_tiled_windows(
         &self,
         num: usize,
-    ) -> Result<heapless::CopyVec<ManagedWindow, WS_WINDOW_LIMIT>> {
+    ) -> Result<heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>> {
         self.spaces[num].get_all_tiled()
     }
 
@@ -396,7 +396,7 @@ pub struct Workspace {
     pub name: String,
     // Actually fine, searching small vectors is extremely efficient, as long as we don't need to
     // realloc
-    pub children: heapless::CopyVec<Child, WS_WINDOW_LIMIT>,
+    pub children: heapless::Vec<Child, WS_WINDOW_LIMIT>,
     pub tiling_modifiers: TilingModifiers,
 }
 
@@ -423,12 +423,12 @@ impl Workspace {
                     arrange,
                     focus_style,
                 },
-                attached: heapless::CopyVec::new(),
+                attached: heapless::Vec::new(),
             },
         )
     }
 
-    fn get_all_windows(&self) -> heapless::CopyVec<&ManagedWindow, { WS_WINDOW_LIMIT }> {
+    fn get_all_windows(&self) -> heapless::Vec<&ManagedWindow, { WS_WINDOW_LIMIT }> {
         self.children
             .iter()
             .flat_map(|ch| std::iter::once(&ch.managed).chain(ch.attached.iter()))
@@ -442,8 +442,8 @@ impl Workspace {
             .collect()
     }
 
-    fn get_all_tiled(&self) -> Result<heapless::CopyVec<ManagedWindow, { WS_WINDOW_LIMIT }>> {
-        let mut smol = heapless::CopyVec::new();
+    fn get_all_tiled(&self) -> Result<heapless::Vec<ManagedWindow, { WS_WINDOW_LIMIT }>> {
+        let mut smol = heapless::Vec::new();
         for child in self.get_all_windows() {
             if child.arrange == ArrangeKind::NoFloat {
                 push_heapless!(smol, *child)?;
@@ -487,7 +487,7 @@ impl Workspace {
     fn find_all_attached(
         &self,
         parent_window: Window,
-    ) -> Option<&heapless::CopyVec<ManagedWindow, WS_WINDOW_LIMIT>> {
+    ) -> Option<&heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>> {
         self.children
             .iter()
             .find(|ch| ch.managed.window == parent_window && !ch.attached.is_empty())
@@ -659,11 +659,11 @@ fn resize_safe(old: f32, diff: f32) -> f32 {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Child {
     pub managed: ManagedWindow,
     // Attached for some reason, window group, transient for, etc
-    pub attached: heapless::CopyVec<ManagedWindow, WS_WINDOW_LIMIT>,
+    pub attached: heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]

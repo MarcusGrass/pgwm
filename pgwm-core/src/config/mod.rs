@@ -348,8 +348,7 @@ pub struct BarCfg {
     pub shortcuts: Vec<Shortcut>,
     #[cfg(feature = "status-bar")]
     #[cfg_attr(feature = "config-file", serde(default = "init_status_checks"))]
-    pub status_checks:
-        heapless::CopyVec<crate::status::checker::Check, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
+    pub status_checks: heapless::Vec<crate::status::checker::Check, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
 }
 
 impl Default for BarCfg {
@@ -739,11 +738,11 @@ The checks all take an `icon` parameter which is an arbitrary string drawn next 
  **/
 #[cfg(feature = "status-bar")]
 fn init_status_checks(
-) -> heapless::CopyVec<crate::status::checker::Check, STATUS_BAR_UNIQUE_CHECK_LIMIT> {
+) -> heapless::Vec<crate::status::checker::Check, STATUS_BAR_UNIQUE_CHECK_LIMIT> {
     use crate::status::checker::{Check, CheckType, CpuFormat, DateFormat, MemFormat, NetFormat};
-    let mut checks = heapless::CopyVec::new();
+    let mut checks = heapless::Vec::new();
     /* Commented out because I'm usually not using a computer with batteries and configure those with config files
-    let mut battery_threshholds = heapless::CopyVec::new();
+    let mut battery_threshholds = heapless::Vec::new();
     // BatFormat takes a threshold and an associated icon which is displayed when below that threshold.
     crate::push_heapless!(
         battery_threshholds,
