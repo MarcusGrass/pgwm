@@ -33,8 +33,6 @@ pub(crate) enum Error {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
-    NixPoll(#[from] nix::Error),
-    #[error(transparent)]
     ConvertToUtf8(#[from] FromUtf8Error),
     #[error(transparent)]
     ConvertCoreToUtf8(#[from] core::str::Utf8Error),

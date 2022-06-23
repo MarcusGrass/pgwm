@@ -13,42 +13,47 @@ use x11rb::protocol::xproto::Window;
 pub(crate) struct Drawer<'a> {
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
-    call_wrapper: &'a CallWrapper<'a>,
 }
 
 impl<'a> Drawer<'a> {
     pub(crate) fn send_floating_to_top(
-        &self,
+        call_wrapper: &mut CallWrapper,
         floating: heapless::Vec<Window, WS_WINDOW_LIMIT>,
         state: &mut State,
     ) -> Result<()> {
         for win in floating {
-            self.call_wrapper.push_window_to_top(win, state)?;
+            call_wrapper.push_window_to_top(win, state)?;
         }
         Ok(())
     }
     pub(crate) fn draw_floating(
-        &self,
+        call_wrapper: &mut CallWrapper,
         window: Window,
         dimensions: Dimensions,
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Drawing floating {window} at {dimensions:?}");
-        self.call_wrapper
-            .configure_window(window, dimensions, state.window_border_width, state)?;
-        self.call_wrapper.map_window(window, state)?;
+        call_wrapper.configure_window(window, dimensions, state.window_border_width, state)?;
+        call_wrapper.send_map(window, state)?;
         Ok(())
     }
 
-    fn move_floating(&self, window: Window, x: i32, y: i32, state: &mut State) -> Result<()> {
+    fn move_floating(
+        call_wrapper: &mut CallWrapper,
+        window: Window,
+        x: i32,
+        y: i32,
+        state: &mut State,
+    ) -> Result<()> {
         pgwm_core::debug!("Drawing floating {window} at ({x}, {y})");
-        self.call_wrapper.move_window(window, x, y, state)?;
-        self.call_wrapper.map_window(window, state)?;
+        call_wrapper.move_window(window, x, y, state)?;
+        call_wrapper.send_map(window, state)?;
         Ok(())
     }
 
     pub(crate) fn draw_on(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         map_windows: bool,
         state: &mut State,
@@ -65,6 +70,7 @@ impl<'a> Drawer<'a> {
             }
         }
         self.draw(
+            call_wrapper,
             mon_ind,
             tiled
                 .iter()
@@ -85,7 +91,7 @@ impl<'a> Drawer<'a> {
                 let y = (dimensions.y as f32
                     + state.status_bar_height as f32
                     + dimensions.height as f32 * rel_y) as i32;
-                self.move_floating(mw.window, x, y, state)?;
+                Self::move_floating(call_wrapper, mw.window, x, y, state)?;
             }
         }
         Ok(())
@@ -93,23 +99,33 @@ impl<'a> Drawer<'a> {
 
     fn draw(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         targets: heapless::Vec<Drawtarget, WS_WINDOW_LIMIT>,
         windows: &heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>,
         state: &mut State,
     ) -> Result<()> {
         if targets.is_empty() {
-            self.call_wrapper
-                .unmap_window(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
+            call_wrapper.send_unmap(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
             return Ok(());
         }
         let ws_ind = state.monitors[mon_ind].hosted_workspace;
         let draw_mode = state.workspaces.get_draw_mode(ws_ind);
         match draw_mode {
             Mode::Tiled(layout) => {
-                self.draw_tiled(mon_ind, ws_ind, windows, targets, layout, state)?;
+                Self::draw_tiled(
+                    call_wrapper,
+                    mon_ind,
+                    ws_ind,
+                    windows,
+                    targets,
+                    layout,
+                    state,
+                )?;
             }
-            Mode::Tabbed(target) => self.draw_tabbed(mon_ind, targets, target, state)?,
+            Mode::Tabbed(target) => {
+                self.draw_tabbed(call_wrapper, mon_ind, targets, target, state)?;
+            }
             Mode::Fullscreen {
                 window,
                 last_draw_mode,
@@ -118,25 +134,34 @@ impl<'a> Drawer<'a> {
                 // pretty inefficient to draw everything below but whatever
                 match last_draw_mode {
                     OldDrawMode::Tiled(layout) => {
-                        self.draw_tiled(mon_ind, ws_ind, windows, targets, layout, state)?;
+                        Self::draw_tiled(
+                            call_wrapper,
+                            mon_ind,
+                            ws_ind,
+                            windows,
+                            targets,
+                            layout,
+                            state,
+                        )?;
                     }
                     OldDrawMode::Tabbed(target) => {
-                        self.draw_tabbed(mon_ind, targets, target, state)?;
+                        self.draw_tabbed(call_wrapper, mon_ind, targets, target, state)?;
                     }
                 }
-                self.call_wrapper.configure_window(
+                call_wrapper.configure_window(
                     window,
                     state.monitors[mon_ind].dimensions,
                     0,
                     state,
                 )?;
-                self.call_wrapper.map_window(window, state)?;
+                call_wrapper.send_map(window, state)?;
             }
         }
         Ok(())
     }
+
     fn draw_tiled(
-        &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         ws_ind: usize,
         windows: &heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>,
@@ -145,8 +170,7 @@ impl<'a> Drawer<'a> {
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Drawing tiled {windows:?} on mon = {mon_ind}");
-        self.call_wrapper
-            .unmap_window(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
+        call_wrapper.send_unmap(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
         let mon_dimensions = state.monitors[mon_ind].dimensions;
         let tiling_modifiers = &state.workspaces.get_ws(ws_ind).tiling_modifiers;
         let dimensions = layout.calculate_dimensions(
@@ -180,14 +204,9 @@ impl<'a> Drawer<'a> {
             };
             let win = target.window;
 
-            self.call_wrapper.configure_window(
-                win,
-                new_dimensions,
-                state.window_border_width,
-                state,
-            )?;
+            call_wrapper.configure_window(win, new_dimensions, state.window_border_width, state)?;
             if target.map {
-                self.call_wrapper.map_window(win, state)?;
+                call_wrapper.send_map(win, state)?;
             }
         }
         Ok(())
@@ -195,14 +214,15 @@ impl<'a> Drawer<'a> {
 
     fn draw_tabbed(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         targets: heapless::Vec<Drawtarget, WS_WINDOW_LIMIT>,
         target: usize,
         state: &mut State,
     ) -> Result<()> {
-        let names: heapless::Vec<Result<FallbackNameConvertCookie<'a>>, WS_WINDOW_LIMIT> = targets
+        let names: heapless::Vec<Result<FallbackNameConvertCookie>, WS_WINDOW_LIMIT> = targets
             .iter()
-            .map(|win| self.call_wrapper.get_name(win.window))
+            .map(|win| call_wrapper.get_name(win.window))
             .collect();
 
         let dt = &targets[target];
@@ -228,39 +248,54 @@ impl<'a> Drawer<'a> {
         };
         for dt in targets.iter() {
             if dt.map {
-                self.call_wrapper.map_window(dt.window, state)?;
+                call_wrapper.send_map(dt.window, state)?;
             }
         }
-        self.call_wrapper
-            .configure_window(win, new_win_dims, state.window_border_width, state)?;
+        call_wrapper.configure_window(win, new_win_dims, state.window_border_width, state)?;
         let found_names = names
             .into_iter()
             .map(|maybe_name_cookie| {
                 maybe_name_cookie
                     .ok()
-                    .and_then(|cookie| cookie.await_name().ok().flatten())
+                    .and_then(|cookie| {
+                        cookie
+                            .await_name(&mut call_wrapper.connection)
+                            .ok()
+                            .flatten()
+                    })
                     .unwrap_or_else(|| heapless::String::from("Unknown name"))
             })
             .collect::<Vec<heapless::String<WM_NAME_LIMIT>>>();
-        self.draw_tab_bar(mon_ind, found_names.as_slice(), target, padding, state)
+        self.draw_tab_bar(
+            call_wrapper,
+            mon_ind,
+            found_names.as_slice(),
+            target,
+            padding,
+            state,
+        )
     }
 
-    pub(crate) fn undraw(&self, mon_ind: usize, state: &mut State) -> Result<()> {
-        self.call_wrapper
-            .unmap_window(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
+    pub(crate) fn undraw(
+        call_wrapper: &mut CallWrapper,
+        mon_ind: usize,
+        state: &mut State,
+    ) -> Result<()> {
+        call_wrapper.send_unmap(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
         state
             .workspaces
             .get_all_windows_in_ws(state.monitors[mon_ind].hosted_workspace)
             .iter()
             .try_for_each(|mw| {
-                self.call_wrapper.unmap_window(mw.window, state)?;
-                Ok::<_, crate::error::Error>(())
+                call_wrapper.send_unmap(mw.window, state)?;
+                Ok::<_, Error>(())
             })?;
         Ok(())
     }
 
     fn draw_tab_bar(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         ws_names: &[heapless::String<WM_NAME_LIMIT>],
         selected: usize,
@@ -272,7 +307,7 @@ impl<'a> Drawer<'a> {
         let mut rounding_err =
             dimensions.width as usize - 2 * padding as usize - ws_names.len() * split;
         let win = state.monitors[mon_ind].tab_bar_win.window.drawable;
-        self.call_wrapper.configure_window(
+        call_wrapper.configure_window(
             win,
             Dimensions::new(
                 dimensions.width - 2 * padding,
@@ -283,7 +318,7 @@ impl<'a> Drawer<'a> {
             0,
             state,
         )?;
-        self.call_wrapper.map_window(win, state)?;
+        call_wrapper.send_map(win, state)?;
         let dbw = &state.monitors[mon_ind].tab_bar_win;
         for (i, name) in ws_names.iter().enumerate() {
             let split_width = if rounding_err > 0 {
@@ -305,6 +340,7 @@ impl<'a> Drawer<'a> {
             let center_offset = (split_width - text_width) / 2;
 
             self.font_manager.draw(
+                call_wrapper,
                 dbw,
                 draw_name,
                 &self.fonts.tab_bar_section,
@@ -319,15 +355,10 @@ impl<'a> Drawer<'a> {
         Ok(())
     }
 
-    pub fn new(
-        font_manager: &'a FontDrawer<'a>,
-        call_wrapper: &'a CallWrapper,
-        fonts: &'a Fonts,
-    ) -> Self {
+    pub fn new(font_manager: &'a FontDrawer<'a>, fonts: &'a Fonts) -> Self {
         Drawer {
             font_manager,
             fonts,
-            call_wrapper,
         }
     }
 }

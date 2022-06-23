@@ -51,7 +51,7 @@ macro_rules! hvec {
 #[cfg(feature = "debug")]
 macro_rules! debug {
     ($($arg:tt)*) => {{
-        eprintln!($($arg)*)
+        eprintln!("[{}:L#{}] {}", file!(), line!(), format_args!($($arg)*));
     }}
 }
 #[macro_export]

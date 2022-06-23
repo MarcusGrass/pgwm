@@ -12,7 +12,6 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::module_name_repetitions)]
-extern crate core;
 
 pub(crate) mod error;
 mod manager;

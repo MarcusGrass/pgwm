@@ -2,7 +2,6 @@ use crate::error::Result;
 use heapless::binary_heap::Min;
 use heapless::{FnvIndexMap, FnvIndexSet};
 use std::collections::HashMap;
-use x11rb::connection::Connection;
 use x11rb::cookie::VoidCookie;
 
 use pgwm_core::colors::Colors;
@@ -29,18 +28,17 @@ use pgwm_core::state::bar_geometry::{
 #[cfg(feature = "status-bar")]
 use pgwm_core::status::checker::{Check, CheckType};
 use x11rb::protocol::xproto::{
-    ButtonIndex, CapStyle, ConnectionExt, CreateGCAux, CreateWindowAux, EventMask, Gcontext,
-    GrabMode, JoinStyle, LineStyle, Pixmap, Screen, Window, WindowClass,
+    ButtonIndex, CapStyle, CreateGCAux, CreateWindowAux, EventMask, Gcontext, GrabMode, JoinStyle,
+    LineStyle, Pixmap, Screen, Window, WindowClass,
 };
+use x11rb::xcb::xproto;
 use x11rb::COPY_DEPTH_FROM_PARENT;
 
 use crate::manager::font::{FontDrawer, LoadedFonts};
-use crate::wm::XorgConnection;
 use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) fn create_state<'a>(
-    connection: &'a XorgConnection,
-    call_wrapper: &'a CallWrapper<'a>,
+    call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
     visual: RenderVisualInfo,
     fonts: &'a Fonts,
@@ -65,14 +63,13 @@ pub(crate) fn create_state<'a>(
 ) -> Result<State> {
     let mut cookie_container = heapless::Vec::new();
     let static_state = create_static_state(
-        connection,
+        call_wrapper,
         screen,
         &colors,
         tab_bar_height as u16,
         &mut cookie_container,
     )?;
     do_create_state(
-        connection,
         call_wrapper,
         font_manager,
         fonts,
@@ -106,8 +103,7 @@ pub(crate) fn create_state<'a>(
 }
 
 pub(crate) fn reinit_state<'a>(
-    connection: &'a XorgConnection,
-    call_wrapper: &'a CallWrapper<'a>,
+    call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     visual: RenderVisualInfo,
@@ -120,7 +116,6 @@ pub(crate) fn reinit_state<'a>(
 ) -> Result<State> {
     let cookie_container = heapless::Vec::new();
     do_create_state(
-        connection,
         call_wrapper,
         font_manager,
         fonts,
@@ -153,25 +148,33 @@ pub(crate) fn reinit_state<'a>(
     )
 }
 
-pub(crate) fn teardown_dynamic_state(connection: &XorgConnection, state: &State) -> Result<()> {
+pub(crate) fn teardown_dynamic_state(connection: &mut CallWrapper, state: &State) -> Result<()> {
     for mon in &state.monitors {
-        connection.destroy_window(mon.bar_win.window.drawable)?;
-        x11rb::protocol::render::free_picture(connection, mon.bar_win.window.picture)?;
-        connection.destroy_window(mon.tab_bar_win.window.drawable)?;
-        x11rb::protocol::render::free_picture(connection, mon.tab_bar_win.window.picture)?;
+        connection.send_destroy(mon.bar_win.window.drawable)?;
+        x11rb::xcb::render::free_picture(
+            &mut connection.connection,
+            mon.bar_win.window.picture,
+            true,
+        )?;
+        connection.send_destroy(mon.tab_bar_win.window.drawable)?;
+        x11rb::xcb::render::free_picture(
+            &mut connection.connection,
+            mon.tab_bar_win.window.picture,
+            true,
+        )?;
     }
     Ok(())
 }
 
 pub(crate) fn teardown_full_state(
-    connection: &XorgConnection,
+    connection: &mut CallWrapper,
     state: &State,
     loaded_fonts: &LoadedFonts,
 ) -> Result<()> {
     let _ = teardown_dynamic_state(connection, state);
-    connection.destroy_window(state.wm_check_win)?;
+    connection.send_destroy(state.wm_check_win)?;
     for font in loaded_fonts.fonts.values() {
-        x11rb::protocol::render::free_glyph_set(connection, font.glyph_set)?;
+        x11rb::xcb::render::free_glyph_set(&mut connection.connection, font.glyph_set, true)?;
     }
     Ok(())
 }
@@ -179,8 +182,7 @@ pub(crate) fn teardown_full_state(
 #[allow(clippy::fn_params_excessive_bools)]
 #[allow(clippy::too_many_lines)]
 fn do_create_state<'a>(
-    connection: &'a XorgConnection,
-    call_wrapper: &'a CallWrapper<'a>,
+    call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     vis_info: RenderVisualInfo,
@@ -207,9 +209,9 @@ fn do_create_state<'a>(
     key_mappings: &[SimpleKeyMapping],
     mouse_mappings: &[SimpleMouseMapping],
     #[cfg(feature = "status-bar")] checks: &[Check],
-    mut cookie_container: heapless::Vec<VoidCookie<'a, XorgConnection>, 32>,
+    mut cookie_container: heapless::Vec<VoidCookie, 32>,
 ) -> Result<State> {
-    let screen_dimensions = get_screen_dimensions(connection, &screen)?;
+    let screen_dimensions = get_screen_dimensions(call_wrapper, &screen)?;
     let mut monitors = Vec::with_capacity(8);
     let mut max_bar_width = 0;
     for (i, dimensions) in screen_dimensions.into_iter().enumerate() {
@@ -225,29 +227,35 @@ fn do_create_state<'a>(
             break;
         }
 
-        let tab_bar_win = connection.generate_id()?;
+        let tab_bar_win = call_wrapper.connection.generate_id()?;
         intern_created_windows.insert(tab_bar_win).unwrap();
         push_heapless!(
             cookie_container,
-            create_tab_bar_win(connection, &screen, tab_bar_win, dimensions, tab_bar_height)?
+            create_tab_bar_win(
+                call_wrapper,
+                &screen,
+                tab_bar_win,
+                dimensions,
+                tab_bar_height
+            )?
         )?;
-        let bar_win = connection.generate_id()?;
+        let bar_win = call_wrapper.connection.generate_id()?;
         intern_created_windows.insert(bar_win).unwrap();
         push_heapless!(
             cookie_container,
             create_workspace_bar_win(
-                connection,
+                call_wrapper,
                 &screen,
                 bar_win,
                 dimensions,
                 status_bar_height as u16
             )?
         )?;
-        let bar_pixmap = connection.generate_id()?;
+        let bar_pixmap = call_wrapper.connection.generate_id()?;
         push_heapless!(
             cookie_container,
             create_workspace_bar_pixmap(
-                connection,
+                call_wrapper,
                 &screen,
                 bar_pixmap,
                 dimensions,
@@ -255,23 +263,12 @@ fn do_create_state<'a>(
             )?
         )?;
         if show_bar_initially {
-            connection.map_window(bar_win)?;
+            xproto::map_window(&mut call_wrapper.connection, bar_win, true)?;
         }
 
-        let bar_win = init_xrender_double_buffered(
-            connection,
-            call_wrapper,
-            screen.root,
-            bar_win,
-            &vis_info,
-        )?;
-        let tab_bar_win = init_xrender_double_buffered(
-            connection,
-            call_wrapper,
-            screen.root,
-            tab_bar_win,
-            &vis_info,
-        )?;
+        let bar_win = init_xrender_double_buffered(call_wrapper, screen.root, bar_win, &vis_info)?;
+        let tab_bar_win =
+            init_xrender_double_buffered(call_wrapper, screen.root, tab_bar_win, &vis_info)?;
         let bar_geometry = create_bar_geometry(
             font_manager,
             fonts,
@@ -299,12 +296,12 @@ fn do_create_state<'a>(
     pgwm_core::debug!("Initializing mouse");
     let mouse_mapping = init_mouse(mouse_mappings);
     pgwm_core::debug!("Initializing keys");
-    let key_mapping = init_keys(connection, key_mappings)?;
-    grab_keys(connection, &key_mapping, screen.root)?;
+    let key_mapping = init_keys(call_wrapper, key_mappings)?;
+    grab_keys(call_wrapper, &key_mapping, screen.root)?;
     for bar_win in monitors.iter().map(|mon| &mon.bar_win) {
         pgwm_core::debug!("Grabbing mouse keys on bar_win");
         grab_mouse(
-            connection,
+            call_wrapper,
             bar_win.window.drawable,
             screen.root,
             &mouse_mapping,
@@ -313,13 +310,13 @@ fn do_create_state<'a>(
 
     pgwm_core::debug!("Creating status bar pixmap");
     #[cfg(feature = "status-bar")]
-    let status_pixmap = connection.generate_id()?;
+    let status_pixmap = call_wrapper.connection.generate_id()?;
 
     #[cfg(feature = "status-bar")]
     push_heapless!(
         cookie_container,
         create_status_bar_pixmap(
-            connection,
+            call_wrapper,
             &screen,
             status_pixmap,
             max_bar_width as u16,
@@ -328,7 +325,7 @@ fn do_create_state<'a>(
     )?;
 
     for cookie in cookie_container {
-        cookie.check()?;
+        cookie.check(&mut call_wrapper.connection)?;
     }
     pgwm_core::debug!("Created state");
     Ok(State {
@@ -360,30 +357,28 @@ fn do_create_state<'a>(
 }
 
 fn create_static_state<'a>(
-    connection: &'a XorgConnection,
+    call_wrapper: &'a mut CallWrapper,
     screen: &'a Screen,
     colors: &Colors,
     tab_bar_height: u16,
-    cookie_container: &mut heapless::Vec<VoidCookie<'a, XorgConnection>, 32>,
+    cookie_container: &mut heapless::Vec<VoidCookie, 32>,
 ) -> Result<StaticState> {
     let mut intern_created_windows = FnvIndexSet::new();
-    let mut gcs = create_gcs(connection, screen, colors)?;
-    let tab_pixmap = connection.generate_id()?;
+    let gcs = create_gcs(call_wrapper, screen, colors)?;
+    let tab_pixmap = call_wrapper.connection.generate_id()?;
     push_heapless!(
         cookie_container,
-        create_tab_pixmap(connection, screen, tab_pixmap, tab_bar_height)?
+        create_tab_pixmap(call_wrapper, screen, tab_pixmap, tab_bar_height)?
     )?;
 
     let sequences_to_ignore = heapless::BinaryHeap::new();
-    let check_win = connection.generate_id()?;
+    let check_win = call_wrapper.connection.generate_id()?;
     intern_created_windows.insert(check_win).unwrap();
     push_heapless!(
         cookie_container,
-        create_wm_check_win(connection, screen, check_win)?
+        create_wm_check_win(call_wrapper, screen, check_win)?
     )?;
-    let keys = gcs.keys().copied().collect::<heapless::Vec<u32, 8>>();
-    for key in keys {
-        let (_, cookie) = gcs.remove(&key).unwrap();
+    for (_, (_, cookie)) in gcs {
         push_heapless!(cookie_container, cookie)?;
     }
 
@@ -400,17 +395,18 @@ struct StaticState {
     intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
 }
 
-fn create_tab_bar_win<'a>(
-    connection: &'a XorgConnection,
+fn create_tab_bar_win(
+    connection: &mut CallWrapper,
     screen: &Screen,
     tab_bar_win: Window,
     dimensions: Dimensions,
     tab_bar_height: i16,
-) -> Result<VoidCookie<'a, XorgConnection>> {
+) -> Result<VoidCookie> {
     let create_win = CreateWindowAux::new()
         .event_mask(EventMask::BUTTON_PRESS)
         .background_pixel(0);
-    Ok(connection.create_window(
+    Ok(xproto::create_window(
+        &mut connection.connection,
         COPY_DEPTH_FROM_PARENT,
         tab_bar_win,
         screen.root,
@@ -422,16 +418,17 @@ fn create_tab_bar_win<'a>(
         WindowClass::INPUT_OUTPUT,
         0,
         &create_win,
+        false,
     )?)
 }
 
-fn create_workspace_bar_win<'a>(
-    connection: &'a XorgConnection,
+fn create_workspace_bar_win(
+    connection: &mut CallWrapper,
     screen: &Screen,
     ws_bar_win: Window,
     dimensions: Dimensions,
     status_bar_height: u16,
-) -> Result<VoidCookie<'a, XorgConnection>> {
+) -> Result<VoidCookie> {
     let cw = CreateWindowAux::new()
         .background_pixel(screen.black_pixel)
         .event_mask(
@@ -441,7 +438,8 @@ fn create_workspace_bar_win<'a>(
                 | EventMask::VISIBILITY_CHANGE
                 | EventMask::LEAVE_WINDOW,
         );
-    Ok(connection.create_window(
+    Ok(xproto::create_window(
+        &mut connection.connection,
         COPY_DEPTH_FROM_PARENT,
         ws_bar_win,
         screen.root,
@@ -453,34 +451,38 @@ fn create_workspace_bar_win<'a>(
         WindowClass::INPUT_OUTPUT,
         0,
         &cw,
+        false,
     )?)
 }
 
-fn create_workspace_bar_pixmap<'a>(
-    connection: &'a XorgConnection,
+fn create_workspace_bar_pixmap(
+    connection: &mut CallWrapper,
     screen: &Screen,
     bar_pixmap: Pixmap,
     dimensions: Dimensions,
     status_bar_height: u16,
-) -> Result<VoidCookie<'a, XorgConnection>> {
-    Ok(connection.create_pixmap(
+) -> Result<VoidCookie> {
+    Ok(xproto::create_pixmap(
+        &mut connection.connection,
         screen.root_depth,
         bar_pixmap,
         screen.root,
         dimensions.width as u16,
         status_bar_height,
+        false,
     )?)
 }
 
 fn create_wm_check_win<'a>(
-    connection: &'a XorgConnection,
+    connection: &'a mut CallWrapper,
     screen: &'a Screen,
     check_win: Window,
-) -> Result<VoidCookie<'a, XorgConnection>> {
+) -> Result<VoidCookie> {
     let cw = CreateWindowAux::new()
         .event_mask(EventMask::NO_EVENT)
         .background_pixel(0);
-    Ok(connection.create_window(
+    Ok(xproto::create_window(
+        &mut connection.connection,
         COPY_DEPTH_FROM_PARENT,
         check_win,
         screen.root,
@@ -492,14 +494,15 @@ fn create_wm_check_win<'a>(
         WindowClass::INPUT_OUTPUT,
         0,
         &cw,
+        false,
     )?)
 }
 
 fn create_gcs<'a>(
-    connection: &'a XorgConnection,
+    call_wrapper: &'a mut CallWrapper,
     screen: &'a Screen,
     colors: &Colors,
-) -> Result<FnvIndexMap<u32, (Gcontext, VoidCookie<'a, XorgConnection>), 8>> {
+) -> Result<FnvIndexMap<u32, (Gcontext, VoidCookie), 8>> {
     let mut map = FnvIndexMap::new();
     let colors_needing_gcs = [
         colors.tab_bar_focused_tab_background().pixel,
@@ -515,18 +518,18 @@ fn create_gcs<'a>(
         colors.shortcut_background().pixel,
     ];
     for pix in colors_needing_gcs {
-        let res = create_background_gc(connection, screen.root, pix)?;
+        let res = create_background_gc(call_wrapper, screen.root, pix)?;
         map.insert(pix, res).expect("Undersize gc map");
     }
 
     Ok(map)
 }
 fn create_background_gc(
-    connection: &XorgConnection,
+    call_wrapper: &mut CallWrapper,
     win: Window,
     pixel: u32,
-) -> Result<(Gcontext, VoidCookie<XorgConnection>)> {
-    let gc = connection.generate_id()?;
+) -> Result<(Gcontext, VoidCookie)> {
+    let gc = call_wrapper.connection.generate_id()?;
     let gc_aux = CreateGCAux::new()
         .graphics_exposures(0)
         .line_style(LineStyle::SOLID)
@@ -534,15 +537,16 @@ fn create_background_gc(
         .join_style(JoinStyle::MITER)
         .foreground(pixel)
         .background(pixel);
-    let cookie = connection.create_gc(gc, win, &gc_aux)?;
+
+    let cookie = xproto::create_gc(&mut call_wrapper.connection, gc, win, &gc_aux, false)?;
     Ok((gc, cookie))
 }
 
 #[cfg(not(feature = "xinerama"))]
 #[allow(clippy::unnecessary_wraps)]
-fn get_screen_dimensions<'a>(
-    _connection: &'a XorgConnection,
-    screen: &'a Screen,
+fn get_screen_dimensions(
+    _connection: &mut CallWrapper,
+    screen: &Screen,
 ) -> Result<Vec<Dimensions>> {
     Ok(vec![Dimensions::new(
         screen.width_in_pixels as i16,
@@ -553,53 +557,59 @@ fn get_screen_dimensions<'a>(
 }
 
 #[cfg(feature = "xinerama")]
-fn get_screen_dimensions<'a>(
-    connection: &'a XorgConnection,
-    _screen: &'a Screen,
+fn get_screen_dimensions(
+    connection: &mut CallWrapper,
+    _screen: &Screen,
 ) -> Result<Vec<Dimensions>> {
-    Ok(x11rb::protocol::xinerama::query_screens(connection)?
-        .reply()?
-        .screen_info
-        .iter()
-        .map(|screen_info| {
-            Dimensions::new(
-                screen_info.width as i16,
-                screen_info.height as i16,
-                screen_info.x_org,
-                screen_info.y_org,
-            )
-        })
-        .collect())
+    Ok(
+        x11rb::xcb::xinerama::query_screens(&mut connection.connection, false)?
+            .reply(&mut connection.connection)?
+            .screen_info
+            .iter()
+            .map(|screen_info| {
+                Dimensions::new(
+                    screen_info.width as i16,
+                    screen_info.height as i16,
+                    screen_info.x_org,
+                    screen_info.y_org,
+                )
+            })
+            .collect(),
+    )
 }
 
 fn create_tab_pixmap<'a>(
-    connection: &'a XorgConnection,
+    connection: &'a mut CallWrapper,
     screen: &'a Screen,
     pixmap: Pixmap,
     tab_bar_height: u16,
-) -> Result<VoidCookie<'a, XorgConnection>> {
-    Ok(connection.create_pixmap(
+) -> Result<VoidCookie> {
+    Ok(xproto::create_pixmap(
+        &mut connection.connection,
         screen.root_depth,
         pixmap,
         screen.root,
         screen.width_in_pixels,
         tab_bar_height,
+        false,
     )?)
 }
 #[cfg(feature = "status-bar")]
-fn create_status_bar_pixmap<'a>(
-    connection: &'a XorgConnection,
+fn create_status_bar_pixmap(
+    connection: &mut CallWrapper,
     screen: &Screen,
     pixmap: Pixmap,
     max_bar_width: u16,
     status_bar_height: u16,
-) -> Result<VoidCookie<'a, XorgConnection>> {
-    Ok(connection.create_pixmap(
+) -> Result<VoidCookie> {
+    Ok(xproto::create_pixmap(
+        &mut connection.connection,
         screen.root_depth,
         pixmap,
         screen.root,
         max_bar_width,
         status_bar_height,
+        false,
     )?)
 }
 
@@ -787,14 +797,17 @@ fn create_fixed_components<It: Iterator<Item = String>>(
 }
 
 fn init_keys(
-    connection: &XorgConnection,
+    connection: &mut CallWrapper,
     simple_key_mappings: &[SimpleKeyMapping],
 ) -> Result<HashMap<KeyBoardMappingKey, Action>> {
-    let setup = connection.setup();
+    let setup = connection.connection.setup();
     let lo = setup.min_keycode;
     let hi = setup.max_keycode;
     let capacity = hi - lo + 1;
-    let mapping = connection.get_keyboard_mapping(lo, capacity)?.reply()?;
+
+    let mapping = xproto::get_keyboard_mapping(&mut connection.connection, lo, capacity, false)?
+        .reply(&mut connection.connection)?;
+    pgwm_core::debug!("Got key mapping");
     let syms = mapping.keysyms;
     let mut map = HashMap::new();
 
@@ -817,21 +830,22 @@ fn init_keys(
 }
 
 fn grab_keys(
-    connection: &XorgConnection,
+    connection: &mut CallWrapper,
     key_map: &HashMap<KeyBoardMappingKey, Action>,
     root_win: Window,
 ) -> Result<()> {
     for key in key_map.keys() {
-        connection
-            .grab_key(
-                true,
-                root_win,
-                key.mods,
-                key.code,
-                GrabMode::ASYNC,
-                GrabMode::ASYNC,
-            )?
-            .check()?;
+        xproto::grab_key(
+            &mut connection.connection,
+            true,
+            root_win,
+            key.mods,
+            key.code,
+            GrabMode::ASYNC,
+            GrabMode::ASYNC,
+            false,
+        )?
+        .check(&mut connection.connection)?;
     }
     Ok(())
 }
@@ -855,13 +869,14 @@ fn init_mouse(simple_mouse_mappings: &[SimpleMouseMapping]) -> HashMap<MouseActi
 }
 
 fn grab_mouse(
-    connection: &XorgConnection,
+    connection: &mut CallWrapper,
     bar_win: Window,
     root_win: Window,
     mouse_map: &HashMap<MouseActionKey, Action>,
 ) -> Result<()> {
     for key in mouse_map.keys() {
-        connection.grab_button(
+        xproto::grab_button(
+            &mut connection.connection,
             true,
             key.target.on_bar().then(|| bar_win).unwrap_or(root_win),
             u32::from(EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE) as u16,
@@ -871,21 +886,29 @@ fn grab_mouse(
             0u16,
             ButtonIndex::from(key.detail),
             key.state,
+            true,
         )?;
     }
     Ok(())
 }
 
 fn init_xrender_double_buffered(
-    connection: &XorgConnection,
-    call_wrapper: &CallWrapper,
+    call_wrapper: &mut CallWrapper,
     root: Window,
     window: Window,
     vis_info: &RenderVisualInfo,
 ) -> Result<DoubleBufferedRenderPicture> {
     let direct = call_wrapper.window_mapped_picture(window, vis_info)?;
-    let write_buf_pixmap = connection.generate_id()?;
-    connection.create_pixmap(vis_info.render.depth, write_buf_pixmap, root, 1, 1)?;
+    let write_buf_pixmap = call_wrapper.connection.generate_id()?;
+    xproto::create_pixmap(
+        &mut call_wrapper.connection,
+        vis_info.render.depth,
+        write_buf_pixmap,
+        root,
+        1,
+        1,
+        true,
+    )?;
     let write_buf_picture = call_wrapper.pixmap_mapped_picture(write_buf_pixmap, vis_info)?;
     call_wrapper.fill_xrender_rectangle(
         write_buf_picture,
@@ -897,7 +920,7 @@ fn init_xrender_double_buffered(
         },
         Dimensions::new(1, 1, 0, 0),
     )?;
-    connection.free_pixmap(write_buf_pixmap)?;
+    xproto::free_pixmap(&mut call_wrapper.connection, write_buf_pixmap, true)?;
     Ok(DoubleBufferedRenderPicture {
         window: RenderPicture {
             drawable: window,

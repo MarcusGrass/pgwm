@@ -95,11 +95,11 @@ git clone https://github.com/MarcusGrass/pgwm.git
 ## Build the project
 The project builds default with xinerama support, a status-bar, and support for a config-file. To compile without either,
 disable default features.
-To build with max optimizations use --profile=optimized.
+To build with max optimizations use --profile=lto.
 In [config.toml](.cargo/config.toml) --release is set to compile with debug assertions, usually when I'm developing 
 the WM I run it like that to ensure that there are no overflows/underflows, x11 uses i16s, u16s, i32s, and u32s fairly interchangeably 
 which poses a conversion risk. Removing that options will yield a negligible performance increase if compiling --release.    
-In benchmarking, heavier calculations see a speedup of around 15-45% on optimized compared to release on my machine, 
+In benchmarking, heavier calculations see a speedup of around 15-45% on lto compared to release on my machine, 
 that being said we're talking about 190 to 150 nanoseconds for calculating tiling positions, there aren't many heavy calculations
 being performed, most latency is from x11 redrawing windows.  
 The project can also be compiled with debug output, the binary will then output various debug info to stderr.
@@ -144,26 +144,26 @@ How to build as a regular Rust project.
 #### With default features
 `cargo build --release`
 or
-`cargo build --profile=optimized`
+`cargo build --profile=lto`
 
 #### With no default features
 `cargo build --release --no-default-features`
 or
-`cargo build --profile=optimized --no-default-features`
+`cargo build --profile=lto --no-default-features`
 
 #### Example of some additional features
 `cargo build --release --no-default-features --features xinerama,status-bar`  
 or  
-`cargo build --profile=optimized --no-default-features --features xinerama,status-bar`
+`cargo build --profile=lto --no-default-features --features xinerama,status-bar`
 
 #### Using cargo install
 Installs the binary to `$HOME/.cargo/bin`  
-`cargo install --profile=optimized --path pgwm`  
+`cargo install --profile=lto --path pgwm`  
 Remember to add cargo bin to path if you haven't already  
 `PATH="$HOME/.cargo/bin:$PATH"`
 
 ### Edit .xinitrc or other file specifying WM entrypoint
-If built with `cargo build` The binary ends up in target/release/pgwm or target/optimized/pgwm
+If built with `cargo build` The binary ends up in target/release/pgwm or target/lto/pgwm
 Replace the (probably) last line of .xinitrc with
 `exec $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary, or just `pgwm` if using `cargo install`.   
 
@@ -213,7 +213,7 @@ wmname compiz # or wmname LG3D
 ```
 
 # Resources
-The WM, according to `smem` on glibc, has a USS/PSS/RSS of around 2M when built for musl with the optimized profile and no known leaks,
+The WM, according to `smem` on glibc, has a USS/PSS/RSS of around 2M when built for musl with the lto profile and no known leaks,
 a memory leak would likely result in a crash rather than a slow increase over time since most dynamic
 data structures are on the stack.  
 CPU-wise it has a fairly low usage, with idle usage that depends completely on whether you use the status bar, what update frequency you're
@@ -237,7 +237,4 @@ this WM binary could be perfectly efficient but slamming the x11 server with req
 Although I have not noticed any such behaviour.
 
 # Licensing
-This project is licensed under [GPL v3](LICENSE). With the exception of [event-collection](performance-test/event-collection) which is 
-a copy of [xtrace-example](https://github.com/psychon/x11rb/tree/master/xtrace-example) from x11rb with an MIT license 
-found [here at the point of copying](https://github.com/psychon/x11rb/commit/b746ec7ba0687661c2d15c799b6be7b84ea7686e) and also 
-[here](performance-test/event-collection/XTRACE_EXAMPLE_LICENSE) in the repo.
+This project is licensed under [GPL v3](LICENSE).

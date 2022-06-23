@@ -1,9 +1,7 @@
-# Compile static `RUSTFLAGS='-C target-feature=+crt-static' cargo b -p pgwm --profile optimized --target x86_64-unknown-linux-gnu`
-
 [profile.release]
 overflow-checks = true # I prefer panics over wraps
 
-[profile.optimized]
+[profile.lto]
 codegen-units = 1 # Better optimization
 debug = false # Inherits from release so should actually do nothing but whatever
 inherits = "release"
