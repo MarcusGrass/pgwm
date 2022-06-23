@@ -7,25 +7,28 @@ use x11rb::{
     protocol::xproto::{GetGeometryReply, GetPropertyReply, QueryTreeReply, Window},
 };
 
-pub(crate) struct QueryTreeCookie<'a> {
-    pub(crate) inner: Cookie<'a, XorgConnection, QueryTreeReply>,
+pub(crate) struct QueryTreeCookie {
+    pub(crate) inner: Cookie<QueryTreeReply>,
 }
 
-impl<'a> QueryTreeCookie<'a> {
-    pub(crate) fn await_children(self) -> Result<heapless::Vec<Window, APPLICATION_WINDOW_LIMIT>> {
-        let tree_reply = self.inner.reply()?;
+impl QueryTreeCookie {
+    pub(crate) fn await_children(
+        self,
+        con: &mut XorgConnection,
+    ) -> Result<heapless::Vec<Window, APPLICATION_WINDOW_LIMIT>> {
+        let tree_reply = self.inner.reply(con)?;
         Ok(heapless::Vec::from_slice(tree_reply.children.as_slice())
             .map_err(|_| pgwm_core::error::Error::HeaplessInstantiate)?)
     }
 }
 
-pub(crate) struct DimensionsCookie<'a> {
-    pub(crate) inner: Cookie<'a, XorgConnection, GetGeometryReply>,
+pub(crate) struct DimensionsCookie {
+    pub(crate) inner: Cookie<GetGeometryReply>,
 }
 
-impl<'a> DimensionsCookie<'a> {
-    pub(crate) fn await_dimensions(self) -> Result<Dimensions> {
-        let reply = self.inner.reply()?;
+impl DimensionsCookie {
+    pub(crate) fn await_dimensions(self, con: &mut XorgConnection) -> Result<Dimensions> {
+        let reply = self.inner.reply(con)?;
         Ok(Dimensions {
             height: reply.height as i16,
             width: reply.width as i16,
@@ -35,15 +38,16 @@ impl<'a> DimensionsCookie<'a> {
     }
 }
 
-pub(crate) struct ClassConvertCookie<'a> {
-    pub(crate) inner: Cookie<'a, XorgConnection, GetPropertyReply>,
+pub(crate) struct ClassConvertCookie {
+    pub(crate) inner: Cookie<GetPropertyReply>,
 }
 
-impl<'a> ClassConvertCookie<'a> {
+impl ClassConvertCookie {
     pub(crate) fn await_class_names(
         self,
+        con: &mut XorgConnection,
     ) -> Result<Option<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>> {
-        Ok(extract_wm_class(self.inner.reply()?))
+        Ok(extract_wm_class(self.inner.reply(con)?))
     }
 }
 
@@ -66,31 +70,31 @@ fn extract_wm_class(
     }
 }
 
-pub(crate) struct FallbackNameConvertCookie<'a> {
-    pub(crate) wm_inner: Cookie<'a, XorgConnection, GetPropertyReply>,
-    pub(crate) ewmh_inner: Cookie<'a, XorgConnection, GetPropertyReply>,
+pub(crate) struct FallbackNameConvertCookie {
+    pub(crate) wm_inner: Cookie<GetPropertyReply>,
+    pub(crate) ewmh_inner: Cookie<GetPropertyReply>,
 }
 
-impl<'a> FallbackNameConvertCookie<'a> {
-    pub(crate) fn await_name(self) -> Result<Option<heapless::String<WM_NAME_LIMIT>>> {
-        let ewmh = self.ewmh_inner.reply()?;
+impl FallbackNameConvertCookie {
+    pub(crate) fn await_name(
+        self,
+        con: &mut XorgConnection,
+    ) -> Result<Option<heapless::String<WM_NAME_LIMIT>>> {
+        let ewmh = self.ewmh_inner.reply(con)?;
         if ewmh.value.is_empty() {
-            let wm = self.wm_inner.reply()?;
+            let wm = self.wm_inner.reply(con)?;
             if wm.value.is_empty() {
                 Ok(None)
             } else {
                 utf8_heapless(wm.value)
             }
+        } else if let Ok(utf8) = utf8_heapless(ewmh.value) {
+            self.wm_inner.forget(con);
+            Ok(utf8)
+        } else if let Ok(wm) = self.wm_inner.reply(con) {
+            utf8_heapless(wm.value)
         } else {
-            utf8_heapless(ewmh.value)
-                // Fallback to wm name if not empty
-                .or_else(|_| {
-                    if let Ok(wm) = self.wm_inner.reply() {
-                        utf8_heapless(wm.value)
-                    } else {
-                        Ok(None)
-                    }
-                })
+            Ok(None)
         }
     }
 }
@@ -100,13 +104,13 @@ fn utf8_heapless<const N: usize>(bytes: Vec<u8>) -> Result<Option<heapless::Stri
     Ok(std::str::from_utf8(slice).map(|s| Some(heapless::String::from(s)))?)
 }
 
-pub(crate) struct TransientConvertCookie<'a> {
-    pub(crate) inner: Cookie<'a, XorgConnection, GetPropertyReply>,
+pub(crate) struct TransientConvertCookie {
+    pub(crate) inner: Cookie<GetPropertyReply>,
 }
 
-impl<'a> TransientConvertCookie<'a> {
-    pub(crate) fn await_is_transient_for(self) -> Result<Option<Window>> {
-        let prop = self.inner.reply()?;
+impl TransientConvertCookie {
+    pub(crate) fn await_is_transient_for(self, con: &mut XorgConnection) -> Result<Option<Window>> {
+        let prop = self.inner.reply(con)?;
         if prop.value_len == 0 {
             Ok(None)
         } else {

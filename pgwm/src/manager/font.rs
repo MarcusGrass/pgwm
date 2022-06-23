@@ -11,17 +11,12 @@ use pgwm_core::config::{FontCfg, Fonts};
 use pgwm_core::geometry::Dimensions;
 
 pub(crate) struct FontDrawer<'a> {
-    call_wrapper: &'a CallWrapper<'a>,
     loaded_render_fonts: &'a LoadedFonts<'a>,
 }
 
 impl<'a> FontDrawer<'a> {
-    pub(crate) fn new(
-        call_wrapper: &'a CallWrapper<'a>,
-        loaded_xrender_fonts: &'a LoadedFonts<'a>,
-    ) -> Self {
+    pub(crate) fn new(loaded_xrender_fonts: &'a LoadedFonts<'a>) -> Self {
         Self {
-            call_wrapper,
             loaded_render_fonts: loaded_xrender_fonts,
         }
     }
@@ -32,6 +27,7 @@ impl<'a> FontDrawer<'a> {
 
     pub(crate) fn draw(
         &self,
+        call_wrapper: &mut CallWrapper,
         dbw: &DoubleBufferedRenderPicture,
         text: &str,
         fonts: &[FontCfg],
@@ -42,31 +38,22 @@ impl<'a> FontDrawer<'a> {
         bg: Color,
         text_color: Color,
     ) -> Result<i16> {
-        pgwm_core::debug!("---\nStarting font draw");
         let encoded = self
             .loaded_render_fonts
             .encode(text, fonts, text_width - text_x);
-        pgwm_core::debug!("Encoded font");
-        self.call_wrapper.fill_xrender_rectangle(
+        call_wrapper.fill_xrender_rectangle(
             dbw.pixmap.picture,
             text_color.as_render_color(),
             Dimensions::new(1, 1, 0, 0),
         )?;
-        pgwm_core::debug!("Filled pen");
-        self.call_wrapper.fill_xrender_rectangle(
-            dbw.window.picture,
-            bg.as_render_color(),
-            fill_area,
-        )?;
-        pgwm_core::debug!("Filled background");
+        call_wrapper.fill_xrender_rectangle(dbw.window.picture, bg.as_render_color(), fill_area)?;
         let mut offset = fill_area.x + text_x;
         let mut drawn_width = 0;
-        pgwm_core::debug!("Sending glyph draw");
         for chunk in encoded {
             drawn_width += chunk.width;
             let box_shift = (fill_area.height - chunk.font_height as i16) / 2;
 
-            self.call_wrapper.draw_glyphs(
+            call_wrapper.draw_glyphs(
                 offset,
                 fill_area.y + text_y + box_shift,
                 chunk.glyph_set,
@@ -76,14 +63,13 @@ impl<'a> FontDrawer<'a> {
 
             offset += chunk.width as i16;
         }
-        pgwm_core::debug!("Drew all glyph chunks\n---\n");
 
         Ok(drawn_width)
     }
 }
 
 pub(crate) fn load_alloc_fonts<'a>(
-    call_wrapper: &'a CallWrapper<'a>,
+    call_wrapper: &mut CallWrapper,
     vis_info: &RenderVisualInfo,
     fonts: &'a Fonts,
     char_remap: &'a HashMap<heapless::String<4>, FontCfg>,

@@ -6,8 +6,8 @@ HELP_MSG="Usage:
     --config-dir=<directory to install default configuration>
       No trailing slash, If not supplied it will try \$XDG_CONFIG_HOME/pgwm,
       if \$XDG_CONFIG_HOME is unset will try \$HOME/.config/pgwm, if \$HOME is unset it will fail.
-    --profile=<release|optimized>
-      Defaults to 'optimized'
+    --profile=<release|lto>
+      Defaults to 'lto'
     --help
       Display this message
 "
@@ -49,7 +49,7 @@ if [ -z "$CONFIG_DIR" ]; then
   fi
 fi
 if [ -z "$PROFILE" ]; then
-  PROFILE=optimized
+  PROFILE=lto
 fi
 
 # This is kind of a traversty though

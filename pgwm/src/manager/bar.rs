@@ -1,6 +1,5 @@
 use crate::error::Result;
 use crate::manager::font::FontDrawer;
-use crate::wm::XorgConnection;
 use crate::x11::call_wrapper::CallWrapper;
 use pgwm_core::colors::Color;
 use pgwm_core::config::Fonts;
@@ -8,10 +7,8 @@ use pgwm_core::config::Fonts;
 use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::state::State;
-use x11rb::cookie::VoidCookie;
 
 pub(crate) struct BarManager<'a> {
-    call_wrapper: &'a CallWrapper<'a>,
     font_drawer: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
 }
@@ -19,6 +16,7 @@ pub(crate) struct BarManager<'a> {
 impl<'a> BarManager<'a> {
     pub(crate) fn draw_focused_window_title(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         state: &mut State,
     ) -> Result<()> {
@@ -27,6 +25,7 @@ impl<'a> BarManager<'a> {
         let title_position = section.position;
         pgwm_core::debug!("Starting window title draw");
         let draw_width = self.font_drawer.draw(
+            call_wrapper,
             &mon.bar_win,
             &section.display,
             &self.fonts.workspace_section,
@@ -51,11 +50,13 @@ impl<'a> BarManager<'a> {
 
     pub(crate) fn set_workspace_focused(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.draw_ws(
+            call_wrapper,
             mon_ind,
             ws_ind,
             state.colors.workspace_bar_focused_workspace_background,
@@ -65,11 +66,13 @@ impl<'a> BarManager<'a> {
 
     pub(crate) fn set_workspace_unfocused(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.draw_ws(
+            call_wrapper,
             mon_ind,
             ws_ind,
             state.colors.workspace_bar_unfocused_workspace_background,
@@ -79,11 +82,13 @@ impl<'a> BarManager<'a> {
 
     pub(crate) fn set_workspace_urgent(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.draw_ws(
+            call_wrapper,
             mon_ind,
             ws_ind,
             state.colors.workspace_bar_urgent_workspace_background,
@@ -93,11 +98,13 @@ impl<'a> BarManager<'a> {
 
     pub(crate) fn set_workspace_selected_not_focused(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.draw_ws(
+            call_wrapper,
             mon_ind,
             ws_ind,
             state
@@ -109,6 +116,7 @@ impl<'a> BarManager<'a> {
 
     fn draw_ws(
         &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         ws_ind: usize,
         bg_color: Color,
@@ -119,6 +127,7 @@ impl<'a> BarManager<'a> {
         let name = &state.workspaces.get_ws(ws_ind).name;
         pgwm_core::debug!("Starting workspace draw");
         self.font_drawer.draw(
+            call_wrapper,
             &mon.bar_win,
             name,
             &self.fonts.workspace_section,
@@ -137,7 +146,13 @@ impl<'a> BarManager<'a> {
         Ok(())
     }
 
-    fn init_workspace(&self, mon_ind: usize, ws_ind: usize, state: &mut State) -> Result<()> {
+    fn init_workspace(
+        &self,
+        call_wrapper: &mut CallWrapper,
+        mon_ind: usize,
+        ws_ind: usize,
+        state: &mut State,
+    ) -> Result<()> {
         let mon = &mut state.monitors[mon_ind];
         let is_mon_focus = state.focused_mon == mon_ind;
         let wants_focus = state.workspaces.get_wants_focus_workspaces();
@@ -156,8 +171,9 @@ impl<'a> BarManager<'a> {
             } else {
                 state.colors.workspace_bar_unfocused_workspace_background
             };
-            pgwm_core::debug!("Starting initial workspace draw");
+            pgwm_core::debug!("Running clean workspace redraw");
             self.font_drawer.draw(
+                call_wrapper,
                 &mon.bar_win,
                 name,
                 &self.fonts.workspace_section,
@@ -177,10 +193,19 @@ impl<'a> BarManager<'a> {
         Ok(())
     }
 
-    pub(crate) fn draw_static(&self, state: &mut State) -> Result<()> {
+    pub(crate) fn draw_static(
+        &self,
+        call_wrapper: &mut CallWrapper,
+        state: &mut State,
+    ) -> Result<()> {
         for mon_ind in 0..state.monitors.len() {
-            self.init_workspace(mon_ind, state.monitors[mon_ind].hosted_workspace, state)?;
-            self.draw_shortcuts(mon_ind, state)?;
+            self.init_workspace(
+                call_wrapper,
+                mon_ind,
+                state.monitors[mon_ind].hosted_workspace,
+                state,
+            )?;
+            self.draw_shortcuts(call_wrapper, mon_ind, state)?;
         }
         Ok(())
     }
@@ -188,21 +213,22 @@ impl<'a> BarManager<'a> {
     #[cfg(feature = "status-bar")]
     pub(crate) fn update_status(
         &self,
+        call_wrapper: &mut CallWrapper,
         content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
         content_ind: usize,
         state: &mut State,
     ) -> Result<()> {
-        self.draw_status(content, content_ind, state)
+        self.draw_status(call_wrapper, content, content_ind, state)
     }
 
     #[cfg(feature = "status-bar")]
     fn draw_status(
         &self,
+        call_wrapper: &mut CallWrapper,
         content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
         content_ind: usize,
         state: &mut State,
     ) -> Result<()> {
-        pgwm_core::debug!("Starting status draw");
         let bg = state.colors.status_bar_background();
         let text_col = state.colors.status_bar_text();
         for mon_ind in 0..state.monitors.len() {
@@ -212,6 +238,7 @@ impl<'a> BarManager<'a> {
                 .update_and_get_section_line(content.clone(), content_ind);
             let src_y = state.monitors[mon_ind].dimensions.y;
             self.font_drawer.draw(
+                call_wrapper,
                 &state.monitors[mon_ind].bar_win,
                 &content,
                 &self.fonts.status_section,
@@ -227,16 +254,20 @@ impl<'a> BarManager<'a> {
     }
 
     #[cfg(feature = "status-bar")]
-    fn draw_status_with_internal_data(&self, state: &State) -> Result<()> {
+    fn draw_status_with_internal_data(
+        &self,
+        call_wrapper: &mut CallWrapper,
+        state: &State,
+    ) -> Result<()> {
         let bg = state.colors.status_bar_background();
         let text_col = state.colors.status_bar_text();
 
-        pgwm_core::debug!("Starting status redraw");
         for i in 0..state.monitors.len() {
             for section in &state.monitors[i].bar_geometry.status.components {
                 let status_position = section.position;
                 let src_y = state.monitors[i].dimensions.y;
                 self.font_drawer.draw(
+                    call_wrapper,
                     &state.monitors[i].bar_win,
                     &section.display,
                     &self.fonts.status_section,
@@ -257,7 +288,12 @@ impl<'a> BarManager<'a> {
         Ok(())
     }
 
-    pub(crate) fn draw_shortcuts(&self, mon_ind: usize, state: &mut State) -> Result<()> {
+    pub(crate) fn draw_shortcuts(
+        &self,
+        call_wrapper: &mut CallWrapper,
+        mon_ind: usize,
+        state: &mut State,
+    ) -> Result<()> {
         pgwm_core::debug!("Starting shortcuts draw");
         let mon = &mut state.monitors[mon_ind];
         let pos = mon.bar_geometry.shortcuts.position;
@@ -267,6 +303,7 @@ impl<'a> BarManager<'a> {
         for shortcut in &mon.bar_geometry.shortcuts.components {
             let name = &shortcut.text;
             self.font_drawer.draw(
+                call_wrapper,
                 &mon.bar_win,
                 name,
                 &self.fonts.shortcut_section,
@@ -282,10 +319,20 @@ impl<'a> BarManager<'a> {
         Ok(())
     }
 
-    pub(crate) fn redraw_on(&self, mon_ind: usize, state: &mut State) -> Result<()> {
-        self.init_workspace(mon_ind, state.monitors[mon_ind].hosted_workspace, state)?;
+    pub(crate) fn redraw_on(
+        &self,
+        call_wrapper: &mut CallWrapper,
+        mon_ind: usize,
+        state: &mut State,
+    ) -> Result<()> {
+        self.init_workspace(
+            call_wrapper,
+            mon_ind,
+            state.monitors[mon_ind].hosted_workspace,
+            state,
+        )?;
         #[cfg(feature = "status-bar")]
-        self.draw_status_with_internal_data(state)?;
+        self.draw_status_with_internal_data(call_wrapper, state)?;
         // Make sure to cover the entire bar with a background again
         state.monitors[mon_ind]
             .bar_geometry
@@ -295,39 +342,28 @@ impl<'a> BarManager<'a> {
             .window_title_section
             .position
             .length;
-        self.draw_focused_window_title(mon_ind, state)?;
-        self.draw_shortcuts(mon_ind, state)?;
+        self.draw_focused_window_title(call_wrapper, mon_ind, state)?;
+        self.draw_shortcuts(call_wrapper, mon_ind, state)?;
         Ok(())
     }
 
     pub(crate) fn toggle_bar(
-        &self,
+        call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         state: &mut State,
-    ) -> Result<Option<VoidCookie<XorgConnection>>> {
+    ) -> Result<bool> {
         if state.monitors[mon_ind].show_bar {
             state.monitors[mon_ind].show_bar = false;
-            self.call_wrapper
-                .unmap_window(state.monitors[mon_ind].bar_win.window.drawable, state)?;
-            Ok(None)
+            call_wrapper.send_unmap(state.monitors[mon_ind].bar_win.window.drawable, state)?;
+            Ok(false)
         } else {
-            let cookie = self
-                .call_wrapper
-                .map_window(state.monitors[mon_ind].bar_win.window.drawable, state)?;
+            call_wrapper.send_map(state.monitors[mon_ind].bar_win.window.drawable, state)?;
             state.monitors[mon_ind].show_bar = true;
-            Ok(Some(cookie))
+            Ok(true)
         }
     }
 
-    pub fn new(
-        call_wrapper: &'a CallWrapper<'a>,
-        font_drawer: &'a FontDrawer<'a>,
-        fonts: &'a Fonts,
-    ) -> Self {
-        Self {
-            call_wrapper,
-            font_drawer,
-            fonts,
-        }
+    pub fn new(font_drawer: &'a FontDrawer<'a>, fonts: &'a Fonts) -> Self {
+        Self { font_drawer, fonts }
     }
 }

@@ -11,25 +11,20 @@ unmaintained = "deny"
 unsound = "deny"
 yanked = "deny"
 notice = "deny"
-ignore = [
-    "RUSTSEC-2021-0127", # Criterion dev-dependency
-    "RUSTSEC-2022-0013", # -||-
-]
+ignore = []
 
 [bans]
 multiple-versions = "deny"
 deny = [
 ]
 
-skip = [
-    # Criterion pulls in csv which pulls in an old itoa, only for dev-deps anyway
-    { name = "itoa", version = "=0.4.8"}
-]
+skip = []
 
 [sources]
 allow-git = [
     "https://github.com/MarcusGrass/x11-keysyms",
     "https://github.com/MarcusGrass/fontdue",
+    "https://github.com/MarcusGrass/x11rb",
 ]
 
 [licenses]
@@ -45,7 +40,4 @@ allow = [
 exceptions = [
     { name = "pgwm", allow = ["GPL-3.0"] },
     { name = "pgwm-core", allow = ["GPL-3.0"] },
-    { name = "event-collection", allow = ["GPL-3.0"] },
-    { name = "event-source", allow = ["GPL-3.0"] },
-    { name = "event-lib", allow = ["GPL-3.0"] },
 ]

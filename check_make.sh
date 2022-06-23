@@ -91,19 +91,19 @@ make uninstall CLEAN_CONFIG=1
 check_uninstall docs docs 1
 
 ensure_no_previous_make
-./configure --profile=optimized
+./configure --profile=lto
 OPTIMIZED_MAKEFILE=$(cat Makefile)
 ensure_no_previous_make
 ./configure
 NO_ARG_MAKEFILE=$(cat Makefile)
 if [ "$OPTIMIZED_MAKEFILE" != "$NO_ARG_MAKEFILE" ]; then
-  echo "Default profile isn't 'optimized'"
+  echo "Default profile isn't 'lto'"
   exit 1
 fi
 make clean
 check_clean
 make
-check_build optimized
+check_build lto
 make install
 check_install "$DEAD_VAR1" "$DEAD_VAR2"
 make uninstall
