@@ -739,6 +739,7 @@ impl<'a> Manager<'a> {
             .find_monitor_at((event.root_x, event.root_y))
             .unwrap_or(0);
         let mon = &state.monitors[mon_ind];
+        // If tabbed and clicked on tab bar win
         if let (Mode::Tabbed(_), true) = (
             state.workspaces.get_draw_mode(mon.hosted_workspace),
             event.event == mon.tab_bar_win.window.drawable,
@@ -787,7 +788,12 @@ impl<'a> Manager<'a> {
                 MouseTarget::WorkspaceBarComponent(_)
                 | MouseTarget::WindowTitle
                 | MouseTarget::ShortcutComponent(_)
-                | MouseTarget::StatusComponent(_) => Some(target),
+                | MouseTarget::StatusComponent(_) => {
+                    // If we clicked on a monitor we need to focus it, other logic depends on
+                    // operations happening on the focused monitor.
+                    self.focus_mon(call_wrapper, mon_ind, state)?;
+                    Some(target)
+                }
                 _ => None,
             }
         } else {
