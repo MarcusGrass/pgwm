@@ -11,6 +11,7 @@ use std::{
 };
 
 use x11rb::protocol::xproto::{Screen, Window};
+use x11rb::xcb::xproto::Timestamp;
 
 use crate::config::key_map::KeyBoardMappingKey;
 use crate::config::mouse_map::{MouseActionKey, MouseTarget};
@@ -51,6 +52,7 @@ pub struct State {
     pub show_bar_initially: bool,
     pub mouse_mapping: HashMap<MouseActionKey, Action>,
     pub key_mapping: HashMap<KeyBoardMappingKey, Action>,
+    pub last_timestamp: Timestamp,
 }
 
 impl State {
@@ -298,6 +300,7 @@ mod tests {
     use crate::state::workspace::{ArrangeKind, FocusStyle, ManagedWindow, Workspaces};
     use crate::state::{Monitor, State};
     use x11rb::protocol::xproto::{BackingStore, Screen};
+    use x11rb::CURRENT_TIME;
 
     fn create_base_state() -> State {
         let cfg = Cfg::default();
@@ -456,6 +459,7 @@ mod tests {
             show_bar_initially: true,
             mouse_mapping: std::collections::HashMap::default(),
             key_mapping: std::collections::HashMap::default(),
+            last_timestamp: CURRENT_TIME,
         }
     }
 
@@ -471,13 +475,13 @@ mod tests {
         assert_eq!(1, state.find_monitor_hosting_workspace(1).unwrap());
         state
             .workspaces
-            .add_child_to_ws(15, 0, ArrangeKind::NoFloat, FocusStyle::Pull)
+            .add_child_to_ws(15, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
             .unwrap();
         assert!(state.find_monitor_focusing_window(15).is_none());
         state.monitors[0].last_focus = Some(ManagedWindow::new(
             15,
             ArrangeKind::NoFloat,
-            FocusStyle::Pull,
+            FocusStyle::Passive,
         ));
         assert_eq!(0, state.find_monitor_focusing_window(15).unwrap());
         assert_eq!(0, state.find_monitor_index_of_window(15).unwrap());

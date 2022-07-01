@@ -16,7 +16,7 @@ status-bar = ["pgwm-core/status-bar", "time"]
 perf-test = []
 
 [dependencies]
-heapless = { version = "0.7.14", default-features = false }
+heapless = { version = "0.7.15", default-features = false }
 fontdue = { version = "0.7.2", default-features = false, features = ["simd"] }
 pgwm-core = { path = "../pgwm-core" }
 thiserror = "1.0.31"

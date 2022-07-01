@@ -46,17 +46,105 @@ impl Rgba8 for (u8, u8, u8, u8) {
     }
 }
 
+pub type RGBA = (u8, u8, u8, u8);
+/**
+Color configuration, Here colors are set for different segments that the WM draws.
+Naming is hopefully fairly self-explanatory for what each color does.
+A constant can be declared as above for reuse.
+ **/
+#[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct ColorBuilder {
+    #[cfg_attr(feature = "config-file", serde(default = "default_black"))]
+    pub window_border: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
+    pub window_border_highlighted: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_orange"))]
+    pub window_border_urgent: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_light_gray"))]
+    pub workspace_bar_selected_unfocused_workspace_background: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_black"))]
+    pub workspace_bar_unfocused_workspace_background: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_blue"))]
+    pub workspace_bar_focused_workspace_background: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_orange"))]
+    pub workspace_bar_urgent_workspace_background: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
+    pub workspace_bar_workspace_section_text: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
+    pub workspace_bar_current_window_title_text: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_dark_gray"))]
+    pub workspace_bar_current_window_title_background: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
+    pub status_bar_text: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_light_gray"))]
+    pub status_bar_background: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
+    pub tab_bar_text: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_light_gray"))]
+    pub tab_bar_focused_tab_background: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_black"))]
+    pub tab_bar_unfocused_tab_background: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
+    pub shortcut_text: RGBA,
+    #[cfg_attr(feature = "config-file", serde(default = "default_black"))]
+    pub shortcut_background: RGBA,
+}
+
+impl Default for ColorBuilder {
+    fn default() -> Self {
+        Self {
+            window_border: default_black(),
+            window_border_highlighted: default_white(),
+            window_border_urgent: default_orange(),
+            workspace_bar_selected_unfocused_workspace_background: default_light_gray(),
+            workspace_bar_unfocused_workspace_background: default_black(),
+            workspace_bar_focused_workspace_background: default_blue(),
+            workspace_bar_urgent_workspace_background: default_orange(),
+            workspace_bar_workspace_section_text: default_white(),
+            workspace_bar_current_window_title_text: default_white(),
+            workspace_bar_current_window_title_background: default_dark_gray(),
+            status_bar_text: default_white(),
+            status_bar_background: default_light_gray(),
+            tab_bar_text: default_white(),
+            tab_bar_focused_tab_background: default_light_gray(),
+            tab_bar_unfocused_tab_background: default_black(),
+            shortcut_text: default_white(),
+            shortcut_background: default_black(),
+        }
+    }
+}
+
+/**
+Just some default colors
+ **/
+const fn default_white() -> RGBA {
+    (223, 223, 223, 0)
+}
+
+const fn default_dark_gray() -> RGBA {
+    (40, 44, 52, 1)
+}
+
+const fn default_light_gray() -> RGBA {
+    (56, 66, 82, 0)
+}
+
+const fn default_black() -> RGBA {
+    (28, 31, 36, 0)
+}
+
+const fn default_blue() -> RGBA {
+    (48, 53, 168, 0)
+}
+
+const fn default_orange() -> RGBA {
+    (224, 44, 16, 0)
+}
+
 macro_rules! impl_colors {
     ( $( $color_name:ident, $index:literal ),* ) => {
-        #[derive(Default)]
-        #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-        #[cfg_attr(test, derive(Eq, PartialEq))]
-        #[derive(Copy, Clone, Debug)]
-        pub struct ColorBuilder {
-            $(
-            $color_name: (u8, u8, u8, u8),
-            )*
-        }
         impl ColorBuilder {
             $(
             #[must_use]

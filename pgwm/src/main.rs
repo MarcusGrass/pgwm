@@ -15,6 +15,7 @@
 
 pub(crate) mod error;
 mod manager;
+pub(crate) mod util;
 mod wm;
 mod x11;
 

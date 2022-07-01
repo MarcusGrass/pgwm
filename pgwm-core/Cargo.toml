@@ -14,7 +14,7 @@ config-file = ["serde", "heapless/serde", "toml"]
 [dependencies]
 atoi = { version = "1.0.0", default-features = false }
 bstr = { version = "0.2.17", default-features = false }
-heapless = { version = "0.7.14", default-features = false }
+heapless = { version = "0.7.15", default-features = false }
 toml = {version = "0.5.9", optional = true}
 thiserror = "1.0.30"
 x11-keysyms = { git = "https://github.com/MarcusGrass/x11-keysyms", rev = "4b0f0e3516100666d18df4b6e8eb520b318e1dc9", features = ["miscellany", "latin1"] }

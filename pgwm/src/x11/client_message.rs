@@ -28,7 +28,7 @@ pub(crate) fn convert_property_change(
                 PropertyChangeMessage::Name((event.window, call_wrapper.get_name(event.window)?)),
             )),
             SupportedAtom::WmHints => {
-                let hints = WmHints::get(&mut call_wrapper.connection, event.window)?;
+                let hints = WmHints::get(call_wrapper.inner_mut(), event.window)?;
                 Ok(Some(PropertyChangeMessage::Hints((event.window, hints))))
             }
             SupportedAtom::WmState => {
