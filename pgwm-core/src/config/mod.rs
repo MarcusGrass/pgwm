@@ -3,6 +3,7 @@ use crate::config::key_map::KeyboardMapping;
 use crate::config::mouse_map::{MouseMapping, MouseTarget};
 use crate::config::workspaces::UserWorkspace;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use x11_keysyms::{
     XK_Print, XK_Return, XK_b, XK_c, XK_comma, XK_d, XK_f, XK_h, XK_j, XK_k, XK_l, XK_n, XK_period,
     XK_q, XK_r, XK_space, XK_t, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
@@ -192,6 +193,35 @@ fn validate_config(cfg: &mut Cfg) -> crate::error::Result<()> {
             }
         } else {
             cfg.tiling_modifiers.vertically_tiled.push(1.0);
+        }
+    }
+
+    if cfg.fonts.fallback.is_none() {
+        if cfg.fonts.shortcut_section.is_empty() && !cfg.bar.shortcuts.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no shortcut section font specified but shortcuts are specified",
+            ));
+        }
+        #[cfg(feature = "status-bar")]
+        if cfg.fonts.status_section.is_empty() && !cfg.bar.status_checks.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no status section font specified but status checks are specified",
+            ));
+        }
+        if cfg.fonts.workspace_section.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no workspace section font specified",
+            ));
+        }
+        if cfg.fonts.tab_bar_section.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no tab bar section font specified",
+            ));
+        }
+        if cfg.fonts.window_name_display_section.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no window name display section font specified",
+            ));
         }
     }
 
@@ -388,6 +418,7 @@ pub struct Fonts {
     pub workspace_section: Vec<FontCfg>,
     #[cfg_attr(feature = "config-file", serde(default = "default_font"))]
     pub window_name_display_section: Vec<FontCfg>,
+    #[cfg(feature = "status-bar")]
     #[cfg_attr(feature = "config-file", serde(default = "default_font"))]
     pub status_section: Vec<FontCfg>,
     #[cfg_attr(feature = "config-file", serde(default = "default_font"))]
@@ -410,10 +441,25 @@ impl Fonts {
             fallback: None,
             workspace_section: vec![fallback.clone()],
             window_name_display_section: vec![fallback.clone()],
+            #[cfg(feature = "status-bar")]
             status_section: vec![fallback.clone()],
             tab_bar_section: vec![fallback.clone()],
             shortcut_section: vec![fallback],
         }
+    }
+
+    #[must_use]
+    pub fn get_all_font_paths(&self) -> Vec<PathBuf> {
+        let it = self
+            .fallback
+            .iter()
+            .chain(self.tab_bar_section.iter())
+            .chain(self.workspace_section.iter())
+            .chain(self.shortcut_section.iter())
+            .chain(self.window_name_display_section.iter());
+        #[cfg(feature = "status-bar")]
+        let it = it.chain(self.status_section.iter());
+        it.map(|f_cfg| PathBuf::from(&f_cfg.path)).collect()
     }
 }
 

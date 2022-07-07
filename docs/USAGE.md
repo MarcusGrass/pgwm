@@ -3,7 +3,11 @@ A work in progress document to make usage of the WM clearer.
 To make a clean install look like the default configuration examples 
 Jetbrains Mono Nerd Font, Font Awesome Brands 6, and Font Awesome Free Solid 6 needs to be installed.
 
+
 ## Enter the WM
+First of all check your configuration by running `pgwm --check-cfg` to find out if it's loadable
+and all fonts can be found.  
+
 On startup, the WM will show an empty background and a bar on top.  
 Using default configuration, `mod+shift+enter` will try to spawn [alacritty](https://github.com/alacritty/alacritty), 
 if using another terminal emulator, that should be changed.
@@ -83,4 +87,4 @@ in your terminal if using bash. (The command let's you take a screenshot).
 
 
 ## Exit
-Exiting is bound by default to `mod+shift+q`, the WM will try to tear down it's state and then close.
+Exiting is bound by default to `mod+shift+q`, the WM will try to tear down its state and then close.

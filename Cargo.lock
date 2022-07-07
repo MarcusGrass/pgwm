@@ -189,15 +189,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
-name = "memoffset"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
 name = "nb"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -221,7 +212,6 @@ dependencies = [
  "bitflags",
  "cfg-if",
  "libc",
- "memoffset",
 ]
 
 [[package]]
@@ -504,7 +494,7 @@ source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=4b0f0e3516100666d18
 [[package]]
 name = "x11rb"
 version = "0.10.0"
-source = "git+https://github.com/MarcusGrass/x11rb?branch=master#95719095260946715e67235663308d8463f4787e"
+source = "git+https://github.com/MarcusGrass/x11rb?branch=master#10d5f0c5b2960abb475da391d3f9b4bd11e09396"
 dependencies = [
  "heapless",
  "nix",

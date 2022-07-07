@@ -23,5 +23,7 @@ but a type containing a path to the specific font to be rendered and a pixel siz
 This is because libXft took care of that through fontconfig before, but now that dependency is gone.
  - No more unsafe code.
  - No c-library dependencies, can be built and statically linked, down to a ~2Mb binary with musl, and ~2Mb USS/PSS/RSS RAM footprint
+ - Reworked the connection to be lighter and faster
+ - Now exclusively uses Unix-sockets, no TCP is available
 
 ## [v0.1.0] - 2022-04-09

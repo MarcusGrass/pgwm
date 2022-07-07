@@ -1,3 +1,4 @@
+# Example cfg, most cfg can be omitted with the exception of `[fonts] fallback`
 [sizing]
 # Height in pixels of the status_bar
 # Cannot be 0 or larger than any monitor's height
@@ -97,6 +98,8 @@ shortcut_text = [223, 223, 223, 0]
 # Fonts are picked left-to right out of available fonts, drawing single chars and falling back if they are missing in the current render
 # If no render can draw a character some x11 default character will be drawn instead.
 [fonts]
+# Fallback can be used if the same font is desired in all places
+fallback = { path = "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf", size = "14.0" }
 # Fonts to use when drawing workspace names (top left of status-bar)
 workspace_section = [
     { path = "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf", size = "14.0" },
