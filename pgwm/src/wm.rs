@@ -272,6 +272,7 @@ fn handle_event<'a>(
 
     #[cfg(feature = "debug")]
     dbg_event(&raw, &call_wrapper.inner_mut().extensions);
+    // Unmap and enter are caused by upstream actions, causing unwanted focusing behaviour etc.
     if state.should_ignore_sequence(seq)
         && (response_type == x11rb::protocol::xproto::ENTER_NOTIFY_EVENT
             || response_type == x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT)

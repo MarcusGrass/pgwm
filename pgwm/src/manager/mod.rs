@@ -413,7 +413,7 @@ impl<'a> Manager<'a> {
     ) -> Result<()> {
         let attrs = call_wrapper.get_window_attributes(event.window)?;
         let hints = call_wrapper.get_hints(event.window)?;
-        pgwm_core::debug!("Maprequest incoming for sequence {}", event.sequence);
+        pgwm_core::debug!("MapRequest incoming for sequence {}", event.sequence);
         if let Ok(attrs) = attrs.reply(call_wrapper.inner_mut()) {
             pgwm_core::debug!("Attributes {attrs:?}");
             if attrs.override_redirect {
@@ -491,7 +491,6 @@ impl<'a> Manager<'a> {
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Managing tiled {win} attached to {attached_to:?}");
-        //let hints = hints_cookie.reply(call_wrapper.inner_mut());
         let hints_reply = hints_cookie.reply(call_wrapper.inner_mut()).ok();
 
         let focus_style = match Self::deduce_focus_style(call_wrapper, win, hints_reply) {
@@ -504,9 +503,6 @@ impl<'a> Manager<'a> {
             }
         };
         if let Some(attached_to) = attached_to {
-            // Should probably look into this more, happens with gpg pop-up auth.
-            // It sends duplicate map-requests on the same sequence and uses WindowTypeNormal when
-            // imo it makes more sense being a float, the input-hint is True as well so it's not pull-based weirdness
             if !state.workspaces.add_attached(
                 attached_to,
                 win,
