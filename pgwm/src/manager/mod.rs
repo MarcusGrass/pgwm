@@ -5,7 +5,9 @@ pub(crate) mod font;
 use crate::error::{Error, Result};
 use crate::manager::bar::BarManager;
 use crate::manager::draw::Drawer;
-use crate::x11::call_wrapper::{CallWrapper, FloatIndicators, WindowFloatDeduction, WmState};
+use crate::x11::call_wrapper::{
+    CallWrapper, FloatIndicators, Protocol, WindowFloatDeduction, WmState,
+};
 use crate::x11::client_message::{ChangeType, ClientMessage, PropertyChangeMessage};
 use crate::x11::cookies::{FallbackNameConvertCookie, TransientConvertCookie};
 use pgwm_core::config::mouse_map::MouseTarget;
@@ -21,7 +23,7 @@ use pgwm_core::state::workspace::{
 };
 use pgwm_core::state::{DragPosition, State, WinMarkedForDeath};
 use x11rb::cookie::Cookie;
-use x11rb::properties::WmHintsCookie;
+use x11rb::properties::{WmHints, WmHintsCookie};
 use x11rb::protocol::xproto::{
     ButtonPressEvent, ButtonReleaseEvent, ConfigureNotifyEvent, ConfigureRequestEvent,
     DestroyNotifyEvent, EnterNotifyEvent, GetWindowAttributesReply, KeyPressEvent, MapRequestEvent,
@@ -50,7 +52,7 @@ impl<'a> Manager<'a> {
 
     pub(crate) fn init(&self, call_wrapper: &mut CallWrapper, state: &mut State) -> Result<()> {
         let ch_wa = call_wrapper.set_root_event_mask(&self.cursor_handle, state)?;
-        ch_wa.check(&mut call_wrapper.connection)?;
+        ch_wa.check(call_wrapper.inner_mut())?;
         pgwm_core::debug!("Set root event mask");
         self.bar_manager.draw_static(call_wrapper, state)?;
         pgwm_core::debug!("Drew workspace sections");
@@ -63,7 +65,7 @@ impl<'a> Manager<'a> {
     pub(crate) fn scan(&self, call_wrapper: &mut CallWrapper, state: &mut State) -> Result<()> {
         let subwindows = call_wrapper
             .query_subwindows(state.screen.root)?
-            .await_children(&mut call_wrapper.connection)?;
+            .await_children(call_wrapper.inner_mut())?;
         let mut children_with_properties: heapless::Vec<ScanProperties, APPLICATION_WINDOW_LIMIT> =
             heapless::Vec::new();
         for win in subwindows {
@@ -94,7 +96,7 @@ impl<'a> Manager<'a> {
             hints,
         } in children_with_properties
         {
-            if let Ok(attr) = attributes.reply(&mut call_wrapper.connection) {
+            if let Ok(attr) = attributes.reply(call_wrapper.inner_mut()) {
                 if !attr.override_redirect
                     // If the window is a viewable top level -> manage
                     // Additionally, when the WM starts up, if a WM state is set that's a pretty good
@@ -103,7 +105,7 @@ impl<'a> Manager<'a> {
                     && !state.intern_created_windows.contains(&window)
                 {
                     if transient_cookie
-                        .await_is_transient_for(&mut call_wrapper.connection)?
+                        .await_is_transient_for(call_wrapper.inner_mut())?
                         .is_some()
                     {
                         push_heapless!(transients, (window, hints))?;
@@ -111,13 +113,13 @@ impl<'a> Manager<'a> {
                         push_heapless!(non_transients, (window, hints))?;
                     }
                 } else {
-                    transient_cookie.inner.forget(&mut call_wrapper.connection);
-                    hints.forget(&mut call_wrapper.connection);
+                    transient_cookie.inner.forget(call_wrapper.inner_mut());
+                    hints.forget(call_wrapper.inner_mut());
                     continue;
                 }
             } else {
-                transient_cookie.inner.forget(&mut call_wrapper.connection);
-                hints.forget(&mut call_wrapper.connection);
+                transient_cookie.inner.forget(call_wrapper.inner_mut());
+                hints.forget(call_wrapper.inner_mut());
             }
         }
 
@@ -148,6 +150,7 @@ impl<'a> Manager<'a> {
         event: KeyPressEvent,
         state: &mut State,
     ) -> Result<()> {
+        state.last_timestamp = event.time;
         if let Some(action) = state.get_key_action(event.detail, event.state) {
             self.exec_action(
                 call_wrapper,
@@ -169,6 +172,7 @@ impl<'a> Manager<'a> {
         action: Action,
         state: &mut State,
     ) -> Result<()> {
+        pgwm_core::debug!("Executing action {action:?}");
         match action {
             Action::Restart => {
                 Self::cleanup(call_wrapper, state)?;
@@ -298,7 +302,8 @@ impl<'a> Manager<'a> {
                             call_wrapper.send_unmap(target_window, state)?;
                             removed_mw.focus_style
                         } else {
-                            FocusStyle::Pull
+                            Self::find_focus_style(call_wrapper, target_window)
+                                .unwrap_or(FocusStyle::Passive)
                         };
                         state.workspaces.add_child_to_ws(
                             target_window,
@@ -388,13 +393,12 @@ impl<'a> Manager<'a> {
                             let mon = state.find_monitor_at((x, y)).unwrap_or(0);
                             self.drawer.draw_on(call_wrapper, mon, false, state)?;
                         }
-                        let dimensions =
-                            dimensions.await_dimensions(&mut call_wrapper.connection)?;
+                        let dimensions = dimensions.await_dimensions(call_wrapper.inner_mut())?;
                         state.drag_window =
                             Some((origin, DragPosition::new(dimensions.x, dimensions.y, x, y)));
                         pgwm_core::debug!("Dragging window {}", origin);
                     } else {
-                        dimensions.inner.forget(&mut call_wrapper.connection);
+                        dimensions.inner.forget(call_wrapper.inner_mut());
                     }
                 }
             }
@@ -410,17 +414,17 @@ impl<'a> Manager<'a> {
     ) -> Result<()> {
         let attrs = call_wrapper.get_window_attributes(event.window)?;
         let hints = call_wrapper.get_hints(event.window)?;
-        pgwm_core::debug!("Maprequest incoming for sequence {}", event.sequence);
-        if let Ok(attrs) = attrs.reply(&mut call_wrapper.connection) {
+        pgwm_core::debug!("MapRequest incoming for sequence {}", event.sequence);
+        if let Ok(attrs) = attrs.reply(call_wrapper.inner_mut()) {
             pgwm_core::debug!("Attributes {attrs:?}");
             if attrs.override_redirect {
                 pgwm_core::debug!("Override redirect, not managing");
-                hints.forget(&mut call_wrapper.connection);
+                hints.forget(call_wrapper.inner_mut());
                 return Ok(());
             }
         } else {
             pgwm_core::debug!("No attributes, not managing");
-            hints.forget(&mut call_wrapper.connection);
+            hints.forget(call_wrapper.inner_mut());
             return Ok(());
         }
         call_wrapper.set_state(event.window, WmState::Normal)?;
@@ -435,6 +439,7 @@ impl<'a> Manager<'a> {
         hints: WmHintsCookie,
         state: &mut State,
     ) -> Result<()> {
+        crate::dbg_win!(call_wrapper, win);
         call_wrapper.set_base_client_event_mask(win)?;
         let dimensions_cookie = call_wrapper.get_dimensions(win)?;
         let float_indicators = call_wrapper.get_float_indicators(win)?;
@@ -449,7 +454,7 @@ impl<'a> Manager<'a> {
         let fi = float_indicators.await_float_indicators(call_wrapper);
         match deduce_float_status(fi, state) {
             WindowFloatDeduction::Floating { parent } => {
-                let dims = dimensions_cookie.await_dimensions(&mut call_wrapper.connection)?;
+                let dims = dimensions_cookie.await_dimensions(call_wrapper.inner_mut())?;
                 self.manage_floating(
                     call_wrapper,
                     win,
@@ -462,7 +467,7 @@ impl<'a> Manager<'a> {
                 )?;
             }
             WindowFloatDeduction::Docked { parent } => {
-                dimensions_cookie.inner.forget(&mut call_wrapper.connection);
+                dimensions_cookie.inner.forget(call_wrapper.inner_mut());
                 self.manage_tiled(
                     call_wrapper,
                     win,
@@ -476,6 +481,7 @@ impl<'a> Manager<'a> {
         }
         Ok(())
     }
+
     fn manage_tiled(
         &self,
         call_wrapper: &mut CallWrapper,
@@ -487,22 +493,18 @@ impl<'a> Manager<'a> {
         state: &mut State,
     ) -> Result<()> {
         pgwm_core::debug!("Managing tiled {win} attached to {attached_to:?}");
-        let hints = hints_cookie.reply(&mut call_wrapper.connection);
-        let focus_style = if let Ok(hints) = hints {
-            if hints.input.filter(|b| *b).is_some() {
-                FocusStyle::Push {
-                    group_leader: hints.window_group,
-                }
-            } else {
-                FocusStyle::Pull
+        let hints_reply = hints_cookie.reply(call_wrapper.inner_mut()).ok();
+
+        let focus_style = match Self::deduce_focus_style(call_wrapper, win, hints_reply) {
+            Ok(fs) => fs,
+            #[allow(unused_variables)]
+            Err(e) => {
+                // Only way this fails is if the window is dead.
+                pgwm_core::debug!("Failed to get focus style {e}, not managing window");
+                return Ok(());
             }
-        } else {
-            FocusStyle::Pull
         };
         if let Some(attached_to) = attached_to {
-            // Should probably look into this more, happens with gpg pop-up auth.
-            // It sends duplicate map-requests on the same sequence and uses WindowTypeNormal when
-            // imo it makes more sense being a float, the input-hint is True as well so it's not pull-based weirdness
             if !state.workspaces.add_attached(
                 attached_to,
                 win,
@@ -529,6 +531,59 @@ impl<'a> Manager<'a> {
         call_wrapper.push_to_client_list(state.screen.root, win)?;
         self.try_focus_window(call_wrapper, win, state)?;
         Ok(())
+    }
+
+    fn find_focus_style(call_wrapper: &mut CallWrapper, win: Window) -> Result<FocusStyle> {
+        let hints = call_wrapper
+            .get_hints(win)?
+            .reply(call_wrapper.inner_mut())
+            .ok();
+        Self::deduce_focus_style(call_wrapper, win, hints)
+    }
+
+    fn deduce_focus_style(
+        call_wrapper: &mut CallWrapper,
+        win: Window,
+        hints: Option<WmHints>,
+    ) -> Result<FocusStyle> {
+        let take_focus = call_wrapper
+            .get_protocols(win)?
+            .iter()
+            .any(|p| p == &Protocol::TakeFocus);
+
+        // Explicitly set input field
+        let focus = if let Some((input, group_leader)) =
+            hints.and_then(|r| r.input.map(|i| (i, r.window_group)))
+        {
+            // If explicitly true
+            if input {
+                // Explicitly true and take focus present means it's locally active
+                if take_focus {
+                    FocusStyle::LocallyActive { group_leader }
+                // Explicitly true and no take focus means Passive
+                } else {
+                    FocusStyle::Passive
+                }
+            } else {
+                // Explicitly false and take focus means Globally active
+                if take_focus {
+                    FocusStyle::GloballyActive
+                // Explicitly false and no take focus means No input
+                } else {
+                    FocusStyle::NoInput
+                }
+            }
+        } else if take_focus {
+            // We're interpreting no input field set as false here
+            FocusStyle::GloballyActive
+        } else {
+            // And set as true here. Some applications doesn't bother setting input = True
+            // even though they have no WM_TAKE_FOCUS, NoInput is so uncommon that we can assume
+            // that this is a mistake on the application's part, I don't like it but I'm not gonna
+            // make PRs for every non-conformant application.
+            FocusStyle::Passive
+        };
+        Ok(focus)
     }
 
     fn manage_floating(
@@ -573,22 +628,20 @@ impl<'a> Manager<'a> {
         } else {
             attached_to
         };
-        let focus_style = if let Ok(hints) = hints_cookie.reply(&mut call_wrapper.connection) {
-            if hints.input.filter(|b| *b).is_some() {
-                FocusStyle::Push {
-                    group_leader: hints.window_group,
-                }
-            } else {
-                FocusStyle::Pull
+        let hints_reply = hints_cookie.reply(call_wrapper.inner_mut()).ok();
+        let focus_style = match Self::deduce_focus_style(call_wrapper, win, hints_reply) {
+            Ok(fs) => fs,
+            #[allow(unused_variables)]
+            Err(e) => {
+                // Only way this fails is if the window is dead.
+                pgwm_core::debug!("Failed to get focus style {e}, not managing window");
+                return Ok(());
             }
-        } else {
-            FocusStyle::Pull
         };
         if let Some(attached_to) = attached_to {
             let parent_dimensions = call_wrapper.get_dimensions(attached_to)?;
             pgwm_core::debug!("Found attached {} to parent {}", win, attached_to);
-            let parent_dimensions =
-                parent_dimensions.await_dimensions(&mut call_wrapper.connection)?;
+            let parent_dimensions = parent_dimensions.await_dimensions(call_wrapper.inner_mut())?;
             pgwm_core::debug!(
                 "Attached geometry {:?}\nParent geometry {:?}",
                 dimensions,
@@ -735,6 +788,7 @@ impl<'a> Manager<'a> {
         event: ButtonPressEvent,
         state: &mut State,
     ) -> Result<()> {
+        state.last_timestamp = event.time;
         let mon_ind = state
             .find_monitor_at((event.root_x, event.root_y))
             .unwrap_or(0);
@@ -835,9 +889,9 @@ impl<'a> Manager<'a> {
             if let Some(mon_ind) = state.find_monitor_index_of_window(window) {
                 self.drawer.draw_on(call_wrapper, mon_ind, false, state)?;
             }
-            dimensions.inner.forget(&mut call_wrapper.connection);
+            dimensions.inner.forget(call_wrapper.inner_mut());
         } else {
-            let dimensions = dimensions.await_dimensions(&mut call_wrapper.connection)?;
+            let dimensions = dimensions.await_dimensions(call_wrapper.inner_mut())?;
             let height = (dimensions.height as f32 * (1f32 + diff)) as u32;
             let width = (dimensions.width as f32 * (1f32 + diff)) as u32;
             call_wrapper.resize_window(window, height, width, state)?;
@@ -851,18 +905,22 @@ impl<'a> Manager<'a> {
         event: ButtonReleaseEvent,
         state: &mut State,
     ) -> Result<()> {
+        state.last_timestamp = event.time;
         if let Some((win, _drag)) = state.drag_window.take() {
             let win_dims = call_wrapper.get_dimensions(win)?;
             pgwm_core::debug!("Got button release and removed drag window {win}");
             let focus_style = self
                 .remove_win_from_state_then_redraw_if_tiled(call_wrapper, win, state)?
-                .map_or(FocusStyle::Pull, |mw| mw.focus_style);
+                .map_or_else(
+                    || Self::find_focus_style(call_wrapper, win),
+                    |mw| Ok(mw.focus_style),
+                )?;
             let (x, y) = (event.root_x, event.root_y);
             let mon = state.find_monitor_at((x, y)).unwrap_or(0);
             let mon = &state.monitors[mon];
             let new_ws = mon.hosted_workspace;
             // Using different placement because one is pointer-relative and the other window-left corner relative
-            let (x, y) = if let Ok(dims) = win_dims.await_dimensions(&mut call_wrapper.connection) {
+            let (x, y) = if let Ok(dims) = win_dims.await_dimensions(call_wrapper.inner_mut()) {
                 calculate_relative_placement(mon.dimensions, dims.x, dims.y)
             } else {
                 calculate_relative_placement(mon.dimensions, x, y)
@@ -884,6 +942,7 @@ impl<'a> Manager<'a> {
         event: MotionNotifyEvent,
         state: &mut State,
     ) -> Result<()> {
+        state.last_timestamp = event.time;
         if let Some((win, drag_pos)) = &state.drag_window {
             let (x, y) = drag_pos.current_position(event.event_x, event.event_y);
             // Sigh, X11 and its mixing up i16 and i32
@@ -923,6 +982,7 @@ impl<'a> Manager<'a> {
         event: EnterNotifyEvent,
         state: &mut State,
     ) -> Result<()> {
+        state.last_timestamp = event.time;
         if event.event != state.screen.root && event.mode != NotifyMode::GRAB {
             self.try_focus_window(call_wrapper, event.event, state)?;
         }
@@ -953,9 +1013,8 @@ impl<'a> Manager<'a> {
                                     match change.change_type {
                                         ChangeType::Add => {
                                             if !state.workspaces.is_managed_floating(window) {
-                                                let dimensions = dimensions.await_dimensions(
-                                                    &mut call_wrapper.connection,
-                                                )?;
+                                                let dimensions = dimensions
+                                                    .await_dimensions(call_wrapper.inner_mut())?;
                                                 let (x, y) = calculate_relative_placement(
                                                     state.monitors[mon_ind].dimensions,
                                                     dimensions.x,
@@ -975,7 +1034,7 @@ impl<'a> Manager<'a> {
                                             }
                                         }
                                         ChangeType::Remove => {
-                                            dimensions.inner.forget(&mut call_wrapper.connection);
+                                            dimensions.inner.forget(call_wrapper.inner_mut());
                                             if state.workspaces.is_managed_floating(window) {
                                                 state.workspaces.un_float_window(window);
                                                 self.drawer.draw_on(
@@ -988,9 +1047,7 @@ impl<'a> Manager<'a> {
                                         }
                                         ChangeType::Toggle => {
                                             if state.workspaces.is_managed_floating(window) {
-                                                dimensions
-                                                    .inner
-                                                    .forget(&mut call_wrapper.connection);
+                                                dimensions.inner.forget(call_wrapper.inner_mut());
                                                 state.workspaces.un_float_window(window);
                                                 self.drawer.draw_on(
                                                     call_wrapper,
@@ -999,9 +1056,8 @@ impl<'a> Manager<'a> {
                                                     state,
                                                 )?;
                                             } else {
-                                                let dimensions = dimensions.await_dimensions(
-                                                    &mut call_wrapper.connection,
-                                                )?;
+                                                let dimensions = dimensions
+                                                    .await_dimensions(call_wrapper.inner_mut())?;
                                                 let (x, y) = calculate_relative_placement(
                                                     state.monitors[mon_ind].dimensions,
                                                     dimensions.x,
@@ -1223,7 +1279,12 @@ impl<'a> Manager<'a> {
                 state,
             )?;
         }
-        call_wrapper.take_focus(state.screen.root, state.screen.root, FocusStyle::Pull)?;
+        call_wrapper.take_focus(
+            state.screen.root,
+            state.screen.root,
+            FocusStyle::Passive,
+            state,
+        )?;
         Self::conditional_grab_pointer(call_wrapper, state)?;
         self.update_current_window_title_and_redraw(
             call_wrapper,
@@ -1291,6 +1352,8 @@ impl<'a> Manager<'a> {
         state: &mut State,
     ) -> Result<()> {
         if state.drag_window.is_some() {
+            name_cookie.wm_inner.forget(call_wrapper.inner_mut());
+            name_cookie.ewmh_inner.forget(call_wrapper.inner_mut());
             // Never refocus and mess with the pointer while dragging
             return Ok(());
         }
@@ -1307,7 +1370,7 @@ impl<'a> Manager<'a> {
             mw
         } else {
             // Dummy unused NoFloat
-            ManagedWindow::new(win, ArrangeKind::NoFloat, FocusStyle::Pull)
+            ManagedWindow::new(win, ArrangeKind::NoFloat, FocusStyle::Passive)
         };
         self.make_window_not_urgent(call_wrapper, win, state)?;
         Self::highlight_border(call_wrapper, win, state)?; // Highlighting the base window even if a top level transient is focused
@@ -1334,16 +1397,16 @@ impl<'a> Manager<'a> {
 
         state.input_focus.replace(win);
         pgwm_core::debug!("Taking focus for {win}");
-        call_wrapper.take_focus(state.screen.root, win, main_focus_target.focus_style)?;
+        call_wrapper.take_focus(state.screen.root, win, main_focus_target.focus_style, state)?;
         pgwm_core::debug!("Getting pointer position");
-        let pointer_pos = pointer_pos.reply(&mut call_wrapper.connection)?;
+        let pointer_pos = pointer_pos.reply(call_wrapper.inner_mut())?;
         Self::capture_pointer_if_outside_window(
             call_wrapper,
             main_focus_target,
             pointer_pos,
             state,
         )?;
-        let name = name_cookie.await_name(&mut call_wrapper.connection);
+        let name = name_cookie.await_name(call_wrapper.inner_mut());
         self.update_current_window_title_and_redraw(
             call_wrapper,
             mon_ind,
@@ -1433,6 +1496,7 @@ impl<'a> Manager<'a> {
         event: PropertyNotifyEvent,
         state: &mut State,
     ) -> Result<()> {
+        state.last_timestamp = event.time;
         // Wm's own events
         if event.window == state.screen.root {
             return Ok(());
@@ -1442,15 +1506,13 @@ impl<'a> Manager<'a> {
         {
             match property_message {
                 PropertyChangeMessage::ClassName((win, cookie)) => {
-                    if let Some(class_names) =
-                        cookie.await_class_names(&mut call_wrapper.connection)?
-                    {
+                    if let Some(class_names) = cookie.await_class_names(call_wrapper.inner_mut())? {
                         self.manually_remap_win(call_wrapper, win, &class_names, state)?;
                     }
                 }
                 PropertyChangeMessage::Name((win, cookie)) => {
                     if let Some(focused) = state.find_monitor_focusing_window(win) {
-                        if let Ok(Some(name)) = cookie.await_name(&mut call_wrapper.connection) {
+                        if let Ok(Some(name)) = cookie.await_name(call_wrapper.inner_mut()) {
                             self.update_current_window_title_and_redraw(
                                 call_wrapper,
                                 focused,
@@ -1459,25 +1521,27 @@ impl<'a> Manager<'a> {
                             )?;
                         }
                     } else {
-                        cookie.ewmh_inner.forget(&mut call_wrapper.connection);
-                        cookie.wm_inner.forget(&mut call_wrapper.connection);
+                        cookie.ewmh_inner.forget(call_wrapper.inner_mut());
+                        cookie.wm_inner.forget(call_wrapper.inner_mut());
                     }
                 }
                 PropertyChangeMessage::Hints((win, cookie)) => {
-                    if let Ok(hints) = cookie.reply(&mut call_wrapper.connection) {
+                    if let Ok(hints) = cookie.reply(call_wrapper.inner_mut()) {
                         if hints.urgent {
                             // Making something not urgent happens through focusing
                             pgwm_core::debug!("Got wm hint for urgency for window {win}");
                             self.make_window_urgent(call_wrapper, win, state)?;
                         }
 
-                        let focus_style = if hints.input.filter(|b| *b).is_some() {
-                            FocusStyle::Push {
-                                group_leader: hints.window_group,
-                            }
-                        } else {
-                            FocusStyle::Pull
-                        };
+                        let focus_style =
+                            match Self::deduce_focus_style(call_wrapper, win, Some(hints)) {
+                                Ok(fs) => fs,
+                                #[allow(unused_variables)]
+                                Err(e) => {
+                                    pgwm_core::debug!("Failed to get focus style {e}");
+                                    return Ok(());
+                                }
+                            };
                         state.workspaces.update_focus_style(focus_style, win);
                     }
                 }
@@ -1522,7 +1586,13 @@ impl<'a> Manager<'a> {
                         pgwm_core::debug!("Remapping from {} to {} on prop change", mapped, ind);
                         let focus_style = self
                             .remove_win_from_state_then_redraw_if_tiled(call_wrapper, win, state)?
-                            .map_or(FocusStyle::Pull, |mw| mw.focus_style);
+                            .map_or_else(
+                                || {
+                                    Self::find_focus_style(call_wrapper, win)
+                                        .unwrap_or(FocusStyle::Passive)
+                                },
+                                |mw| mw.focus_style,
+                            );
                         call_wrapper.send_unmap(win, state)?;
                         state.workspaces.add_child_to_ws(
                             win,
@@ -1624,7 +1694,7 @@ impl<'a> Manager<'a> {
     ) -> Result<Option<usize>> {
         let wm_classes = call_wrapper
             .get_class_names(win)?
-            .await_class_names(&mut call_wrapper.connection)?;
+            .await_class_names(call_wrapper.inner_mut())?;
         pgwm_core::debug!("WM_CLASS {:?}", wm_classes);
         if let Some(wm_classes) = wm_classes {
             for class in wm_classes {

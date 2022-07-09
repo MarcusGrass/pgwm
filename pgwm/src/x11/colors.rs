@@ -29,11 +29,9 @@ pub(crate) fn alloc_colors(
             )
         )?;
     }
-    eprintln!("Sent alloc for {} colors", alloc_rgba_cookies.len());
     let mut allocated_colors: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
         heapless::Vec::new();
     for ((r, g, b, a), cookie) in alloc_rgba_cookies {
-        eprintln!("checking alloc color for seq {}", cookie.sequence_number());
         push_heapless!(
             allocated_colors,
             Color {

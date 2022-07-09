@@ -156,6 +156,7 @@ impl<'a> BarManager<'a> {
         let mon = &mut state.monitors[mon_ind];
         let is_mon_focus = state.focused_mon == mon_ind;
         let wants_focus = state.workspaces.get_wants_focus_workspaces();
+        pgwm_core::debug!("Running clean workspace redraw on mon {mon_ind}");
         for (ind, ws) in mon.bar_geometry.workspace.components.iter().enumerate() {
             let name = &ws.text;
             let bg = if name.contains(state.workspaces.get_ws(ws_ind).name.as_str()) {
@@ -171,7 +172,6 @@ impl<'a> BarManager<'a> {
             } else {
                 state.colors.workspace_bar_unfocused_workspace_background
             };
-            pgwm_core::debug!("Running clean workspace redraw");
             self.font_drawer.draw(
                 call_wrapper,
                 &mon.bar_win,

@@ -3,6 +3,7 @@ use crate::config::key_map::KeyboardMapping;
 use crate::config::mouse_map::{MouseMapping, MouseTarget};
 use crate::config::workspaces::UserWorkspace;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use x11_keysyms::{
     XK_Print, XK_Return, XK_b, XK_c, XK_comma, XK_d, XK_f, XK_h, XK_j, XK_k, XK_l, XK_n, XK_period,
     XK_q, XK_r, XK_space, XK_t, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
@@ -107,7 +108,6 @@ pub struct Cfg {
     #[cfg_attr(feature = "config-file", serde(alias = "tiling-modifiers"))]
     pub tiling_modifiers: TilingModifiers,
     pub fonts: Fonts,
-    #[cfg_attr(feature = "config-file", serde(default = "init_colors"))]
     pub colors: ColorBuilder,
     #[cfg_attr(
         feature = "config-file",
@@ -142,9 +142,16 @@ impl Cfg {
                 Ok(cfg) => Ok(cfg),
                 // Not having a config file is not an error, fallback to default hard-coded
                 Err(e) => match e {
-                    crate::error::Error::ConfigDirFind
-                    | crate::error::Error::ConfigFileFind
-                    | crate::error::Error::Io(_) => Ok(Cfg::default()),
+                    crate::error::Error::ConfigDirFind | crate::error::Error::ConfigFileFind => {
+                        crate::debug!("Failed to find config, loading default");
+                        Ok(Cfg::default())
+                    }
+                    #[allow(unused_variables)]
+                    crate::error::Error::Io(e) => {
+                        crate::debug!("Got io error reading config {e}, loading default");
+                        Ok(Cfg::default())
+                    }
+
                     // Having a bad config file is an error
                     _ => Err(e),
                 },
@@ -196,6 +203,35 @@ fn validate_config(cfg: &mut Cfg) -> crate::error::Result<()> {
         }
     }
 
+    if cfg.fonts.fallback.is_none() {
+        if cfg.fonts.shortcut_section.is_empty() && !cfg.bar.shortcuts.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no shortcut section font specified but shortcuts are specified",
+            ));
+        }
+        #[cfg(feature = "status-bar")]
+        if cfg.fonts.status_section.is_empty() && !cfg.bar.status_checks.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no status section font specified but status checks are specified",
+            ));
+        }
+        if cfg.fonts.workspace_section.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no workspace section font specified",
+            ));
+        }
+        if cfg.fonts.tab_bar_section.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no tab bar section font specified",
+            ));
+        }
+        if cfg.fonts.window_name_display_section.is_empty() {
+            return Err(crate::error::Error::ConfigLogic(
+                "No fallback font and no window name display section font specified",
+            ));
+        }
+    }
+
     cfg.key_mappings.iter()
         .map(|kb| &kb.on_click)
         .chain(cfg.mouse_mappings.iter().map(|mm| &mm.on_click))
@@ -220,7 +256,7 @@ impl Default for Cfg {
             options: Options::default(),
             tiling_modifiers: TilingModifiers::default(),
             fonts: Fonts::default(),
-            colors: init_colors(),
+            colors: ColorBuilder::default(),
             char_remap: init_char_remap(),
             workspaces: init_workspaces(),
             mouse_mappings: init_mouse_mappings(),
@@ -234,32 +270,59 @@ impl Default for Cfg {
 #[cfg_attr(test, derive(Eq, PartialEq))]
 #[derive(Copy, Clone, Debug)]
 pub struct Sizing {
+    #[cfg_attr(feature = "config-file", serde(default = "default_bar_height"))]
     pub status_bar_height: i16,
+    #[cfg_attr(feature = "config-file", serde(default = "default_bar_height"))]
     pub tab_bar_height: i16,
+    #[cfg_attr(feature = "config-file", serde(default = "default_window_padding"))]
     pub window_padding: i16,
+    #[cfg_attr(
+        feature = "config-file",
+        serde(default = "default_window_border_width")
+    )]
     pub window_border_width: u32,
+    #[cfg_attr(
+        feature = "config-file",
+        serde(default = "default_workspace_bar_window_name_padding")
+    )]
     pub workspace_bar_window_name_padding: u16,
+}
+
+const fn default_bar_height() -> i16 {
+    20
+}
+
+const fn default_window_padding() -> i16 {
+    8
+}
+
+const fn default_window_border_width() -> u32 {
+    3
+}
+
+const fn default_workspace_bar_window_name_padding() -> u16 {
+    8
 }
 
 impl Default for Sizing {
     fn default() -> Self {
         Self {
             // Height of the status bar, the top bar with status and workspace info
-            status_bar_height: 20,
+            status_bar_height: default_bar_height(),
 
             // Height of the tab-bar when in tabbed-mode
-            tab_bar_height: 20,
+            tab_bar_height: default_bar_height(),
 
             // Space between windows that are not decorated with a border, neighbouring windows share this space ie. 2 windows tiled
             // horizontally [a, b] will have a total length of 3 * window_padding, one left of a, one in the middle, and one right of b
-            window_padding: 8,
+            window_padding: default_window_padding(),
 
             // Decorated space around windows, neighbouring windows do not share this space ie. 2 windows tiled horizontally
             // [a, b] will have a total length of 4 * window_border_width, , one left of a, one right of a, one left of b, and one right of b
-            window_border_width: 3,
+            window_border_width: default_window_border_width(),
 
             // Padding to the left of where in the workspace bar the window's WM_NAME or _NET_WM_NAME property is displayed
-            workspace_bar_window_name_padding: 8,
+            workspace_bar_window_name_padding: default_workspace_bar_window_name_padding(),
         }
     }
 }
@@ -268,47 +331,87 @@ impl Default for Sizing {
 #[cfg_attr(test, derive(PartialEq))]
 #[derive(Clone, Debug)]
 pub struct Options {
+    #[cfg_attr(feature = "config-file", serde(default = "default_pad_while_tabbed"))]
     pub pad_while_tabbed: bool,
+    #[cfg_attr(feature = "config-file", serde(default = "default_destroy_after"))]
     pub destroy_after: u64, // Millis before force-close
-    pub kill_after: u64,    // Millis before we kill the client
+    #[cfg_attr(feature = "config-file", serde(default = "default_kill_after"))]
+    pub kill_after: u64, // Millis before we kill the client
+    #[cfg_attr(feature = "config-file", serde(default = "default_cursor_name"))]
     pub cursor_name: String,
+    #[cfg_attr(feature = "config-file", serde(default = "default_show_bar_initially"))]
     pub show_bar_initially: bool,
+}
+
+const fn default_pad_while_tabbed() -> bool {
+    true
+}
+
+const fn default_destroy_after() -> u64 {
+    2000
+}
+
+const fn default_kill_after() -> u64 {
+    5000
+}
+
+fn default_cursor_name() -> String {
+    String::from("left_ptr")
+}
+
+const fn default_show_bar_initially() -> bool {
+    true
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             // Whether or not to have window padding in the tabbed layout
-            pad_while_tabbed: true,
+            pad_while_tabbed: default_pad_while_tabbed(),
 
             // When a window is signalled to be killed a delete request is sent to the client this is a timeout in milliseconds
             // starting from when that request is sent to when a destroy-window for that client is sent to x11
-            destroy_after: 2000,
+            destroy_after: default_destroy_after(),
 
             // If a window is not destroyed after sending a destroy-window, a kill request will be sent after this timeout in milliseconds
-            kill_after: 5000,
+            kill_after: default_kill_after(),
 
             // X11 cursor name, can be found online somewhere, currently unknown where.
-            cursor_name: String::from("left_ptr"),
+            cursor_name: default_cursor_name(),
 
-            show_bar_initially: true,
+            show_bar_initially: default_show_bar_initially(),
         }
     }
 }
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 pub struct TilingModifiers {
+    #[cfg_attr(feature = "config-file", serde(default = "default_left_leader"))]
     pub left_leader: f32,
+    #[cfg_attr(feature = "config-file", serde(default = "default_center_leader"))]
     pub center_leader: f32,
+    #[cfg_attr(feature = "config-file", serde(default = "default_vertically_tiled"))]
     pub vertically_tiled: Vec<f32>,
+}
+
+const fn default_left_leader() -> f32 {
+    2.0
+}
+
+const fn default_center_leader() -> f32 {
+    2.0
+}
+
+fn default_vertically_tiled() -> Vec<f32> {
+    vec![1.0; NUM_TILING_MODIFIERS]
 }
 
 impl Default for TilingModifiers {
     fn default() -> Self {
         TilingModifiers {
-            left_leader: 2.0,
-            center_leader: 2.0,
-            vertically_tiled: vec![1.0; NUM_TILING_MODIFIERS],
+            left_leader: default_left_leader(),
+            center_leader: default_center_leader(),
+            vertically_tiled: default_vertically_tiled(),
         }
     }
 }
@@ -317,11 +420,54 @@ impl Default for TilingModifiers {
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Fonts {
+    pub fallback: Option<FontCfg>,
+    #[cfg_attr(feature = "config-file", serde(default = "default_font"))]
     pub workspace_section: Vec<FontCfg>,
+    #[cfg_attr(feature = "config-file", serde(default = "default_font"))]
     pub window_name_display_section: Vec<FontCfg>,
+    #[cfg(feature = "status-bar")]
+    #[cfg_attr(feature = "config-file", serde(default = "default_font"))]
     pub status_section: Vec<FontCfg>,
+    #[cfg_attr(feature = "config-file", serde(default = "default_font"))]
     pub tab_bar_section: Vec<FontCfg>,
+    #[cfg_attr(feature = "config-file", serde(default = "default_font"))]
     pub shortcut_section: Vec<FontCfg>,
+}
+
+fn default_font() -> Vec<FontCfg> {
+    vec![FontCfg::new(
+        "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
+        "14.0",
+    )]
+}
+
+impl Fonts {
+    #[must_use]
+    pub fn from_fallback(fallback: FontCfg) -> Self {
+        Self {
+            fallback: Some(fallback.clone()),
+            workspace_section: vec![fallback.clone()],
+            window_name_display_section: vec![fallback.clone()],
+            #[cfg(feature = "status-bar")]
+            status_section: vec![fallback.clone()],
+            tab_bar_section: vec![fallback.clone()],
+            shortcut_section: vec![fallback],
+        }
+    }
+
+    #[must_use]
+    pub fn get_all_font_paths(&self) -> Vec<PathBuf> {
+        let it = self
+            .fallback
+            .iter()
+            .chain(self.tab_bar_section.iter())
+            .chain(self.workspace_section.iter())
+            .chain(self.shortcut_section.iter())
+            .chain(self.window_name_display_section.iter());
+        #[cfg(feature = "status-bar")]
+        let it = it.chain(self.status_section.iter());
+        it.map(|f_cfg| PathBuf::from(&f_cfg.path)).collect()
+    }
 }
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -389,28 +535,8 @@ per target segment.
  **/
 impl Default for Fonts {
     fn default() -> Self {
-        Self {
-            workspace_section: vec![FontCfg::new(
-                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "14.0",
-            )],
-            window_name_display_section: vec![FontCfg::new(
-                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "14.0",
-            )],
-            status_section: vec![FontCfg::new(
-                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "14.0",
-            )],
-            tab_bar_section: vec![FontCfg::new(
-                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "14.0",
-            )],
-            shortcut_section: vec![FontCfg::new(
-                "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
-                "14.0",
-            )],
-        }
+        let mut df = default_font();
+        Self::from_fallback(df.pop().unwrap())
     }
 }
 
@@ -695,41 +821,6 @@ fn init_mouse_mappings() -> Vec<SimpleMouseMapping> {
             on_click: Action::Spawn("xscreensaver-command".into(), vec!["-lock".into()]),
         },
     ]
-}
-
-/**
-Just some default colors
- **/
-const WHITE: (u8, u8, u8, u8) = (223, 223, 223, 0);
-const DARK_GRAY: (u8, u8, u8, u8) = (40, 44, 52, 1);
-const LIGHT_GRAY: (u8, u8, u8, u8) = (56, 66, 82, 0);
-const BLACK: (u8, u8, u8, u8) = (28, 31, 36, 0);
-const BLUE: (u8, u8, u8, u8) = (48, 53, 168, 0);
-const ORANGE: (u8, u8, u8, u8) = (224, 44, 16, 0);
-/**
-   Color configuration, Here colors are set for different segments that the WM draws.
-   Naming is hopefully fairly self-explanatory for what each color does.
-   A constant can be declared as above for reuse.
-**/
-fn init_colors() -> ColorBuilder {
-    ColorBuilder::default()
-        .window_border(BLACK)
-        .window_border_highlighted(WHITE)
-        .window_border_urgent(ORANGE)
-        .workspace_bar_selected_unfocused_workspace_background(LIGHT_GRAY)
-        .workspace_bar_unfocused_workspace_background(BLACK)
-        .workspace_bar_focused_workspace_background(BLUE)
-        .workspace_bar_urgent_workspace_background(ORANGE)
-        .workspace_bar_workspace_section_text(WHITE)
-        .workspace_bar_current_window_title_text(WHITE)
-        .workspace_bar_current_window_title_background(DARK_GRAY)
-        .status_bar_text(WHITE)
-        .status_bar_background(LIGHT_GRAY)
-        .tab_bar_text(WHITE)
-        .tab_bar_focused_tab_background(LIGHT_GRAY)
-        .tab_bar_unfocused_tab_background(BLACK)
-        .shortcut_text(WHITE)
-        .shortcut_background(BLACK)
 }
 
 /**

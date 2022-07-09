@@ -85,7 +85,7 @@ pub(crate) fn run_wm() -> Result<()> {
     //    .ok_or(Error::X11OpenDefaultDb)?;
     let rdb = x11rb::resource_manager::protocol::Database::GET_RESOURCE_DATABASE;
     let get_prop = x11rb::xcb::xproto::get_property(
-        &mut call_wrapper.connection,
+        call_wrapper.inner_mut(),
         rdb.delete,
         screen.root,
         rdb.property,
@@ -94,22 +94,18 @@ pub(crate) fn run_wm() -> Result<()> {
         rdb.long_length,
         false,
     )?
-    .reply(&mut call_wrapper.connection)?;
+    .reply(call_wrapper.inner_mut())?;
     pgwm_core::debug!("Got resource database properties");
     let resource_db =
         x11rb::resource_manager::protocol::Database::new_from_get_property_reply(&get_prop)
             .ok_or(Error::X11OpenDefaultDb)?;
-    let cursor_handle = x11rb::cursor::Handle::new(&mut call_wrapper.connection, 0, &resource_db)?;
-    let visual = find_render_visual_info(&mut call_wrapper.connection, screen)?;
+    let cursor_handle = x11rb::cursor::Handle::new(call_wrapper.inner_mut(), 0, &resource_db)?;
+    let visual = find_render_visual_info(call_wrapper.inner_mut(), screen)?;
     let loaded = load_alloc_fonts(&mut call_wrapper, &visual, &fonts, &char_remap)?;
     let lf = LoadedFonts::new(loaded, &char_remap)?;
 
     let font_drawer = FontDrawer::new(&lf);
-    let colors = alloc_colors(
-        &mut call_wrapper.connection,
-        screen.default_colormap,
-        colors,
-    )?;
+    let colors = alloc_colors(call_wrapper.inner_mut(), screen.default_colormap, colors)?;
 
     pgwm_core::debug!("Creating state");
     let mut state = crate::x11::state_lifecycle::create_state(
@@ -157,7 +153,6 @@ pub(crate) fn run_wm() -> Result<()> {
     crate::debug!("Initialized manager state");
     manager.scan(&mut call_wrapper, &mut state)?;
     crate::debug!("Initialized, starting loop");
-    call_wrapper.connection.sync()?;
     loop {
         #[cfg(feature = "status-bar")]
         let loop_result = if should_check {
@@ -226,7 +221,7 @@ fn loop_with_status<'a>(
         // This looks dumb... Anyway, avoiding an unnecessary poll and going straight to status update
         // if no new events or duration is now.
         while let Some(event) = call_wrapper
-            .connection
+            .inner_mut()
             .read_next_event(next_check.duration_since(std::time::Instant::now()))?
         {
             handle_event(event, call_wrapper, manager, state)?;
@@ -240,7 +235,8 @@ fn loop_with_status<'a>(
         next_check = next.next_check;
         // Check destroyed, not that important so moved from event handling flow
         Manager::destroy_marked(call_wrapper, state)?;
-        call_wrapper.connection.sync()?;
+        #[cfg(feature = "debug")]
+        call_wrapper.inner_mut().clear_cache()?;
     }
 }
 
@@ -250,13 +246,14 @@ fn loop_without_status<'a>(
     state: &mut State,
 ) -> Result<()> {
     // Arbitrarily chosen
-    const DEADLINE: Duration = Duration::from_millis(1000);
+    const DEADLINE: Duration = Duration::from_secs(10_000);
     loop {
-        while let Some(event) = call_wrapper.connection.read_next_event(DEADLINE)? {
+        while let Some(event) = call_wrapper.inner_mut().read_next_event(DEADLINE)? {
             handle_event(event, call_wrapper, manager, state)?;
         }
         Manager::destroy_marked(call_wrapper, state)?;
-        call_wrapper.connection.sync()?;
+        #[cfg(feature = "debug")]
+        call_wrapper.inner_mut().clear_cache()?;
     }
 }
 
@@ -274,10 +271,14 @@ fn handle_event<'a>(
         .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
         .ok_or(Error::X11EventParse)?;
 
+    #[cfg(feature = "debug")]
+    dbg_event(&raw, &call_wrapper.inner_mut().extensions);
+    // Unmap and enter are caused by upstream actions, causing unwanted focusing behaviour etc.
     if state.should_ignore_sequence(seq)
         && (response_type == x11rb::protocol::xproto::ENTER_NOTIFY_EVENT
             || response_type == x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT)
     {
+        pgwm_core::debug!("[Ignored]");
         return Ok(());
     }
 
@@ -372,6 +373,18 @@ fn handle_event<'a>(
     Ok(())
 }
 
+#[cfg(feature = "debug")]
+fn dbg_event(raw: &[u8], ext_info_provider: &x11rb::x11_utils::ExtensionInfoProvider) {
+    match x11rb::xcb::Event::parse(raw, ext_info_provider) {
+        Ok(evt) => {
+            eprintln!("{evt:?}");
+        }
+        Err(e) => {
+            eprintln!("Failed to parse event {e}");
+        }
+    }
+}
+
 fn find_render_visual_info(
     connection: &mut XorgConnection,
     screen: &Screen,
@@ -397,7 +410,6 @@ fn find_appropriate_visual(
         })
         .collect::<HashMap<Pictformat, Pictforminfo>>();
     // Should only be one
-    pgwm_core::debug!("{candidates:?}");
     for screen in formats.screens {
         let candidate = screen.depths.into_iter().find_map(|pd| {
             (pd.depth == depth)
@@ -413,7 +425,6 @@ fn find_appropriate_visual(
                 .flatten()
         });
         if let Some(candidate) = candidate {
-            pgwm_core::debug!("{candidate:?}");
             return Ok(VisualInfo {
                 visual_id: candidate.visual,
                 pict_format: candidate.format,

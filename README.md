@@ -7,6 +7,8 @@ interpretations has to be made. If something seems implemented wrongly, and it i
 an explanation in [EWMH.md](docs/EWMH.md), please create an issue if you have the time.
 Big shout out to [x11rb](https://github.com/psychon/x11rb) which has great safe x11 bindings!
 
+Even Jetbrains IDE's work without freaking out assuming `setwmname LG3D` is in your `~/.xinitrc`.
+
 # Why
 I love to build my old tools, so after a few years of running up against bugs that bothered my workflow 
 and features that I wanted but were missing in other tiling WMs
@@ -52,7 +54,8 @@ different tags per monitor this WM operates closer to DWM's [single tagset patch
 The beauty of xmonad and using haskel for a configurable WM is that through a functional language Xmonad provides
 an absurd level of customizability, this lends itself well to contributors creating additions through xmonad-contrib.
 This WM does not aim to match that level of customizability but instead tries to be minimal and reasonably configurable,
-while also being distributable and configurable through a binary rather than compiled-configuration.
+while also being distributable and configurable through a binary rather than compiled-configuration. Something like [penrose](https://github.com/sminez/penrose) 
+is likely what you're looking for if you want something more Xmonad-like.
 
 # Usage
 Some getting-started information is described [here](docs/USAGE.md).
@@ -98,7 +101,7 @@ disable default features.
 To build with max optimizations use --profile=lto.
 In [config.toml](.cargo/config.toml) --release is set to compile with debug assertions, usually when I'm developing 
 the WM I run it like that to ensure that there are no overflows/underflows, x11 uses i16s, u16s, i32s, and u32s fairly interchangeably 
-which poses a conversion risk. Removing that options will yield a negligible performance increase if compiling --release.    
+which poses a conversion risk. Removing that option will yield a negligible performance increase if compiling --release.    
 In benchmarking, heavier calculations see a speedup of around 15-45% on lto compared to release on my machine, 
 that being said we're talking about 190 to 150 nanoseconds for calculating tiling positions, there aren't many heavy calculations
 being performed, most latency is from x11 redrawing windows.  

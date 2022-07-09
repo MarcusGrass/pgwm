@@ -75,15 +75,16 @@ pub(crate) fn load_alloc_fonts<'a>(
     char_remap: &'a HashMap<heapless::String<4>, FontCfg>,
 ) -> Result<HashMap<&'a FontCfg, LoadedFont>> {
     let mut map = HashMap::new();
-    for f_cfg in fonts
+    let it = fonts
         .workspace_section
         .iter()
         .chain(fonts.window_name_display_section.iter())
-        .chain(fonts.status_section.iter())
         .chain(fonts.shortcut_section.iter())
         .chain(fonts.tab_bar_section.iter())
-        .chain(char_remap.values())
-    {
+        .chain(char_remap.values());
+    #[cfg(feature = "status-bar")]
+    let it = it.chain(fonts.status_section.iter());
+    for f_cfg in it {
         // Ugly and kind of dumb
         let mut id = 0;
         if let Entry::Vacant(v) = map.entry(f_cfg) {

@@ -257,12 +257,7 @@ impl<'a> Drawer<'a> {
             .map(|maybe_name_cookie| {
                 maybe_name_cookie
                     .ok()
-                    .and_then(|cookie| {
-                        cookie
-                            .await_name(&mut call_wrapper.connection)
-                            .ok()
-                            .flatten()
-                    })
+                    .and_then(|cookie| cookie.await_name(call_wrapper.inner_mut()).ok().flatten())
                     .unwrap_or_else(|| heapless::String::from("Unknown name"))
             })
             .collect::<Vec<heapless::String<WM_NAME_LIMIT>>>();

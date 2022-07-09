@@ -7,7 +7,7 @@ use x11rb::protocol::render::{
 use x11rb::protocol::xproto::{
     Atom, AtomEnum, ChangeWindowAttributesAux, ClientMessageEvent, ConfigureRequestEvent,
     ConfigureWindowAux, EventMask, GetPropertyReply, GetWindowAttributesReply, GrabMode,
-    InputFocus, InternAtomReply, PropMode, QueryPointerReply, Screen, StackMode, Window,
+    InputFocus, InternAtomReply, PropMode, QueryPointerReply, Screen, StackMode, Timestamp, Window,
 };
 use x11rb::protocol::ErrorKind;
 use x11rb::xcb::xproto;
@@ -17,6 +17,7 @@ use crate::error::Error::GlyphMismatch;
 use crate::wm::XorgConnection;
 use pgwm_core::config::{WINDOW_MANAGER_NAME, WINDOW_MANAGER_NAME_BUF_SIZE};
 use pgwm_core::geometry::Dimensions;
+use pgwm_core::push_heapless;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
 use pgwm_core::state::workspace::FocusStyle;
 use pgwm_core::state::State;
@@ -44,7 +45,7 @@ macro_rules! impl_atoms {
             fn init_maps(connection: &mut XorgConnection) -> Result<(FnvIndexMap<&'static [u8], ResolvedAtom, 32>, FnvIndexMap<Atom, ResolvedAtom, 32>)> {
                     let mut name_to_atom = FnvIndexMap::new();
                     let mut atom_to_resolved = FnvIndexMap::new();
-                    let mut cookies = heapless::Deque::<Cookie<InternAtomReply>, 32>::new();
+                    let mut cookies = heapless::Deque::<Cookie<InternAtomReply>, 64>::new();
         $(
                     cookies.push_back(xproto::intern_atom(connection, false, $const_name, false)?)
                     .expect("Not enough space for intern atoms");
@@ -98,6 +99,9 @@ impl_atoms!(
     false,
     WM_TAKE_FOCUS,
     WmTakeFocus,
+    false,
+    WM_CLIENT_LEADER,
+    WmClientLeader,
     false,
     _NET_WM_WINDOW_TYPE,
     NetWmWindowType,
@@ -181,7 +185,7 @@ pub(crate) struct ResolvedAtom {
 }
 
 pub(crate) struct CallWrapper {
-    pub(crate) connection: XorgConnection,
+    connection: XorgConnection,
     name_to_atom: FnvIndexMap<&'static [u8], ResolvedAtom, 32>,
     atom_to_resolved: FnvIndexMap<Atom, ResolvedAtom, 32>,
 }
@@ -618,19 +622,26 @@ impl CallWrapper {
         root: Window,
         target: Window,
         focus_style: FocusStyle,
+        state: &State,
     ) -> Result<()> {
-        match focus_style {
-            FocusStyle::Push { group_leader } => {
-                if let Some(leader) = group_leader {
-                    xproto::set_input_focus(
-                        &mut self.connection,
-                        InputFocus::PARENT,
-                        leader,
-                        CURRENT_TIME,
-                        true,
-                    )?;
-                } else {
-                    pgwm_core::debug!("Found window with focus_style pull with no group leader");
+        let target = if target == root {
+            // No active window if root gets focused
+            xproto::set_input_focus(
+                &mut self.connection,
+                InputFocus::PARENT,
+                target,
+                CURRENT_TIME,
+                true,
+            )?;
+            NONE
+        } else {
+            match focus_style {
+                FocusStyle::NoInput => {
+                    pgwm_core::debug!("NoInput win {target} take focus");
+                    target
+                }
+                FocusStyle::Passive => {
+                    pgwm_core::debug!("Passive win {target} take focus");
                     xproto::set_input_focus(
                         &mut self.connection,
                         InputFocus::PARENT,
@@ -638,24 +649,43 @@ impl CallWrapper {
                         CURRENT_TIME,
                         true,
                     )?;
+                    target
+                }
+                FocusStyle::LocallyActive { group_leader } => {
+                    if let Some(gl) = group_leader {
+                        pgwm_core::debug!(
+                            "Passive win {target} set input focus on group leader {:?}",
+                            group_leader
+                        );
+                        xproto::set_input_focus(
+                            &mut self.connection,
+                            InputFocus::PARENT,
+                            gl,
+                            CURRENT_TIME,
+                            true,
+                        )?;
+                        self.send_take_focus(target, state.last_timestamp)?;
+                        gl
+                    } else {
+                        // Don't know if this is even valid
+                        pgwm_core::debug!("Passive win {target} without group loader");
+                        xproto::set_input_focus(
+                            &mut self.connection,
+                            InputFocus::PARENT,
+                            target,
+                            CURRENT_TIME,
+                            true,
+                        )?;
+                        self.send_take_focus(target, state.last_timestamp)?;
+                        target
+                    }
+                }
+                FocusStyle::GloballyActive => {
+                    pgwm_core::debug!("Globally active win {target} take focus");
+                    self.send_take_focus(target, state.last_timestamp)?;
+                    target
                 }
             }
-            FocusStyle::Pull => {
-                xproto::set_input_focus(
-                    &mut self.connection,
-                    InputFocus::PARENT,
-                    target,
-                    CURRENT_TIME,
-                    true,
-                )?;
-            }
-        }
-        let target = if target == root {
-            // No active window if root gets focused
-            NONE
-        } else {
-            self.send_take_focus(target)?;
-            target
         };
         let data = [target, CURRENT_TIME];
         self.connection.change_property32(
@@ -686,18 +716,12 @@ impl CallWrapper {
         Ok(())
     }
 
-    fn send_take_focus(&mut self, win: Window) -> Result<()> {
+    fn send_take_focus(&mut self, win: Window, timestamp: Timestamp) -> Result<()> {
         let event = ClientMessageEvent::new(
             32,
             win,
             self.name_to_atom[WM_PROTOCOLS].value,
-            [
-                self.name_to_atom[WM_TAKE_FOCUS].value,
-                CURRENT_TIME,
-                0,
-                0,
-                0,
-            ],
+            [self.name_to_atom[WM_TAKE_FOCUS].value, timestamp, 0, 0, 0],
         );
         pgwm_core::debug!("Sending WM_TAKE_FOCUS focus for {}", win);
         xproto::send_event(
@@ -959,7 +983,117 @@ impl CallWrapper {
         self.atom_to_resolved.get(&atom).copied()
     }
 
-    pub fn new(mut connection: XorgConnection) -> Result<Self> {
+    #[cfg(feature = "debug")]
+    pub(crate) fn get_leader(&mut self, win: Window) -> Result<Option<Window>> {
+        Ok(xproto::get_property(
+            &mut self.connection,
+            false,
+            win,
+            self.name_to_atom[WM_CLIENT_LEADER].value,
+            AtomEnum::WINDOW,
+            0,
+            4,
+            false,
+        )?
+        .reply(&mut self.connection)?
+        .value32()
+        .and_then(|mut it| it.next()))
+    }
+
+    pub(crate) fn get_protocols(&mut self, win: Window) -> Result<heapless::Vec<Protocol, 2>> {
+        let prop = xproto::get_property(
+            &mut self.connection,
+            false,
+            win,
+            self.name_to_atom[WM_PROTOCOLS].value,
+            AtomEnum::ATOM,
+            0,
+            16,
+            false,
+        )?
+        .reply(&mut self.connection)?;
+        let mut protocols = heapless::Vec::new();
+        if let Some(values) = prop.value32() {
+            for protoc_enum in values {
+                if self.name_to_atom[WM_DELETE_WINDOW].value == protoc_enum {
+                    push_heapless!(protocols, Protocol::Delete)?;
+                } else if self.name_to_atom[WM_TAKE_FOCUS].value == protoc_enum {
+                    push_heapless!(protocols, Protocol::TakeFocus)?;
+                }
+            }
+        }
+        Ok(protocols)
+    }
+
+    #[cfg(feature = "debug")]
+    pub(crate) fn debug_window(&mut self, win: Window) -> Result<()> {
+        use std::fmt::Write;
+        let props = xproto::list_properties(&mut self.connection, win, false)?;
+        let geom = self.get_dimensions(win)?;
+        let attrs = self.get_window_attributes(win)?;
+        let name = self.get_name(win)?;
+        let class = self.get_class_names(win)?;
+        let hints_cookie = WmHints::get(&mut self.connection, win)?;
+        let mut base = format!(
+            "Debug Window {}, name: {}, classes: {:?}\n",
+            win,
+            name.await_name(&mut self.connection)
+                .unwrap_or_default()
+                .unwrap_or_default(),
+            class
+                .await_class_names(&mut self.connection)
+                .unwrap_or_default()
+                .unwrap_or_default()
+        );
+        base.push_str("\tHints: \n");
+        if let Ok(hints) = hints_cookie.reply(&mut self.connection) {
+            let _ = base.write_fmt(format_args!("\t\t{:?}", hints));
+        }
+        base.push('\n');
+        base.push_str("\tAttributes: \n");
+        if let Ok(attributes) = attrs.reply(&mut self.connection) {
+            let _ = base.write_fmt(format_args!("\t\t{:?}", attributes));
+        }
+        base.push('\n');
+        base.push_str("\tGeometry: \n");
+        if let Ok(dims) = geom.await_dimensions(&mut self.connection) {
+            let _ = base.write_fmt(format_args!("\t\t{:?}", dims));
+        }
+        base.push('\n');
+        base.push_str("\tProperties: ");
+        if let Ok(props) = props.reply(&mut self.connection) {
+            for prop in props.atoms {
+                if let Ok(name) = xproto::get_atom_name(&mut self.connection, prop, false)?
+                    .reply(&mut self.connection)
+                {
+                    if let Ok(utf8) = String::from_utf8(name.name) {
+                        let post = match utf8.as_str() {
+                            "WM_CLIENT_LEADER" => self
+                                .get_leader(win)
+                                .unwrap_or_default()
+                                .map(|win| win.to_string())
+                                .unwrap_or_default(),
+                            "WM_PROTOCOLS" => {
+                                let protocols = self.get_protocols(win)?;
+                                format!("{:?}", protocols)
+                            }
+                            _ => "".to_owned(),
+                        };
+                        let _ = base.write_fmt(format_args!("\n\t\t{utf8}: {post}"));
+                    }
+                }
+            }
+        }
+        base.push('\n');
+        eprintln!("{base}");
+        Ok(())
+    }
+
+    pub(crate) fn inner_mut(&mut self) -> &mut XorgConnection {
+        &mut self.connection
+    }
+
+    pub(crate) fn new(mut connection: XorgConnection) -> Result<Self> {
         let (name_to_atom, atom_to_resolved) = init_maps(&mut connection)?;
         Ok(CallWrapper {
             connection,
@@ -995,6 +1129,14 @@ impl WmState {
             _ => None,
         }
     }
+}
+
+/// [Protocols](https://tronche.com/gui/x/icccm/sec-4.html#WM_PROTOCOLS)
+/// Only 2 non-deprecated being used
+#[derive(Debug, Eq, PartialEq)]
+pub enum Protocol {
+    TakeFocus,
+    Delete,
 }
 
 pub(crate) struct FloatDeductionCookie {
