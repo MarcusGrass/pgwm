@@ -142,9 +142,16 @@ impl Cfg {
                 Ok(cfg) => Ok(cfg),
                 // Not having a config file is not an error, fallback to default hard-coded
                 Err(e) => match e {
-                    crate::error::Error::ConfigDirFind
-                    | crate::error::Error::ConfigFileFind
-                    | crate::error::Error::Io(_) => Ok(Cfg::default()),
+                    crate::error::Error::ConfigDirFind | crate::error::Error::ConfigFileFind => {
+                        crate::debug!("Failed to find config, loading default");
+                        Ok(Cfg::default())
+                    }
+                    #[allow(unused_variables)]
+                    crate::error::Error::Io(e) => {
+                        crate::debug!("Got io error reading config {e}, loading default");
+                        Ok(Cfg::default())
+                    }
+
                     // Having a bad config file is an error
                     _ => Err(e),
                 },
