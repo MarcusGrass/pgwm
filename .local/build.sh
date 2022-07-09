@@ -48,8 +48,3 @@ if [[ "lto" == $MODE ]]; then
   /usr/bin/cargo b -p pgwm --profile "$MODE" --features $FEATURES --target x86_64-unknown-linux-musl && install target/x86_64-unknown-linux-musl/lto/pgwm "$INSTALL_PATH"
   exit 0
 fi
-
-if [[ "lto" == $MODE ]]; then
-  /usr/bin/cargo b -p pgwm --profile "$MODE" --features $FEATURES --target x86_64-unknown-linux-musl && install target/x86_64-unknown-linux-musl/lto/pgwm "$INSTALL_PATH"
-  exit 0
-fi

@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+### Fixed
+
+### Added
+
+### Changed
+
+## [v0.2.0] - 2022-07-09
 
 ### Fixed
  - Splitting text on a char boundary caused a panic in some cases while using the tabbed mode
@@ -23,7 +30,8 @@ but a type containing a path to the specific font to be rendered and a pixel siz
 This is because libXft took care of that through fontconfig before, but now that dependency is gone.
  - No more unsafe code.
  - No c-library dependencies, can be built and statically linked, down to a ~2Mb binary with musl, and ~2Mb USS/PSS/RSS RAM footprint
- - Reworked the connection to be lighter and faster
+ - Reworked the connection to be lighter and faster, eventual severe bugs in the implementation 
+will cause a panic in debug and a freeze otherwise
  - Now exclusively uses Unix-sockets, no TCP is available
 
 ## [v0.1.0] - 2022-04-09
