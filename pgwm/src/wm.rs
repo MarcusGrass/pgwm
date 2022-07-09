@@ -377,7 +377,7 @@ fn handle_event<'a>(
 fn dbg_event(raw: &[u8], ext_info_provider: &x11rb::x11_utils::ExtensionInfoProvider) {
     match x11rb::xcb::Event::parse(raw, ext_info_provider) {
         Ok(evt) => {
-            eprintln!("Got event {evt:?}");
+            eprintln!("{evt:?}");
         }
         Err(e) => {
             eprintln!("Failed to parse event {e}");
@@ -410,7 +410,6 @@ fn find_appropriate_visual(
         })
         .collect::<HashMap<Pictformat, Pictforminfo>>();
     // Should only be one
-    pgwm_core::debug!("{candidates:?}");
     for screen in formats.screens {
         let candidate = screen.depths.into_iter().find_map(|pd| {
             (pd.depth == depth)
@@ -426,7 +425,6 @@ fn find_appropriate_visual(
                 .flatten()
         });
         if let Some(candidate) = candidate {
-            pgwm_core::debug!("{candidate:?}");
             return Ok(VisualInfo {
                 visual_id: candidate.visual,
                 pict_format: candidate.format,

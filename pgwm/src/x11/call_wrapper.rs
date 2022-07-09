@@ -624,7 +624,6 @@ impl CallWrapper {
         focus_style: FocusStyle,
         state: &State,
     ) -> Result<()> {
-        crate::dbg_win!(self, target);
         let target = if target == root {
             // No active window if root gets focused
             xproto::set_input_focus(

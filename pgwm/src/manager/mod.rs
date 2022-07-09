@@ -172,6 +172,7 @@ impl<'a> Manager<'a> {
         action: Action,
         state: &mut State,
     ) -> Result<()> {
+        pgwm_core::debug!("Executing action {action:?}");
         match action {
             Action::Restart => {
                 Self::cleanup(call_wrapper, state)?;
@@ -438,6 +439,7 @@ impl<'a> Manager<'a> {
         hints: WmHintsCookie,
         state: &mut State,
     ) -> Result<()> {
+        crate::dbg_win!(call_wrapper, win);
         call_wrapper.set_base_client_event_mask(win)?;
         let dimensions_cookie = call_wrapper.get_dimensions(win)?;
         let float_indicators = call_wrapper.get_float_indicators(win)?;
@@ -1350,6 +1352,8 @@ impl<'a> Manager<'a> {
         state: &mut State,
     ) -> Result<()> {
         if state.drag_window.is_some() {
+            name_cookie.wm_inner.forget(call_wrapper.inner_mut());
+            name_cookie.ewmh_inner.forget(call_wrapper.inner_mut());
             // Never refocus and mess with the pointer while dragging
             return Ok(());
         }
