@@ -153,7 +153,6 @@ pub(crate) fn run_wm() -> Result<()> {
     crate::debug!("Initialized manager state");
     manager.scan(&mut call_wrapper, &mut state)?;
     crate::debug!("Initialized, starting loop");
-    call_wrapper.inner_mut().sync()?;
     loop {
         #[cfg(feature = "status-bar")]
         let loop_result = if should_check {
@@ -236,7 +235,8 @@ fn loop_with_status<'a>(
         next_check = next.next_check;
         // Check destroyed, not that important so moved from event handling flow
         Manager::destroy_marked(call_wrapper, state)?;
-        call_wrapper.inner_mut().sync()?;
+        #[cfg(feature = "debug")]
+        call_wrapper.inner_mut().clear_cache()?;
     }
 }
 
@@ -246,13 +246,14 @@ fn loop_without_status<'a>(
     state: &mut State,
 ) -> Result<()> {
     // Arbitrarily chosen
-    const DEADLINE: Duration = Duration::from_millis(1000);
+    const DEADLINE: Duration = Duration::from_secs(10_000);
     loop {
         while let Some(event) = call_wrapper.inner_mut().read_next_event(DEADLINE)? {
             handle_event(event, call_wrapper, manager, state)?;
         }
         Manager::destroy_marked(call_wrapper, state)?;
-        call_wrapper.inner_mut().sync()?;
+        #[cfg(feature = "debug")]
+        call_wrapper.inner_mut().clear_cache()?;
     }
 }
 

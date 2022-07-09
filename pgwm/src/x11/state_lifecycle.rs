@@ -1,6 +1,6 @@
 use crate::error::Result;
 use heapless::binary_heap::Min;
-use heapless::{FnvIndexMap, FnvIndexSet};
+use heapless::FnvIndexSet;
 use std::collections::HashMap;
 use x11rb::cookie::VoidCookie;
 
@@ -36,6 +36,7 @@ use x11rb::{COPY_DEPTH_FROM_PARENT, CURRENT_TIME};
 
 use crate::manager::font::{FontDrawer, LoadedFonts};
 use crate::x11::call_wrapper::CallWrapper;
+const COOKIE_CONTAINER_CAPACITY: usize = 64;
 
 pub(crate) fn create_state<'a>(
     call_wrapper: &'a mut CallWrapper,
@@ -209,7 +210,7 @@ fn do_create_state<'a>(
     key_mappings: &[SimpleKeyMapping],
     mouse_mappings: &[SimpleMouseMapping],
     #[cfg(feature = "status-bar")] checks: &[Check],
-    mut cookie_container: heapless::Vec<VoidCookie, 32>,
+    mut cookie_container: heapless::Vec<VoidCookie, COOKIE_CONTAINER_CAPACITY>,
 ) -> Result<State> {
     let screen_dimensions = get_screen_dimensions(call_wrapper, &screen)?;
     let mut monitors = Vec::with_capacity(8);
@@ -362,7 +363,7 @@ fn create_static_state<'a>(
     screen: &'a Screen,
     colors: &Colors,
     tab_bar_height: u16,
-    cookie_container: &mut heapless::Vec<VoidCookie, 32>,
+    cookie_container: &mut heapless::Vec<VoidCookie, COOKIE_CONTAINER_CAPACITY>,
 ) -> Result<StaticState> {
     let mut intern_created_windows = FnvIndexSet::new();
     let gcs = create_gcs(call_wrapper, screen, colors)?;
@@ -379,7 +380,7 @@ fn create_static_state<'a>(
         cookie_container,
         create_wm_check_win(call_wrapper, screen, check_win)?
     )?;
-    for (_, (_, cookie)) in gcs {
+    for cookie in gcs {
         push_heapless!(cookie_container, cookie)?;
     }
 
@@ -503,8 +504,7 @@ fn create_gcs<'a>(
     call_wrapper: &'a mut CallWrapper,
     screen: &'a Screen,
     colors: &Colors,
-) -> Result<FnvIndexMap<u32, (Gcontext, VoidCookie), 8>> {
-    let mut map = FnvIndexMap::new();
+) -> Result<heapless::Vec<VoidCookie, 16>> {
     let colors_needing_gcs = [
         colors.tab_bar_focused_tab_background().pixel,
         colors.tab_bar_unfocused_tab_background().pixel,
@@ -518,12 +518,12 @@ fn create_gcs<'a>(
         colors.status_bar_background().pixel,
         colors.shortcut_background().pixel,
     ];
+    let mut v = heapless::Vec::new();
     for pix in colors_needing_gcs {
-        let res = create_background_gc(call_wrapper, screen.root, pix)?;
-        map.insert(pix, res).expect("Undersize gc map");
+        push_heapless!(v, create_background_gc(call_wrapper, screen.root, pix)?.1)?;
     }
 
-    Ok(map)
+    Ok(v)
 }
 fn create_background_gc(
     call_wrapper: &mut CallWrapper,

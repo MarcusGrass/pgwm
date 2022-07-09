@@ -494,7 +494,7 @@ source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=4b0f0e3516100666d18
 [[package]]
 name = "x11rb"
 version = "0.10.0"
-source = "git+https://github.com/MarcusGrass/x11rb?branch=master#10d5f0c5b2960abb475da391d3f9b4bd11e09396"
+source = "git+https://github.com/MarcusGrass/x11rb?branch=master#668b463fb6676c2508c78f5e8fdc435dbf04a057"
 dependencies = [
  "heapless",
  "nix",

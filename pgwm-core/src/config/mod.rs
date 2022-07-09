@@ -438,7 +438,7 @@ impl Fonts {
     #[must_use]
     pub fn from_fallback(fallback: FontCfg) -> Self {
         Self {
-            fallback: None,
+            fallback: Some(fallback.clone()),
             workspace_section: vec![fallback.clone()],
             window_name_display_section: vec![fallback.clone()],
             #[cfg(feature = "status-bar")]
