@@ -3,20 +3,19 @@ use crate::config::{DefaultDraw, TilingModifiers, APPLICATION_WINDOW_LIMIT, WS_W
 use crate::error::Result;
 use crate::geometry::draw::{Mode, OldDrawMode};
 use crate::geometry::layout::Layout;
-use crate::push_heapless;
+use crate::state::properties::WindowProperties;
 use crate::util::vec_ops::push_to_front;
-use heapless::FnvIndexMap;
-use std::collections::HashMap;
 use x11rb::protocol::xproto::Window;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Workspaces {
     // Hot read
     spaces: Vec<Workspace>,
     // Hot on read/write
-    win_to_ws: FnvIndexMap<Window, usize, APPLICATION_WINDOW_LIMIT>,
+    win_to_ws: smallmap::Map<Window, usize>,
     // Hot read
-    name_to_ws: HashMap<String, usize>,
+    name_to_ws: smallmap::Map<String, usize>,
     base_tiling_modifiers: TilingModifiers,
 }
 
@@ -26,7 +25,7 @@ impl Workspaces {
         tiling_modifiers: TilingModifiers,
     ) -> Result<Self> {
         let mut v = Vec::<Workspace>::new();
-        let mut name_to_ws = HashMap::new();
+        let mut name_to_ws = smallmap::Map::new();
         for (i, ws) in init_workspaces.iter().enumerate() {
             v.push(Workspace {
                 draw_mode: match ws.default_draw {
@@ -44,7 +43,7 @@ impl Workspaces {
         }
         Ok(Workspaces {
             spaces: v,
-            win_to_ws: FnvIndexMap::new(),
+            win_to_ws: smallmap::Map::new(),
             name_to_ws,
             base_tiling_modifiers: tiling_modifiers,
         })
@@ -55,17 +54,11 @@ impl Workspaces {
         self.win_to_ws.keys().copied().collect()
     }
 
-    #[must_use]
-    pub fn get_all_windows_in_ws(
+    pub fn iter_all_managed_windows_in_ws(
         &self,
         ws_ind: usize,
-    ) -> heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT> {
-        self.spaces[ws_ind]
-            .get_all_windows()
-            .iter()
-            .copied()
-            .copied()
-            .collect()
+    ) -> impl Iterator<Item = &ManagedWindow> {
+        self.spaces[ws_ind].iter_all_windows()
     }
 
     #[must_use]
@@ -79,84 +72,82 @@ impl Workspaces {
     }
 
     #[must_use]
-    pub fn get_managed_win(&self, window: Window) -> Option<ManagedWindow> {
+    pub fn get_managed_win(&self, window: Window) -> Option<&ManagedWindow> {
         self.win_to_ws
             .get(&window)
             .and_then(|ws_ind| self.spaces[*ws_ind].find_managed_window(window))
     }
 
-    pub fn update_size_modifier(&mut self, window: Window, resize: f32) -> Result<bool> {
+    #[must_use]
+    pub fn get_managed_win_mut(&mut self, window: Window) -> Option<&mut ManagedWindow> {
         self.win_to_ws
-            .get(&window)
-            .map(|ws_ind| {
-                let ws = &mut self.spaces[*ws_ind];
-                let tiled = ws.get_all_tiled()?;
-                if let Some(index) = tiled.iter().position(|ch| ch.window == window) {
-                    match ws.draw_mode {
-                        Mode::Tiled(Layout::LeftLeader) => {
-                            if index == 0 {
-                                ws.tiling_modifiers.left_leader =
-                                    resize_safe(ws.tiling_modifiers.left_leader, resize);
-                                Ok(true)
-                            } else {
-                                ws.tiling_modifiers.vertically_tiled[index - 1] = resize_safe(
-                                    ws.tiling_modifiers.vertically_tiled[index - 1],
-                                    resize,
-                                );
-                                Ok(true)
-                            }
-                        }
-                        Mode::Tiled(Layout::CenterLeader) => {
-                            if index == 0 {
-                                ws.tiling_modifiers.center_leader =
-                                    resize_safe(ws.tiling_modifiers.center_leader, resize);
-                                Ok(true)
-                            } else {
-                                ws.tiling_modifiers.vertically_tiled[index - 1] = resize_safe(
-                                    ws.tiling_modifiers.vertically_tiled[index - 1],
-                                    resize,
-                                );
-                                Ok(true)
-                            }
-                        }
-                        _ => Ok(false),
-                    }
-                } else {
-                    Ok(false)
-                }
-            })
-            .unwrap_or(Ok(false))
+            .get_mut(&window)
+            .and_then(|ws_ind| self.spaces[*ws_ind].find_managed_window_mut(window))
+    }
+
+    pub fn update_size_modifier(&mut self, window: Window, resize: f32) -> bool {
+        self.win_to_ws.get(&window).map_or(false, |ws_ind| {
+            let ws = &mut self.spaces[*ws_ind];
+            ws.resize_children(window, resize)
+        })
     }
 
     pub fn clear_size_modifiers(&mut self, ws_ind: usize) {
         self.spaces[ws_ind].tiling_modifiers = self.base_tiling_modifiers.clone();
     }
 
-    pub fn unset_fullscreened(&mut self, ws_ind: usize) -> bool {
+    pub fn unset_fullscreened(&mut self, ws_ind: usize) -> Option<Window> {
         let ws = &mut self.spaces[ws_ind];
         let dm = ws.draw_mode;
-        if let Mode::Fullscreen { last_draw_mode, .. } = dm {
+        if let Mode::Fullscreen {
+            last_draw_mode,
+            window,
+        } = dm
+        {
             ws.draw_mode = last_draw_mode.to_draw_mode();
-            return true;
+            return Some(window);
         }
-        false
+        None
     }
 
-    pub fn set_fullscreened(&mut self, ws_ind: usize, window: Window) -> Result<()> {
+    pub fn set_fullscreened(&mut self, ws_ind: usize, window: Window) -> Result<Option<Window>> {
         let ws = &mut self.spaces[ws_ind];
         let dm = ws.draw_mode;
-        if !matches!(dm, Mode::Fullscreen { .. }) {
-            self.spaces[ws_ind].draw_mode = Mode::Fullscreen {
-                window,
-                last_draw_mode: OldDrawMode::from_draw_mode(dm)?,
-            };
-        }
-        Ok(())
+        let (new_mode, old_fullscreen) = match dm {
+            Mode::Tiled(_) | Mode::Tabbed(_) => (
+                Mode::Fullscreen {
+                    window,
+                    last_draw_mode: OldDrawMode::from_draw_mode(dm)?,
+                },
+                None,
+            ),
+            Mode::Fullscreen {
+                window: old_win,
+                last_draw_mode,
+            } => {
+                if old_win == window {
+                    (dm, None)
+                } else {
+                    (
+                        Mode::Fullscreen {
+                            window,
+                            last_draw_mode,
+                        },
+                        Some(old_win),
+                    )
+                }
+            }
+        };
+        self.spaces[ws_ind].draw_mode = new_mode;
+        Ok(old_fullscreen)
     }
 
     #[must_use]
     pub fn get_wants_focus_workspaces(&self) -> Vec<bool> {
-        self.spaces.iter().map(Workspace::any_wants_focus).collect()
+        self.spaces
+            .iter()
+            .map(|ws| ws.iter_all_windows().any(|ch| ch.wants_focus))
+            .collect()
     }
 
     pub fn set_wants_focus(&mut self, window: Window, wants_focus: bool) -> Option<(usize, bool)> {
@@ -197,8 +188,7 @@ impl Workspaces {
     pub fn switch_tab_focus_window(&mut self, num: usize, window: Window) -> Result<Option<bool>> {
         let ws = &mut self.spaces[num];
         if let Mode::Tabbed(_) = ws.draw_mode {
-            let children = ws.get_all_tiled()?;
-            if let Some(pos) = children.iter().position(|ch| ch.window == window) {
+            if let Some(pos) = ws.tiling_index_of(window) {
                 let new = Mode::Tabbed(pos);
                 let changed = ws.draw_mode != new;
                 ws.draw_mode = new;
@@ -216,7 +206,20 @@ impl Workspaces {
     }
 
     pub fn toggle_floating(&mut self, window: Window, num: usize, floating: ArrangeKind) -> bool {
-        self.spaces[num].toggle_float(window, floating)
+        if let Some(mw) = self.spaces[num]
+            .iter_all_windows_mut()
+            .find(|mw| mw.window == window)
+        {
+            if mw.arrange == floating {
+                false
+            } else {
+                crate::debug!("Floating {}", mw.window);
+                mw.arrange = floating;
+                true
+            }
+        } else {
+            false
+        }
     }
 
     pub fn add_child_to_ws(
@@ -225,11 +228,10 @@ impl Workspaces {
         num: usize,
         arrange: ArrangeKind,
         focus_style: FocusStyle,
+        properties: &WindowProperties,
     ) -> Result<()> {
-        self.win_to_ws
-            .insert(window, num)
-            .expect("Map capacity overflow, increase configured capacity to have more windows");
-        self.spaces[num].add_child(window, arrange, focus_style)
+        self.win_to_ws.insert(window, num);
+        self.spaces[num].add_child(window, arrange, focus_style, properties.clone())
     }
 
     pub fn add_attached(
@@ -238,12 +240,17 @@ impl Workspaces {
         attached: Window,
         arrange: ArrangeKind,
         focus_style: FocusStyle,
+        properties: &WindowProperties,
     ) -> Result<bool> {
         if let Some(ws) = self.win_to_ws.get(&parent).copied() {
-            self.win_to_ws
-                .insert(attached, ws)
-                .expect("Map capacity overflow, increase configured capacity to have more windows");
-            self.spaces[ws].add_attached(parent, attached, arrange, focus_style)?;
+            self.win_to_ws.insert(attached, ws);
+            self.spaces[ws].add_attached(
+                parent,
+                attached,
+                arrange,
+                focus_style,
+                properties.clone(),
+            )?;
             Ok(true)
         } else {
             Ok(false)
@@ -251,24 +258,13 @@ impl Workspaces {
     }
 
     #[must_use]
-    pub fn find_all_attached(
+    pub fn find_all_attached_managed(
         &self,
         parent: Window,
     ) -> Option<&heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>> {
         self.win_to_ws
             .get(&parent)
-            .and_then(|ws| self.spaces[*ws].find_all_attached(parent))
-    }
-
-    #[must_use]
-    pub fn find_managed_parent(&self, child: Window) -> Option<ManagedWindow> {
-        self.win_to_ws.get(&child).and_then(|ws_ind| {
-            self.spaces[*ws_ind]
-                .children
-                .iter()
-                .find(|ch| ch.attached.iter().any(|mw| mw.window == child))
-                .map(|ch| ch.managed)
-        })
+            .and_then(|ws| self.spaces[*ws].find_all_attached_managed(parent))
     }
 
     pub fn un_float_window(&mut self, window: Window) -> Option<bool> {
@@ -319,19 +315,22 @@ impl Workspaces {
         }
     }
 
-    pub fn find_first_tiled(&self, num: usize) -> Result<Option<ManagedWindow>> {
-        self.spaces[num].get_all_tiled().map(|children| {
-            children
-                .iter()
-                .find_map(|ch| (ch.arrange == ArrangeKind::NoFloat).then(|| *ch))
-        })
+    #[must_use]
+    pub fn find_first_tiled(&self, num: usize) -> Option<Window> {
+        self.spaces[num]
+            .iter_all_windows()
+            .find_map(|ch| (ch.arrange == ArrangeKind::NoFloat).then(|| ch.window))
     }
 
+    #[must_use]
     pub fn get_all_tiled_windows(
         &self,
         num: usize,
-    ) -> Result<heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>> {
-        self.spaces[num].get_all_tiled()
+    ) -> heapless::Vec<&ManagedWindow, WS_WINDOW_LIMIT> {
+        self.spaces[num]
+            .iter_all_windows()
+            .filter(|mw| mw.arrange == ArrangeKind::NoFloat)
+            .collect()
     }
 
     pub fn tab_focus_window(&mut self, window: Window) -> bool {
@@ -341,7 +340,7 @@ impl Workspaces {
     }
 
     #[must_use]
-    pub fn next_window(&self, cur: Window) -> Option<ManagedWindow> {
+    pub fn next_window(&self, cur: Window) -> Option<&ManagedWindow> {
         self.win_to_ws
             .get(&cur)
             .copied()
@@ -349,7 +348,7 @@ impl Workspaces {
     }
 
     #[must_use]
-    pub fn prev_window(&self, cur: Window) -> Option<ManagedWindow> {
+    pub fn prev_window(&self, cur: Window) -> Option<&ManagedWindow> {
         self.win_to_ws
             .get(&cur)
             .copied()
@@ -375,22 +374,24 @@ impl Workspaces {
         if let Some(mut mw) = self
             .win_to_ws
             .get(&win)
-            .and_then(|ind| self.spaces[*ind].find_managed_window(win))
+            .and_then(|ind| self.spaces[*ind].find_managed_window_mut(win))
         {
             mw.focus_style = focus_style;
         }
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub enum DeleteResult {
     TiledTopLevel(ManagedWindow),
     FloatingTopLevel(ManagedWindow),
-    AttachedFloating(ManagedWindow),
-    AttachedTiled(ManagedWindow),
+    AttachedFloating((Window, ManagedWindow)),
+    AttachedTiled((Window, ManagedWindow)),
     None,
 }
-#[derive(Clone, Debug, PartialEq)]
+
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Workspace {
     pub draw_mode: Mode,
     pub name: String,
@@ -406,6 +407,7 @@ impl Workspace {
         window: Window,
         arrange: ArrangeKind,
         focus_style: FocusStyle,
+        properties: WindowProperties,
     ) -> Result<()> {
         crate::debug!("Adding child to ws: win = {} {:?}", window, arrange,);
         for child in &mut self.children {
@@ -422,34 +424,62 @@ impl Workspace {
                     wants_focus: false,
                     arrange,
                     focus_style,
+                    properties,
                 },
                 attached: heapless::Vec::new(),
             },
         )
     }
 
-    fn get_all_windows(&self) -> heapless::Vec<&ManagedWindow, { WS_WINDOW_LIMIT }> {
+    fn iter_all_windows(&self) -> impl Iterator<Item = &ManagedWindow> {
         self.children
             .iter()
             .flat_map(|ch| std::iter::once(&ch.managed).chain(ch.attached.iter()))
-            .collect()
     }
 
-    fn get_all_windows_mut(&mut self) -> heapless::Vec<&mut ManagedWindow, { WS_WINDOW_LIMIT }> {
+    fn iter_all_windows_mut(&mut self) -> impl Iterator<Item = &mut ManagedWindow> {
         self.children
             .iter_mut()
             .flat_map(|ch| std::iter::once(&mut ch.managed).chain(ch.attached.iter_mut()))
-            .collect()
     }
 
-    fn get_all_tiled(&self) -> Result<heapless::Vec<ManagedWindow, { WS_WINDOW_LIMIT }>> {
-        let mut smol = heapless::Vec::new();
-        for child in self.get_all_windows() {
-            if child.arrange == ArrangeKind::NoFloat {
-                push_heapless!(smol, *child)?;
+    fn resize_children(&mut self, window: Window, resize: f32) -> bool {
+        let ind = self.tiling_index_of(window);
+        if let Some(index) = ind {
+            match self.draw_mode {
+                Mode::Tiled(Layout::LeftLeader) => {
+                    if index == 0 {
+                        self.tiling_modifiers.left_leader =
+                            resize_safe(self.tiling_modifiers.left_leader, resize);
+                        true
+                    } else {
+                        self.tiling_modifiers.vertically_tiled[index - 1] =
+                            resize_safe(self.tiling_modifiers.vertically_tiled[index - 1], resize);
+                        true
+                    }
+                }
+                Mode::Tiled(Layout::CenterLeader) => {
+                    if index == 0 {
+                        self.tiling_modifiers.center_leader =
+                            resize_safe(self.tiling_modifiers.center_leader, resize);
+                        true
+                    } else {
+                        self.tiling_modifiers.vertically_tiled[index - 1] =
+                            resize_safe(self.tiling_modifiers.vertically_tiled[index - 1], resize);
+                        true
+                    }
+                }
+                _ => false,
             }
+        } else {
+            false
         }
-        Ok(smol)
+    }
+
+    fn tiling_index_of(&self, window: Window) -> Option<usize> {
+        self.iter_all_windows()
+            .filter(|mw| mw.arrange == ArrangeKind::NoFloat)
+            .position(|w| w.window == window)
     }
 
     fn add_attached(
@@ -458,6 +488,7 @@ impl Workspace {
         attached: Window,
         arrange: ArrangeKind,
         focus_style: FocusStyle,
+        properties: WindowProperties,
     ) -> Result<()> {
         if let Some(ind) = self
             .children
@@ -478,13 +509,14 @@ impl Workspace {
                     wants_focus: false,
                     arrange,
                     focus_style,
+                    properties,
                 },
             )?;
         }
         Ok(())
     }
 
-    fn find_all_attached(
+    fn find_all_attached_managed(
         &self,
         parent_window: Window,
     ) -> Option<&heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>> {
@@ -495,7 +527,7 @@ impl Workspace {
     }
 
     fn un_float(&mut self, window: Window) -> Option<bool> {
-        self.get_all_windows_mut().iter_mut().find_map(|mw| {
+        self.iter_all_windows_mut().find_map(|mw| {
             (mw.window == window).then(|| {
                 if mw.arrange == ArrangeKind::NoFloat {
                     false
@@ -507,16 +539,22 @@ impl Workspace {
         })
     }
 
-    fn find_managed_window(&self, window: Window) -> Option<ManagedWindow> {
+    fn find_managed_window(&self, window: Window) -> Option<&ManagedWindow> {
         self.children.iter().find_map(|ch| {
             if ch.managed.window == window {
-                Some(ch.managed)
+                Some(&ch.managed)
             } else {
-                ch.attached
-                    .iter()
-                    .filter(|tr| tr.window == window)
-                    .copied()
-                    .next()
+                ch.attached.iter().find(|tr| tr.window == window)
+            }
+        })
+    }
+
+    fn find_managed_window_mut(&mut self, window: Window) -> Option<&mut ManagedWindow> {
+        self.children.iter_mut().find_map(|ch| {
+            if ch.managed.window == window {
+                Some(&mut ch.managed)
+            } else {
+                ch.attached.iter_mut().find(|tr| tr.window == window)
             }
         })
     }
@@ -539,9 +577,9 @@ impl Workspace {
                     let mw = crate::util::vec_ops::remove(&mut child.attached, ind);
                     crate::debug!("Removed attached from ws {:?}", child);
                     return if mw.arrange == ArrangeKind::NoFloat {
-                        DeleteResult::AttachedTiled(child.managed)
+                        DeleteResult::AttachedTiled((child.managed.window, mw))
                     } else {
-                        DeleteResult::AttachedFloating(child.managed)
+                        DeleteResult::AttachedFloating((child.managed.window, mw))
                     };
                 }
             }
@@ -550,28 +588,8 @@ impl Workspace {
     }
 
     fn is_floating(&self, window: Window) -> bool {
-        self.get_all_windows()
-            .iter()
+        self.iter_all_windows()
             .any(|ch| ch.window == window && ch.arrange != ArrangeKind::NoFloat)
-    }
-
-    fn toggle_float(&mut self, window: Window, floating: ArrangeKind) -> bool {
-        let mut all_children = self.get_all_windows_mut();
-        if let Some(ind) = all_children.iter().position(|ch| ch.window == window) {
-            if all_children[ind].arrange == floating {
-                false
-            } else {
-                crate::debug!("Floating {}", ind);
-                all_children[ind].arrange = floating;
-                true
-            }
-        } else {
-            false
-        }
-    }
-
-    fn any_wants_focus(&self) -> bool {
-        self.get_all_windows().iter().any(|win| win.wants_focus)
     }
 
     fn set_wants_focus(&mut self, window: Window, wants_focus: bool) -> Option<bool> {
@@ -602,8 +620,10 @@ impl Workspace {
         }
     }
 
-    fn find_next(&self, cur: Window) -> Option<ManagedWindow> {
-        let all = self.get_all_windows();
+    fn find_next(&self, cur: Window) -> Option<&ManagedWindow> {
+        let all = self
+            .iter_all_windows()
+            .collect::<heapless::Vec<&ManagedWindow, WS_WINDOW_LIMIT>>();
         let len = all.len();
         if len == 1 {
             return None;
@@ -612,11 +632,12 @@ impl Workspace {
             .position(|ch| ch.window == cur)
             .and_then(|ind| all.get((ind + 1) % len))
             .copied()
-            .copied()
     }
 
-    fn find_prev(&self, cur: Window) -> Option<ManagedWindow> {
-        let all = self.get_all_windows();
+    fn find_prev(&self, cur: Window) -> Option<&ManagedWindow> {
+        let all = self
+            .iter_all_windows()
+            .collect::<heapless::Vec<&ManagedWindow, WS_WINDOW_LIMIT>>();
         let len = all.len();
         if len == 1 {
             return None;
@@ -624,7 +645,6 @@ impl Workspace {
         all.iter()
             .position(|ch| ch.window == cur)
             .and_then(|ind| all.get((ind as i16 - 1).rem_euclid(len as i16) as usize))
-            .copied()
             .copied()
     }
 
@@ -643,13 +663,13 @@ impl Workspace {
     }
 
     fn num_tiled(&self) -> usize {
-        self.get_all_windows()
-            .iter()
+        self.iter_all_windows()
             .filter(|ch| ch.arrange == ArrangeKind::NoFloat)
             .count()
     }
 }
 
+#[inline]
 fn resize_safe(old: f32, diff: f32) -> f32 {
     let new = old + diff;
     if new <= 0.0 {
@@ -659,7 +679,8 @@ fn resize_safe(old: f32, diff: f32) -> f32 {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Child {
     pub managed: ManagedWindow,
     // Attached for some reason, window group, transient for, etc
@@ -672,15 +693,25 @@ pub enum ArrangeKind {
     // This state is kind of error prone, just used for knowing whether or not to draw tiled
     FloatingActive,
     FloatingInactive(f32, f32),
-    FloatOnTop(Window),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ManagedWindow {
     pub window: Window,
     pub wants_focus: bool,
     pub arrange: ArrangeKind,
     pub focus_style: FocusStyle,
+    pub properties: WindowProperties,
+}
+
+#[cfg(test)]
+impl PartialEq for ManagedWindow {
+    fn eq(&self, other: &Self) -> bool {
+        self.window == other.window
+            && self.wants_focus == other.wants_focus
+            && self.arrange == other.arrange
+            && self.focus_style == other.focus_style
+    }
 }
 
 /// [docs of different input focus styles ](https://tronche.com/gui/x/icccm/sec-4.html#s-4.1.7)
@@ -688,18 +719,24 @@ pub struct ManagedWindow {
 pub enum FocusStyle {
     NoInput,
     Passive,
-    LocallyActive { group_leader: Option<Window> },
+    LocallyActive,
     GloballyActive,
 }
 
 impl ManagedWindow {
     #[must_use]
-    pub fn new(window: Window, arrange: ArrangeKind, focus_style: FocusStyle) -> Self {
+    pub fn new(
+        window: Window,
+        arrange: ArrangeKind,
+        focus_style: FocusStyle,
+        properties: WindowProperties,
+    ) -> Self {
         ManagedWindow {
             window,
             wants_focus: false,
             arrange,
             focus_style,
+            properties,
         }
     }
 }
@@ -709,7 +746,24 @@ mod tests {
     use crate::config::Cfg;
     use crate::geometry::draw::Mode;
     use crate::geometry::layout::Layout;
+    use crate::state::properties::{WindowProperties, WmName};
     use crate::state::workspace::{ArrangeKind, DeleteResult, FocusStyle, Workspaces};
+
+    fn default_properties() -> WindowProperties {
+        WindowProperties {
+            wm_state: None,
+            net_wm_state: crate::state::properties::NetWmState::default(),
+            hints: None,
+            size_hints: None,
+            window_types: heapless::Vec::default(),
+            leader: None,
+            pid: None,
+            class: heapless::Vec::default(),
+            protocols: heapless::Vec::default(),
+            name: WmName::NetWmName(heapless::String::default()),
+            transient_for: None,
+        }
+    }
 
     fn empty_workspaces() -> Workspaces {
         let cfg = Cfg::default();
@@ -721,8 +775,8 @@ mod tests {
         let workspaces = empty_workspaces();
         for i in 0..9 {
             assert_eq!(0, workspaces.get_all_managed_windows().len());
-            assert_eq!(0, workspaces.get_all_windows_in_ws(0).len());
-            assert_eq!(0, workspaces.get_all_tiled_windows(i).unwrap().len());
+            assert_eq!(0, workspaces.iter_all_managed_windows_in_ws(0).count());
+            assert_eq!(0, workspaces.get_all_tiled_windows(i).len());
         }
     }
 
@@ -730,34 +784,47 @@ mod tests {
     fn map_doesnt_leak() {
         let mut workspaces = empty_workspaces();
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         assert!(workspaces.get_managed_win(0).is_some());
         assert!(workspaces.get_managed_win(1).is_none());
         assert!(workspaces.get_managed_win(2).is_none());
         assert!(workspaces.get_managed_win(3).is_none());
         assert_eq!(1, workspaces.get_all_managed_windows().len());
-        assert_eq!(1, workspaces.get_all_windows_in_ws(0).len());
-        assert_eq!(1, workspaces.get_all_tiled_windows(0).unwrap().len());
-        assert!(workspaces.find_all_attached(0).is_none());
+        assert_eq!(1, workspaces.iter_all_managed_windows_in_ws(0).count());
+        assert_eq!(1, workspaces.get_all_tiled_windows(0).len());
+        assert!(workspaces.find_all_attached_managed(0).is_none());
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::FloatingActive, FocusStyle::Passive)
+            .add_child_to_ws(
+                1,
+                0,
+                ArrangeKind::FloatingActive,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         assert!(workspaces.get_managed_win(0).is_some());
         assert!(workspaces.get_managed_win(1).is_some());
         assert!(workspaces.get_managed_win(2).is_none());
         assert!(workspaces.get_managed_win(3).is_none());
         assert_eq!(2, workspaces.get_all_managed_windows().len());
-        assert_eq!(2, workspaces.get_all_windows_in_ws(0).len());
-        assert_eq!(1, workspaces.get_all_tiled_windows(0).unwrap().len());
-        assert!(workspaces.find_all_attached(0).is_none());
+        assert_eq!(2, workspaces.iter_all_managed_windows_in_ws(0).count());
+        assert_eq!(1, workspaces.get_all_tiled_windows(0).len());
+        assert!(workspaces.find_all_attached_managed(0).is_none());
 
         assert!(workspaces
             .add_attached(
                 0,
                 2,
                 ArrangeKind::FloatingInactive(0.0, 0.0),
-                FocusStyle::Passive
+                FocusStyle::Passive,
+                &default_properties()
             )
             .unwrap());
         assert!(workspaces.get_managed_win(0).is_some());
@@ -765,12 +832,18 @@ mod tests {
         assert!(workspaces.get_managed_win(2).is_some());
         assert!(workspaces.get_managed_win(3).is_none());
         assert_eq!(3, workspaces.get_all_managed_windows().len());
-        assert_eq!(3, workspaces.get_all_windows_in_ws(0).len());
-        assert_eq!(1, workspaces.get_all_tiled_windows(0).unwrap().len());
-        assert_eq!(1, workspaces.find_all_attached(0).unwrap().len());
+        assert_eq!(3, workspaces.iter_all_managed_windows_in_ws(0).count());
+        assert_eq!(1, workspaces.get_all_tiled_windows(0).len());
+        assert_eq!(1, workspaces.find_all_attached_managed(0).unwrap().len());
 
         workspaces
-            .add_child_to_ws(3, 1, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                3,
+                1,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
 
         assert!(workspaces.get_managed_win(0).is_some());
@@ -778,11 +851,11 @@ mod tests {
         assert!(workspaces.get_managed_win(2).is_some());
         assert!(workspaces.get_managed_win(3).is_some());
         assert_eq!(4, workspaces.get_all_managed_windows().len());
-        assert_eq!(3, workspaces.get_all_windows_in_ws(0).len());
-        assert_eq!(1, workspaces.get_all_windows_in_ws(1).len());
-        assert_eq!(1, workspaces.get_all_tiled_windows(1).unwrap().len());
-        assert_eq!(1, workspaces.get_all_tiled_windows(0).unwrap().len());
-        assert_eq!(1, workspaces.find_all_attached(0).unwrap().len());
+        assert_eq!(3, workspaces.iter_all_managed_windows_in_ws(0).count());
+        assert_eq!(1, workspaces.iter_all_managed_windows_in_ws(1).count());
+        assert_eq!(1, workspaces.get_all_tiled_windows(1).len());
+        assert_eq!(1, workspaces.get_all_tiled_windows(0).len());
+        assert_eq!(1, workspaces.find_all_attached_managed(0).unwrap().len());
 
         assert!(matches!(
             workspaces.delete_child_from_ws(0),
@@ -794,10 +867,10 @@ mod tests {
         assert!(workspaces.get_managed_win(2).is_none());
         assert!(workspaces.get_managed_win(3).is_some());
         assert_eq!(2, workspaces.get_all_managed_windows().len());
-        assert_eq!(1, workspaces.get_all_windows_in_ws(0).len());
-        assert_eq!(1, workspaces.get_all_windows_in_ws(1).len());
-        assert_eq!(1, workspaces.get_all_tiled_windows(1).unwrap().len());
-        assert_eq!(0, workspaces.get_all_tiled_windows(0).unwrap().len());
+        assert_eq!(1, workspaces.iter_all_managed_windows_in_ws(0).count());
+        assert_eq!(1, workspaces.iter_all_managed_windows_in_ws(1).count());
+        assert_eq!(1, workspaces.get_all_tiled_windows(1).len());
+        assert_eq!(0, workspaces.get_all_tiled_windows(0).len());
 
         assert!(matches!(
             workspaces.delete_child_from_ws(1),
@@ -808,10 +881,10 @@ mod tests {
         assert!(workspaces.get_managed_win(2).is_none());
         assert!(workspaces.get_managed_win(3).is_some());
         assert_eq!(1, workspaces.get_all_managed_windows().len());
-        assert_eq!(0, workspaces.get_all_windows_in_ws(0).len());
-        assert_eq!(1, workspaces.get_all_windows_in_ws(1).len());
-        assert_eq!(1, workspaces.get_all_tiled_windows(1).unwrap().len());
-        assert_eq!(0, workspaces.get_all_tiled_windows(0).unwrap().len());
+        assert_eq!(0, workspaces.iter_all_managed_windows_in_ws(0).count());
+        assert_eq!(1, workspaces.iter_all_managed_windows_in_ws(1).count());
+        assert_eq!(1, workspaces.get_all_tiled_windows(1).len());
+        assert_eq!(0, workspaces.get_all_tiled_windows(0).len());
 
         assert!(matches!(
             workspaces.delete_child_from_ws(3),
@@ -822,10 +895,10 @@ mod tests {
         assert!(workspaces.get_managed_win(2).is_none());
         assert!(workspaces.get_managed_win(3).is_none());
         assert_eq!(0, workspaces.get_all_managed_windows().len());
-        assert_eq!(0, workspaces.get_all_windows_in_ws(0).len());
-        assert_eq!(0, workspaces.get_all_windows_in_ws(1).len());
-        assert_eq!(0, workspaces.get_all_tiled_windows(1).unwrap().len());
-        assert_eq!(0, workspaces.get_all_tiled_windows(0).unwrap().len());
+        assert_eq!(0, workspaces.iter_all_managed_windows_in_ws(0).count());
+        assert_eq!(0, workspaces.iter_all_managed_windows_in_ws(1).count());
+        assert_eq!(0, workspaces.get_all_tiled_windows(1).len());
+        assert_eq!(0, workspaces.get_all_tiled_windows(0).len());
         assert_eq!(workspaces, empty_workspaces());
     }
 
@@ -834,7 +907,13 @@ mod tests {
         let mut workspaces = empty_workspaces();
         assert!(workspaces.find_ws_containing_window(0).is_none());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         assert_eq!(0, workspaces.find_ws_containing_window(0).unwrap());
     }
@@ -882,7 +961,7 @@ mod tests {
     #[test]
     fn can_find_first_tiled() {
         let mut workspaces = empty_workspaces();
-        assert!(workspaces.find_first_tiled(0).unwrap().is_none());
+        assert!(workspaces.find_first_tiled(0).is_none());
         assert_eq!(workspaces, empty_workspaces());
         workspaces
             .add_child_to_ws(
@@ -890,14 +969,21 @@ mod tests {
                 0,
                 ArrangeKind::FloatingInactive(0.0, 0.0),
                 FocusStyle::Passive,
+                &default_properties(),
             )
             .unwrap();
-        assert!(workspaces.find_first_tiled(0).unwrap().is_none());
+        assert!(workspaces.find_first_tiled(0).is_none());
         assert_ne!(workspaces, empty_workspaces());
         workspaces
-            .add_attached(0, 1, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_attached(
+                0,
+                1,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
-        assert!(workspaces.find_first_tiled(0).unwrap().is_some());
+        assert!(workspaces.find_first_tiled(0).is_some());
         assert!(matches!(
             workspaces.delete_child_from_ws(0),
             DeleteResult::FloatingTopLevel(_)
@@ -912,15 +998,27 @@ mod tests {
 
         workspaces.clear_size_modifiers(0);
         assert_eq!(workspaces, empty_workspaces());
-        assert!(!workspaces.update_size_modifier(1, 0.1).unwrap());
+        assert!(!workspaces.update_size_modifier(1, 0.1));
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                1,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         let base = workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0];
-        assert!(workspaces.update_size_modifier(0, 0.1).unwrap());
+        assert!(workspaces.update_size_modifier(0, 0.1));
         assert_eq!(
             base + 0.1,
             workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0]
@@ -939,22 +1037,34 @@ mod tests {
 
         workspaces.clear_size_modifiers(0);
         assert_eq!(workspaces, empty_workspaces());
-        assert!(!workspaces.update_size_modifier(1, 0.1).unwrap());
+        assert!(!workspaces.update_size_modifier(1, 0.1));
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                1,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         let base = workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0];
-        assert!(workspaces.update_size_modifier(0, 0.1).unwrap());
+        assert!(workspaces.update_size_modifier(0, 0.1));
         assert_eq!(
             base + 0.1,
             workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0]
         );
         let base = workspaces.get_ws(0).tiling_modifiers.vertically_tiled[0];
         // Would go past 0
-        assert!(workspaces.update_size_modifier(0, -10.0).unwrap());
+        assert!(workspaces.update_size_modifier(0, -10.0));
         // No change
         assert_eq!(
             base,
@@ -973,7 +1083,13 @@ mod tests {
             .is_none());
         assert_eq!(workspaces, empty_workspaces());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         assert!(workspaces
             .set_wants_focus(0, true)
@@ -998,17 +1114,35 @@ mod tests {
         assert!(workspaces.next_window(0).is_none());
         assert!(workspaces.prev_window(0).is_none());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         assert!(workspaces.next_window(0).is_none());
         assert!(workspaces.prev_window(0).is_none());
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::FloatingActive, FocusStyle::Passive)
+            .add_child_to_ws(
+                1,
+                0,
+                ArrangeKind::FloatingActive,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         assert_eq!(Some(0), workspaces.next_window(1).map(|mw| mw.window));
         assert_eq!(Some(0), workspaces.prev_window(1).map(|mw| mw.window));
         workspaces
-            .add_child_to_ws(2, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                2,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         // Reverse insertion order
         assert_eq!(Some(1), workspaces.next_window(2).map(|mw| mw.window));
@@ -1029,13 +1163,25 @@ mod tests {
         assert_eq!(Mode::Tabbed(0), workspaces.get_draw_mode(0));
 
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         workspaces.set_draw_mode(0, Mode::Tabbed(5));
         // Will return a draw_mode of 0 if OOB
         assert_eq!(Mode::Tabbed(0), workspaces.get_draw_mode(0));
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                1,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         // still oob...
         assert_eq!(Mode::Tabbed(0), workspaces.get_draw_mode(0));
@@ -1054,10 +1200,22 @@ mod tests {
         workspaces.set_draw_mode(0, Mode::Tabbed(0));
         assert!(workspaces.switch_tab_focus_window(0, 0).unwrap().is_none());
         workspaces
-            .add_child_to_ws(0, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                0,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         workspaces
-            .add_child_to_ws(1, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
+            .add_child_to_ws(
+                1,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &default_properties(),
+            )
             .unwrap();
         assert!(workspaces.switch_tab_focus_window(0, 5).unwrap().is_none());
         assert_eq!(Mode::Tabbed(0), workspaces.get_draw_mode(0));
@@ -1080,6 +1238,7 @@ mod tests {
                 0,
                 ArrangeKind::FloatingInactive(0.0, 0.0),
                 FocusStyle::Passive,
+                &default_properties(),
             )
             .unwrap();
         assert!(workspaces.is_managed_floating(0));

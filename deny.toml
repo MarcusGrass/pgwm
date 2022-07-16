@@ -17,8 +17,11 @@ ignore = []
 multiple-versions = "deny"
 deny = [
 ]
-
-skip = []
+skip = [
+    # Clash in build deps between heapless and smallmap
+    { name = "semver", version = "0.9.0" },
+    { name = "rustc_version", version = "0.2.3" },
+]
 
 [sources]
 allow-git = [

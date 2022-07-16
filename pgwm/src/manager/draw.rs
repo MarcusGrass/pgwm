@@ -1,7 +1,6 @@
 use crate::error::{Error, Result};
 use crate::manager::font::FontDrawer;
 use crate::x11::call_wrapper::CallWrapper;
-use crate::x11::cookies::FallbackNameConvertCookie;
 use pgwm_core::config::{Fonts, WM_NAME_LIMIT, WS_WINDOW_LIMIT};
 use pgwm_core::geometry::draw::{Mode, OldDrawMode};
 use pgwm_core::geometry::{layout::Layout, Dimensions};
@@ -59,39 +58,35 @@ impl<'a> Drawer<'a> {
         state: &mut State,
     ) -> Result<()> {
         let ws_ind = state.monitors[mon_ind].hosted_workspace;
-        let windows_in_ws = state.workspaces.get_all_windows_in_ws(ws_ind);
-        let mut tiled = heapless::Vec::<ManagedWindow, WS_WINDOW_LIMIT>::new();
-        let mut floating = heapless::Vec::<ManagedWindow, WS_WINDOW_LIMIT>::new();
-        for mw in windows_in_ws {
+        let mut tiled = heapless::Vec::<&ManagedWindow, WS_WINDOW_LIMIT>::new();
+        let mut floating = heapless::Vec::<(Window, ArrangeKind), WS_WINDOW_LIMIT>::new();
+        for mw in state.workspaces.iter_all_managed_windows_in_ws(ws_ind) {
             if mw.arrange == ArrangeKind::NoFloat {
                 push_heapless!(tiled, mw)?;
             } else {
-                push_heapless!(floating, mw)?;
+                push_heapless!(floating, (mw.window, mw.arrange))?;
             }
         }
-        self.draw(
-            call_wrapper,
-            mon_ind,
-            tiled
-                .iter()
-                .map(|win| Drawtarget {
-                    window: win.window,
-                    map: map_windows,
-                })
-                .collect(),
-            &tiled,
-            state,
-        )?;
+        let targets = tiled
+            .iter()
+            .map(|win| Drawtarget {
+                window: win.window,
+                map: map_windows,
+                name: win.properties.name.get_cloned(),
+            })
+            .collect();
+        drop(tiled);
+        self.draw(call_wrapper, mon_ind, targets, state)?;
 
         pgwm_core::debug!("Drawing {} floating on mon = {mon_ind}", floating.len());
-        for mw in floating {
-            if let ArrangeKind::FloatingInactive(rel_x, rel_y) = mw.arrange {
+        for (win, arrange) in floating {
+            if let ArrangeKind::FloatingInactive(rel_x, rel_y) = arrange {
                 let dimensions = state.monitors[mon_ind].dimensions;
                 let x = (dimensions.x as f32 + dimensions.width as f32 * rel_x) as i32;
                 let y = (dimensions.y as f32
                     + state.status_bar_height as f32
                     + dimensions.height as f32 * rel_y) as i32;
-                Self::move_floating(call_wrapper, mw.window, x, y, state)?;
+                Self::move_floating(call_wrapper, win, x, y, state)?;
             }
         }
         Ok(())
@@ -102,7 +97,6 @@ impl<'a> Drawer<'a> {
         call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         targets: heapless::Vec<Drawtarget, WS_WINDOW_LIMIT>,
-        windows: &heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>,
         state: &mut State,
     ) -> Result<()> {
         if targets.is_empty() {
@@ -113,15 +107,7 @@ impl<'a> Drawer<'a> {
         let draw_mode = state.workspaces.get_draw_mode(ws_ind);
         match draw_mode {
             Mode::Tiled(layout) => {
-                Self::draw_tiled(
-                    call_wrapper,
-                    mon_ind,
-                    ws_ind,
-                    windows,
-                    targets,
-                    layout,
-                    state,
-                )?;
+                Self::draw_tiled(call_wrapper, mon_ind, ws_ind, targets, layout, state)?;
             }
             Mode::Tabbed(target) => {
                 self.draw_tabbed(call_wrapper, mon_ind, targets, target, state)?;
@@ -134,15 +120,7 @@ impl<'a> Drawer<'a> {
                 // pretty inefficient to draw everything below but whatever
                 match last_draw_mode {
                     OldDrawMode::Tiled(layout) => {
-                        Self::draw_tiled(
-                            call_wrapper,
-                            mon_ind,
-                            ws_ind,
-                            windows,
-                            targets,
-                            layout,
-                            state,
-                        )?;
+                        Self::draw_tiled(call_wrapper, mon_ind, ws_ind, targets, layout, state)?;
                     }
                     OldDrawMode::Tabbed(target) => {
                         self.draw_tabbed(call_wrapper, mon_ind, targets, target, state)?;
@@ -164,12 +142,11 @@ impl<'a> Drawer<'a> {
         call_wrapper: &mut CallWrapper,
         mon_ind: usize,
         ws_ind: usize,
-        windows: &heapless::Vec<ManagedWindow, WS_WINDOW_LIMIT>,
         targets: heapless::Vec<Drawtarget, WS_WINDOW_LIMIT>,
         layout: Layout,
         state: &mut State,
     ) -> Result<()> {
-        pgwm_core::debug!("Drawing tiled {windows:?} on mon = {mon_ind}");
+        pgwm_core::debug!("Drawing tiled {targets:?} on mon = {mon_ind}");
         call_wrapper.send_unmap(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
         let mon_dimensions = state.monitors[mon_ind].dimensions;
         let tiling_modifiers = &state.workspaces.get_ws(ws_ind).tiling_modifiers;
@@ -184,12 +161,12 @@ impl<'a> Drawer<'a> {
                 0
             },
             true,
-            windows.len(),
+            targets.len(),
             tiling_modifiers.vertically_tiled.as_slice(),
             tiling_modifiers.left_leader,
             tiling_modifiers.center_leader,
         )?;
-        if dimensions.len() != windows.len() {
+        if dimensions.len() != targets.len() {
             return Err(Error::Tiling);
         }
         let mon_x = state.monitors[mon_ind].dimensions.x;
@@ -220,11 +197,6 @@ impl<'a> Drawer<'a> {
         target: usize,
         state: &mut State,
     ) -> Result<()> {
-        let names: heapless::Vec<Result<FallbackNameConvertCookie>, WS_WINDOW_LIMIT> = targets
-            .iter()
-            .map(|win| call_wrapper.get_name(win.window))
-            .collect();
-
         let dt = &targets[target];
         let win = dt.window;
         let mon = &state.monitors[mon_ind];
@@ -252,15 +224,10 @@ impl<'a> Drawer<'a> {
             }
         }
         call_wrapper.configure_window(win, new_win_dims, state.window_border_width, state)?;
-        let found_names = names
+        let found_names = targets
             .into_iter()
-            .map(|maybe_name_cookie| {
-                maybe_name_cookie
-                    .ok()
-                    .and_then(|cookie| cookie.await_name(call_wrapper.inner_mut()).ok().flatten())
-                    .unwrap_or_else(|| heapless::String::from("Unknown name"))
-            })
-            .collect::<Vec<heapless::String<WM_NAME_LIMIT>>>();
+            .map(|mw| mw.name)
+            .collect::<heapless::Vec<heapless::String<WM_NAME_LIMIT>, WS_WINDOW_LIMIT>>();
         self.draw_tab_bar(
             call_wrapper,
             mon_ind,
@@ -277,14 +244,15 @@ impl<'a> Drawer<'a> {
         state: &mut State,
     ) -> Result<()> {
         call_wrapper.send_unmap(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
-        state
+        for win in state
             .workspaces
-            .get_all_windows_in_ws(state.monitors[mon_ind].hosted_workspace)
-            .iter()
-            .try_for_each(|mw| {
-                call_wrapper.send_unmap(mw.window, state)?;
-                Ok::<_, Error>(())
-            })?;
+            .iter_all_managed_windows_in_ws(state.monitors[mon_ind].hosted_workspace)
+            .map(|mw| mw.window)
+            // Annoying having to collect after move but whatever
+            .collect::<heapless::Vec<Window, WS_WINDOW_LIMIT>>()
+        {
+            call_wrapper.send_unmap(win, state)?;
+        }
         Ok(())
     }
 
@@ -358,8 +326,9 @@ impl<'a> Drawer<'a> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone, Debug)]
 struct Drawtarget {
     window: Window,
     map: bool,
+    name: heapless::String<WM_NAME_LIMIT>,
 }
