@@ -1,4 +1,5 @@
 pub mod bar_geometry;
+pub mod properties;
 pub mod workspace;
 
 use crate::error::Result;
@@ -23,7 +24,7 @@ use crate::state::bar_geometry::BarGeometry;
 use crate::{
     colors::Colors,
     config::{APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE},
-    state::workspace::{ManagedWindow, Workspaces},
+    state::workspace::Workspaces,
 };
 
 #[allow(clippy::struct_excessive_bools)]
@@ -84,7 +85,7 @@ impl State {
     #[must_use]
     pub fn find_monitor_focusing_window(&self, window: Window) -> Option<usize> {
         for (i, mon) in self.monitors.iter().enumerate() {
-            if mon.last_focus.filter(|mw| mw.window == window).is_some() {
+            if mon.last_focus.filter(|mw| *mw == window).is_some() {
                 return Some(i);
             }
         }
@@ -129,49 +130,50 @@ impl State {
         None
     }
 
-    pub fn find_first_focus_candidate(&self, mon_ind: usize) -> Result<Option<ManagedWindow>> {
+    pub fn find_first_focus_candidate(&self, mon_ind: usize) -> Result<Option<Window>> {
         let mon = &self.monitors[mon_ind];
         if let Some(win) = mon.last_focus {
             Ok(Some(win))
         } else {
-            let tiled = self
-                .workspaces
-                .get_all_tiled_windows(mon.hosted_workspace)?;
+            let tiled = self.workspaces.get_all_tiled_windows(mon.hosted_workspace);
             if tiled.is_empty() {
                 Ok(None)
             } else {
                 Ok(match self.workspaces.get_draw_mode(mon.hosted_workspace) {
-                    Mode::Tiled(_) => Some(tiled[0]),
-                    Mode::Tabbed(u) => Some(tiled[u]),
-                    Mode::Fullscreen { window, .. } => self.workspaces.get_managed_win(window),
+                    Mode::Tiled(_) => Some(tiled[0].window),
+                    Mode::Tabbed(u) => Some(tiled[u].window),
+                    Mode::Fullscreen { window, .. } => {
+                        self.workspaces.get_managed_win(window).map(|mw| mw.window)
+                    }
                 })
             }
         }
     }
 
     #[must_use]
-    pub fn find_appropriate_ws_focus(
-        &self,
-        mon_ind: usize,
-        ws_ind: usize,
-    ) -> Option<ManagedWindow> {
+    pub fn find_appropriate_ws_focus(&self, mon_ind: usize, ws_ind: usize) -> Option<Window> {
         if let Some(currently_focused_window) = self.input_focus {
             if let Some(ws_ind_with_focus) = self
                 .workspaces
                 .find_ws_containing_window(currently_focused_window)
             {
                 if ws_ind_with_focus == ws_ind {
-                    return self.workspaces.get_managed_win(currently_focused_window);
+                    return self
+                        .workspaces
+                        .get_managed_win(currently_focused_window)
+                        .map(|mw| mw.window);
                 }
             }
         } else if self.monitors[mon_ind].hosted_workspace == ws_ind {
             if let Some(focused_on_mon) = self.monitors[mon_ind].last_focus {
-                if let Some(ws_ind_with_focus) = self
-                    .workspaces
-                    .find_ws_containing_window(focused_on_mon.window)
+                if let Some(ws_ind_with_focus) =
+                    self.workspaces.find_ws_containing_window(focused_on_mon)
                 {
                     if ws_ind_with_focus == ws_ind {
-                        return self.workspaces.get_managed_win(focused_on_mon.window);
+                        return self
+                            .workspaces
+                            .get_managed_win(focused_on_mon)
+                            .map(|mw| mw.window);
                     }
                 }
             }
@@ -226,7 +228,7 @@ pub struct Monitor {
     pub bar_geometry: BarGeometry,
     pub dimensions: Dimensions,
     pub hosted_workspace: usize,
-    pub last_focus: Option<ManagedWindow>,
+    pub last_focus: Option<Window>,
     pub show_bar: bool,
     pub window_title_display: heapless::String<256>,
 }
@@ -297,6 +299,7 @@ mod tests {
     use crate::state::bar_geometry::{
         BarGeometry, ShortcutSection, WindowTitleSection, WorkspaceSection,
     };
+    use crate::state::properties::{WindowProperties, WmName};
     use crate::state::workspace::{ArrangeKind, FocusStyle, ManagedWindow, Workspaces};
     use crate::state::{Monitor, State};
     use x11rb::protocol::xproto::{BackingStore, Screen};
@@ -473,16 +476,36 @@ mod tests {
         assert!(state.find_monitor_focusing_window(0).is_none());
         assert_eq!(0, state.find_monitor_hosting_workspace(0).unwrap());
         assert_eq!(1, state.find_monitor_hosting_workspace(1).unwrap());
-        state
-            .workspaces
-            .add_child_to_ws(15, 0, ArrangeKind::NoFloat, FocusStyle::Passive)
-            .unwrap();
-        assert!(state.find_monitor_focusing_window(15).is_none());
-        state.monitors[0].last_focus = Some(ManagedWindow::new(
+        let mw = ManagedWindow::new(
             15,
             ArrangeKind::NoFloat,
             FocusStyle::Passive,
-        ));
+            WindowProperties::new(
+                None,
+                Default::default(),
+                None,
+                None,
+                Default::default(),
+                None,
+                None,
+                Default::default(),
+                Default::default(),
+                WmName::NetWmName(Default::default()),
+                None,
+            ),
+        );
+        state
+            .workspaces
+            .add_child_to_ws(
+                mw.window,
+                0,
+                ArrangeKind::NoFloat,
+                FocusStyle::Passive,
+                &mw.properties,
+            )
+            .unwrap();
+        assert!(state.find_monitor_focusing_window(15).is_none());
+        state.monitors[0].last_focus = Some(mw.window);
         assert_eq!(0, state.find_monitor_focusing_window(15).unwrap());
         assert_eq!(0, state.find_monitor_index_of_window(15).unwrap());
         assert_eq!(

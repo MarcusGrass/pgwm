@@ -188,7 +188,7 @@ fn do_create_state<'a>(
     fonts: &'a Fonts,
     vis_info: RenderVisualInfo,
     screen: Screen,
-    mut intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
+    mut intern_created_windows: FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
     dying_windows: heapless::Vec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
     workspaces: Workspaces,
     colors: Colors,
@@ -394,7 +394,7 @@ fn create_static_state<'a>(
 struct StaticState {
     wm_check_win: Window,
     sequences_to_ignore: heapless::BinaryHeap<u16, Min, BINARY_HEAP_LIMIT>,
-    intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
+    intern_created_windows: FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
 }
 
 fn create_tab_bar_win(

@@ -146,7 +146,8 @@ pub(crate) fn load_alloc_fonts<'a>(
 
 pub struct LoadedFonts<'a> {
     pub(crate) fonts: HashMap<&'a FontCfg, LoadedFont>,
-    chars: HashMap<char, LoadedChar>,
+    // Simple key, use smallmap
+    chars: smallmap::Map<char, LoadedChar>,
 }
 
 struct LoadedChar {
@@ -160,7 +161,7 @@ impl<'a> LoadedFonts<'a> {
         fonts: HashMap<&'a FontCfg, LoadedFont>,
         char_mapping: &HashMap<heapless::String<4>, FontCfg>,
     ) -> Result<Self> {
-        let mut chars = HashMap::new();
+        let mut chars = smallmap::Map::new();
         for (char, font) in char_mapping {
             let maybe_char = char.chars().next();
             match maybe_char {

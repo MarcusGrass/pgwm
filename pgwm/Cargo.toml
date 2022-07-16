@@ -19,6 +19,7 @@ perf-test = []
 heapless = { version = "0.7.15", default-features = false }
 fontdue = { version = "0.7.2", default-features = false, features = ["simd"] }
 pgwm-core = { path = "../pgwm-core" }
+smallmap = { version = "1.4.0", default-features = false }
 thiserror = "1.0.31"
 time = { version = "0.3.11", optional = true, default-features = false, features = ["formatting", "local-offset"] }
 x11rb = { version = "0.10.0", features = ["render", "cursor"]}
