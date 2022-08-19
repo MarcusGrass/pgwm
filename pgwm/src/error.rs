@@ -18,8 +18,6 @@ pub(crate) enum Error {
     X11IdCreation(#[from] ReplyOrIdError),
     #[error("Failed to parse event")]
     X11EventParse,
-    #[error("Failed to open default db")]
-    X11OpenDefaultDb,
     #[error("Number of glyph ids not corresponding to number of metrics")]
     GlyphMismatch,
     #[error("Could not become wm, access denied, there is likely another WM running")]

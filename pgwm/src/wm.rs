@@ -81,24 +81,8 @@ pub(crate) fn run_wm() -> Result<()> {
 
     call_wrapper.try_become_wm(screen)?;
     pgwm_core::debug!("Became wm");
-    //let resource_db = x11rb::resource_manager::new_from_resource_manager(&connection)?
-    //    .ok_or(Error::X11OpenDefaultDb)?;
-    let rdb = x11rb::resource_manager::protocol::Database::GET_RESOURCE_DATABASE;
-    let get_prop = x11rb::xcb::xproto::get_property(
-        call_wrapper.inner_mut(),
-        rdb.delete,
-        screen.root,
-        rdb.property,
-        rdb.type_,
-        rdb.long_offset,
-        rdb.long_length,
-        false,
-    )?
-    .reply(call_wrapper.inner_mut())?;
     pgwm_core::debug!("Got resource database properties");
-    let resource_db =
-        x11rb::resource_manager::protocol::Database::new_from_get_property_reply(&get_prop)
-            .ok_or(Error::X11OpenDefaultDb)?;
+    let resource_db = x11rb::resource_manager::new_from_default(call_wrapper.inner_mut())?;
     let cursor_handle = x11rb::cursor::Handle::new(call_wrapper.inner_mut(), 0, &resource_db)?;
     let visual = find_render_visual_info(call_wrapper.inner_mut(), screen)?;
     let loaded = load_alloc_fonts(&mut call_wrapper, &visual, &fonts, &char_remap)?;
@@ -265,7 +249,7 @@ fn handle_event<'a>(
     state: &mut State,
 ) -> Result<()> {
     // Ripped from xcb_connection_protocol, non-public small parsing functions
-    let response_type = raw.get(0).map(|x| x & 0x7f).ok_or(Error::X11EventParse)?;
+    let response_type = raw.first().map(|x| x & 0x7f).ok_or(Error::X11EventParse)?;
     let seq = raw
         .get(2..4)
         .map(|b| u16::from_ne_bytes(b.try_into().unwrap()))
