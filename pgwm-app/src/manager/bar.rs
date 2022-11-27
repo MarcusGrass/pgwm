@@ -1,12 +1,13 @@
-use crate::error::Result;
-use crate::manager::font::FontDrawer;
-use crate::x11::call_wrapper::CallWrapper;
 use pgwm_core::colors::Color;
 use pgwm_core::config::Fonts;
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::state::State;
+
+use crate::error::Result;
+use crate::manager::font::FontDrawer;
+use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) struct BarManager<'a> {
     font_drawer: &'a FontDrawer<'a>,
@@ -23,7 +24,7 @@ impl<'a> BarManager<'a> {
         let mon = &state.monitors[mon_ind];
         let section = &mon.bar_geometry.window_title_section;
         let title_position = section.position;
-        pgwm_core::debug!("Starting window title draw");
+        pgwm_utils::debug!("Starting window title draw");
         let draw_width = self.font_drawer.draw(
             call_wrapper,
             &mon.bar_win,
@@ -125,7 +126,7 @@ impl<'a> BarManager<'a> {
         let mon = &mut state.monitors[mon_ind];
         let component = &mon.bar_geometry.workspace.components[ws_ind];
         let name = &state.workspaces.get_ws(ws_ind).name;
-        pgwm_core::debug!("Starting workspace draw");
+        pgwm_utils::debug!("Starting workspace draw");
         self.font_drawer.draw(
             call_wrapper,
             &mon.bar_win,
@@ -156,7 +157,7 @@ impl<'a> BarManager<'a> {
         let mon = &mut state.monitors[mon_ind];
         let is_mon_focus = state.focused_mon == mon_ind;
         let wants_focus = state.workspaces.get_wants_focus_workspaces();
-        pgwm_core::debug!("Running clean workspace redraw on mon {mon_ind}");
+        pgwm_utils::debug!("Running clean workspace redraw on mon {mon_ind}");
         for (ind, ws) in mon.bar_geometry.workspace.components.iter().enumerate() {
             let name = &ws.text;
             let bg = if name.contains(state.workspaces.get_ws(ws_ind).name.as_str()) {
@@ -294,7 +295,7 @@ impl<'a> BarManager<'a> {
         mon_ind: usize,
         state: &mut State,
     ) -> Result<()> {
-        pgwm_core::debug!("Starting shortcuts draw");
+        pgwm_utils::debug!("Starting shortcuts draw");
         let mon = &mut state.monitors[mon_ind];
         let pos = mon.bar_geometry.shortcuts.position;
         let mut offset = pos.start;

@@ -1,22 +1,18 @@
-pub mod bar_geometry;
-pub mod properties;
-pub mod workspace;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::ops::{Add, Sub};
+use core::time::Duration;
 
-use crate::error::Result;
 use heapless::binary_heap::Min;
-use std::collections::HashMap;
-use std::ops::Sub;
-use std::{
-    ops::Add,
-    time::{Duration, SystemTime},
-};
-
-use x11rb::protocol::xproto::{Screen, Window};
-use x11rb::xcb::xproto::Timestamp;
+use smallmap::Map;
+use tiny_std::time::Instant;
+use xcb_rust_protocol::proto::xproto::Timestamp;
+use xcb_rust_protocol::proto::xproto::{Screen, Window};
 
 use crate::config::key_map::KeyBoardMappingKey;
 use crate::config::mouse_map::{MouseActionKey, MouseTarget};
 use crate::config::Action;
+use crate::error::Result;
 use crate::geometry::draw::Mode;
 use crate::geometry::Dimensions;
 use crate::render::DoubleBufferedRenderPicture;
@@ -26,6 +22,10 @@ use crate::{
     config::{APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE},
     state::workspace::Workspaces,
 };
+
+pub mod bar_geometry;
+pub mod properties;
+pub mod workspace;
 
 #[allow(clippy::struct_excessive_bools)]
 pub struct State {
@@ -51,8 +51,8 @@ pub struct State {
     pub destroy_after: u64,
     pub kill_after: u64,
     pub show_bar_initially: bool,
-    pub mouse_mapping: HashMap<MouseActionKey, Action>,
-    pub key_mapping: HashMap<KeyBoardMappingKey, Action>,
+    pub mouse_mapping: Map<MouseActionKey, Action>,
+    pub key_mapping: Map<KeyBoardMappingKey, Action>,
     pub last_timestamp: Timestamp,
 }
 
@@ -217,7 +217,7 @@ impl State {
         if self.focused_mon == new_focus {
             None
         } else {
-            Some(std::mem::replace(&mut self.focused_mon, new_focus))
+            Some(core::mem::replace(&mut self.focused_mon, new_focus))
         }
     }
 }
@@ -238,6 +238,7 @@ pub struct DrawArea {
     pub width: i16,
     pub window: Window,
 }
+
 pub struct DragPosition {
     origin_x: i16,
     origin_y: i16,
@@ -247,6 +248,7 @@ pub struct DragPosition {
 
 impl DragPosition {
     #[must_use]
+    #[inline]
     pub fn new(origin_x: i16, origin_y: i16, event_origin_x: i16, event_origin_y: i16) -> Self {
         DragPosition {
             origin_x,
@@ -257,6 +259,7 @@ impl DragPosition {
     }
 
     #[must_use]
+    #[inline]
     pub fn current_position(&self, cursor_x: i16, cursor_y: i16) -> (i16, i16) {
         let x = self.origin_x + cursor_x - self.event_origin_x;
         let y = self.origin_y + cursor_y - self.event_origin_y;
@@ -267,7 +270,7 @@ impl DragPosition {
 #[derive(Debug, Clone, Copy)]
 pub struct WinMarkedForDeath {
     pub win: Window,
-    die_at: SystemTime,
+    die_at: Instant,
     pub sent_destroy: bool,
 }
 
@@ -276,22 +279,35 @@ impl WinMarkedForDeath {
     pub fn new(win: Window, destroy_after: u64) -> Self {
         Self {
             win,
-            die_at: SystemTime::now().add(Duration::from_millis(destroy_after)),
+            die_at: Instant::now()
+                .add(Duration::from_millis(destroy_after))
+                .unwrap(),
             sent_destroy: false,
         }
     }
     #[must_use]
     pub fn should_kill(&self, kill_after: u64) -> bool {
-        self.sent_destroy && self.die_at <= SystemTime::now().sub(Duration::from_millis(kill_after))
+        self.sent_destroy
+            && self.die_at
+                <= Instant::now()
+                    .sub(Duration::from_millis(kill_after))
+                    .unwrap()
     }
     #[must_use]
     pub fn should_destroy(&self) -> bool {
-        self.die_at <= SystemTime::now()
+        self.die_at <= Instant::now()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+    use alloc::vec;
+
+    use smallmap::Map;
+    use xcb_rust_protocol::proto::xproto::{BackingStoreEnum, EventMask, Screen};
+    use xcb_rust_protocol::CURRENT_TIME;
+
     use crate::colors::{Color, Colors};
     use crate::config::{Cfg, USED_DIFFERENT_COLOR_SEGMENTS};
     use crate::geometry::{Dimensions, Line};
@@ -302,8 +318,6 @@ mod tests {
     use crate::state::properties::{WindowProperties, WmName};
     use crate::state::workspace::{ArrangeKind, FocusStyle, ManagedWindow, Workspaces};
     use crate::state::{Monitor, State};
-    use x11rb::protocol::xproto::{BackingStore, Screen};
-    use x11rb::CURRENT_TIME;
 
     fn create_base_state() -> State {
         let cfg = Cfg::default();
@@ -432,7 +446,7 @@ mod tests {
                 default_colormap: 0,
                 white_pixel: 0,
                 black_pixel: 0,
-                current_input_masks: 0,
+                current_input_masks: EventMask::NO_EVENT,
                 width_in_pixels: 0,
                 height_in_pixels: 0,
                 width_in_millimeters: 0,
@@ -440,8 +454,8 @@ mod tests {
                 min_installed_maps: 0,
                 max_installed_maps: 0,
                 root_visual: 0,
-                backing_stores: BackingStore::NOT_USEFUL,
-                save_unders: false,
+                backing_stores: BackingStoreEnum::NOT_USEFUL,
+                save_unders: 0,
                 root_depth: 0,
                 allowed_depths: vec![],
             },
@@ -460,8 +474,8 @@ mod tests {
             destroy_after: 0,
             kill_after: 0,
             show_bar_initially: true,
-            mouse_mapping: std::collections::HashMap::default(),
-            key_mapping: std::collections::HashMap::default(),
+            mouse_mapping: Map::default(),
+            key_mapping: Map::default(),
             last_timestamp: CURRENT_TIME,
         }
     }

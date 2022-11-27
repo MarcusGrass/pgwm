@@ -1,3 +1,9 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use smallmap::Map;
+use xcb_rust_protocol::proto::xproto::Window;
+
 use crate::config::workspaces::UserWorkspace;
 use crate::config::{DefaultDraw, TilingModifiers, APPLICATION_WINDOW_LIMIT, WS_WINDOW_LIMIT};
 use crate::error::Result;
@@ -5,7 +11,6 @@ use crate::geometry::draw::{Mode, OldDrawMode};
 use crate::geometry::layout::Layout;
 use crate::state::properties::WindowProperties;
 use crate::util::vec_ops::push_to_front;
-use x11rb::protocol::xproto::Window;
 
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -13,9 +18,9 @@ pub struct Workspaces {
     // Hot read
     spaces: Vec<Workspace>,
     // Hot on read/write
-    win_to_ws: smallmap::Map<Window, usize>,
+    win_to_ws: Map<Window, usize>,
     // Hot read
-    name_to_ws: smallmap::Map<String, usize>,
+    name_to_ws: Map<String, usize>,
     base_tiling_modifiers: TilingModifiers,
 }
 
@@ -25,7 +30,7 @@ impl Workspaces {
         tiling_modifiers: TilingModifiers,
     ) -> Result<Self> {
         let mut v = Vec::<Workspace>::new();
-        let mut name_to_ws = smallmap::Map::new();
+        let mut name_to_ws = Map::new();
         for (i, ws) in init_workspaces.iter().enumerate() {
             v.push(Workspace {
                 draw_mode: match ws.default_draw {
@@ -43,7 +48,7 @@ impl Workspaces {
         }
         Ok(Workspaces {
             spaces: v,
-            win_to_ws: smallmap::Map::new(),
+            win_to_ws: Map::new(),
             name_to_ws,
             base_tiling_modifiers: tiling_modifiers,
         })
@@ -105,12 +110,18 @@ impl Workspaces {
         } = dm
         {
             ws.draw_mode = last_draw_mode.to_draw_mode();
+            // If it's not managed we want to remove it from the ws mapping to avoid a memory leak
+            if ws.find_managed_window(window).is_none() {
+                self.win_to_ws.remove(&window);
+            }
             return Some(window);
         }
         None
     }
 
     pub fn set_fullscreened(&mut self, ws_ind: usize, window: Window) -> Result<Option<Window>> {
+        // We want to be able to track if a ws owns a fullscreened window even if it's not managed
+        self.win_to_ws.insert(window, ws_ind);
         let ws = &mut self.spaces[ws_ind];
         let dm = ws.draw_mode;
         let (new_mode, old_fullscreen) = match dm {
@@ -213,7 +224,7 @@ impl Workspaces {
             if mw.arrange == floating {
                 false
             } else {
-                crate::debug!("Floating {}", mw.window);
+                pgwm_utils::debug!("Floating {}", mw.window);
                 mw.arrange = floating;
                 true
             }
@@ -288,7 +299,19 @@ impl Workspaces {
                         self.win_to_ws.remove(&child.window);
                     }
                 }
-                self.spaces[ind].delete_child(window)
+                let dr = self.spaces[ind].delete_child(window);
+                // We need to remove fullscreen status If the window was fullscreened
+                // or else we'll have a bug
+                if let Mode::Fullscreen {
+                    window: fs_window,
+                    last_draw_mode,
+                } = self.spaces[ind].draw_mode
+                {
+                    if fs_window == window {
+                        self.spaces[ind].draw_mode = last_draw_mode.to_draw_mode();
+                    }
+                };
+                dr
             })
     }
 
@@ -319,7 +342,7 @@ impl Workspaces {
     pub fn find_first_tiled(&self, num: usize) -> Option<Window> {
         self.spaces[num]
             .iter_all_windows()
-            .find_map(|ch| (ch.arrange == ArrangeKind::NoFloat).then(|| ch.window))
+            .find_map(|ch| (ch.arrange == ArrangeKind::NoFloat).then_some(ch.window))
     }
 
     #[must_use]
@@ -409,7 +432,7 @@ impl Workspace {
         focus_style: FocusStyle,
         properties: WindowProperties,
     ) -> Result<()> {
-        crate::debug!("Adding child to ws: win = {} {:?}", window, arrange,);
+        pgwm_utils::debug!("Adding child to ws: win = {} {:?}", window, arrange,);
         for child in &mut self.children {
             if child.managed.window == window {
                 child.managed.arrange = arrange;
@@ -434,13 +457,13 @@ impl Workspace {
     fn iter_all_windows(&self) -> impl Iterator<Item = &ManagedWindow> {
         self.children
             .iter()
-            .flat_map(|ch| std::iter::once(&ch.managed).chain(ch.attached.iter()))
+            .flat_map(|ch| core::iter::once(&ch.managed).chain(ch.attached.iter()))
     }
 
     fn iter_all_windows_mut(&mut self) -> impl Iterator<Item = &mut ManagedWindow> {
         self.children
             .iter_mut()
-            .flat_map(|ch| std::iter::once(&mut ch.managed).chain(ch.attached.iter_mut()))
+            .flat_map(|ch| core::iter::once(&mut ch.managed).chain(ch.attached.iter_mut()))
     }
 
     fn resize_children(&mut self, window: Window, resize: f32) -> bool {
@@ -575,7 +598,7 @@ impl Workspace {
             for child in &mut self.children {
                 if let Some(ind) = child.attached.iter().position(|tr| tr.window == window) {
                     let mw = crate::util::vec_ops::remove(&mut child.attached, ind);
-                    crate::debug!("Removed attached from ws {:?}", child);
+                    pgwm_utils::debug!("Removed attached from ws {:?}", child);
                     return if mw.arrange == ArrangeKind::NoFloat {
                         DeleteResult::AttachedTiled((child.managed.window, mw))
                     } else {
@@ -743,6 +766,9 @@ impl ManagedWindow {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec;
+    use alloc::vec::Vec;
+
     use crate::config::Cfg;
     use crate::geometry::draw::Mode;
     use crate::geometry::layout::Layout;
@@ -824,7 +850,7 @@ mod tests {
                 2,
                 ArrangeKind::FloatingInactive(0.0, 0.0),
                 FocusStyle::Passive,
-                &default_properties()
+                &default_properties(),
             )
             .unwrap());
         assert!(workspaces.get_managed_win(0).is_some());

@@ -1,5 +1,5 @@
-use x11rb::protocol::render::{Directformat, Pictformat, Picture};
-use x11rb::protocol::xproto::{Drawable, Visualid};
+use xcb_rust_protocol::proto::render::{Directformat, Pictformat, Picture};
+use xcb_rust_protocol::proto::xproto::{Drawable, Visualid};
 
 pub struct RenderPicture {
     pub drawable: Drawable,

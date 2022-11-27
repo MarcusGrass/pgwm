@@ -1,19 +1,21 @@
+use alloc::string::ToString;
+use core::cmp::Ordering;
+use core::ops::Add;
+use core::time::Duration;
+
+use heapless::binary_heap::Min;
+use heapless::{BinaryHeap, String};
+use tiny_std::time::Instant;
+
 use crate::config::{
-    STATUS_BAR_BAT_SEGMENT_LIMIT, STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_DATE_PATTERN_LIMIT,
-    STATUS_BAR_UNIQUE_CHECK_LIMIT,
+    STATUS_BAR_BAT_SEGMENT_LIMIT, STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_UNIQUE_CHECK_LIMIT,
 };
 use crate::format_heapless;
 use crate::status::cpu::LoadChecker;
-use crate::status::sys::mem::Data;
-use heapless::binary_heap::Min;
-use heapless::{BinaryHeap, String};
-use std::cmp::Ordering;
-use std::ops::Add;
-use std::time::{Duration, Instant};
-use time::format_description::FormatItem;
-use time::{OffsetDateTime, UtcOffset};
-
 use crate::status::net::{ThroughputChecker, ThroughputPerSec};
+use crate::status::sys::bat::BatChecker;
+use crate::status::sys::mem::{Data, MemChecker};
+use crate::status::time::ClockFormatter;
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -235,53 +237,37 @@ impl MemFormat {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DateFormat {
     icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-    pub pattern: String<STATUS_BAR_DATE_PATTERN_LIMIT>,
-    #[cfg_attr(feature = "config-file", serde(deserialize_with = "from_hms_tuple"))]
-    utc_offset: UtcOffset,
-}
-
-#[cfg(feature = "config-file")]
-fn from_hms_tuple<'de, D: serde::de::Deserializer<'de>>(
-    deserializer: D,
-) -> std::result::Result<UtcOffset, D::Error> {
-    let (h, m, s): (i8, i8, i8) = serde::de::Deserialize::deserialize(deserializer)?;
-    UtcOffset::from_hms(h, m, s)
-        .map_err(|d| serde::de::Error::custom(format!("Failed to parse utc-offset {:?}", d)))
+    clock_formatter: ClockFormatter,
 }
 
 impl DateFormat {
     #[must_use]
     pub fn new(
         icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-        pattern: String<STATUS_BAR_DATE_PATTERN_LIMIT>,
-        utc_offset: UtcOffset,
+        clock_formatter: ClockFormatter,
     ) -> Self {
         Self {
             icon,
-            pattern,
-            utc_offset,
+            clock_formatter,
         }
     }
 
     #[must_use]
-    pub fn format_date<'a>(
-        &self,
-        items: &'a [FormatItem<'a>],
-    ) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
-        let dt = OffsetDateTime::now_utc()
-            .to_offset(self.utc_offset)
-            .format(items)
-            .ok()
-            .unwrap_or_else(|| "Failed Dt parse".to_owned());
-        format_heapless!("{} {}", self.icon, &dt)
+    pub fn format_date(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+        let output = self
+            .clock_formatter
+            .format_now()
+            .unwrap_or_else(|_| "Failed to format get date".to_string());
+        format_heapless!("{} {}", self.icon, output)
     }
 }
 
 pub struct Checker<'a> {
     cpu_checker: LoadChecker,
     net_checker: ThroughputChecker,
+    mem_checker: MemChecker,
+    bat_checker: BatChecker,
     check_heap: BinaryHeap<PackagedCheck<'a>, Min, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
-    date_fmt: std::prelude::rust_2021::Vec<FormatItem<'a>>,
 }
 
 #[derive(PartialEq, Eq)]
@@ -296,7 +282,8 @@ impl<'a> PackagedCheck<'a> {
         // Using this instead of SystemTime now avoids de-syncs between checks and unnecessary system calls
         self.next_time = self
             .next_time
-            .add(Duration::from_millis(self.check.interval));
+            .add(Duration::from_millis(self.check.interval))
+            .unwrap();
     }
 }
 
@@ -359,7 +346,9 @@ impl<'a> Checker<'a> {
         packaged: &mut PackagedCheck,
     ) -> Option<String<STATUS_BAR_CHECK_CONTENT_LIMIT>> {
         match &packaged.check.check_type {
-            CheckType::Battery(limits) => crate::status::sys::bat::get_battery_percentage()
+            CheckType::Battery(limits) => self
+                .bat_checker
+                .get_battery_percentage()
                 .ok()
                 .and_then(|bat| limits.iter().find_map(|limit| limit.format_bat(bat))),
             CheckType::Cpu(fmt) => self
@@ -372,10 +361,12 @@ impl<'a> Checker<'a> {
                 .get_throughput()
                 .ok()
                 .map(|tp| fmt.format_net(tp)),
-            CheckType::Mem(fmt) => crate::status::sys::mem::read_mem_info()
+            CheckType::Mem(fmt) => self
+                .mem_checker
+                .read_mem_info()
                 .ok()
                 .map(|mem| fmt.format_mem(mem)),
-            CheckType::Date(fmt) => Some(fmt.format_date(self.date_fmt.as_slice())),
+            CheckType::Date(fmt) => Some(fmt.format_date()),
         }
     }
 
@@ -396,28 +387,25 @@ impl<'a> Checker<'a> {
                 position,
             });
         }
-        let mut date_fmt = Vec::new();
-        for check in checks.iter() {
-            if let CheckType::Date(df) = &check.check_type {
-                date_fmt = time::format_description::parse(&df.pattern).unwrap_or_default();
-                break; // Only one date check atm
-            }
-        }
         Checker {
             cpu_checker: LoadChecker::default(),
             net_checker: ThroughputChecker::default(),
+            mem_checker: MemChecker::default(),
+            bat_checker: BatChecker::default(),
             check_heap,
-            date_fmt,
         }
     }
 }
 
 #[cfg(test)]
 mod checker_tests {
-    use crate::status::checker::{Check, CheckType, Checker, CpuFormat};
+    use core::ops::{Add, Sub};
+    use core::time::Duration;
+    use pgwm_utils::unix_eprintln;
     use std::collections::HashSet;
-    use std::ops::{Add, Sub};
-    use std::time::{Duration, Instant};
+    use tiny_std::time::Instant;
+
+    use crate::status::checker::{Check, CheckType, Checker, CpuFormat};
 
     #[test]
     #[should_panic]
@@ -441,9 +429,9 @@ mod checker_tests {
         let mut checker = Checker::new(&mut checks);
         let result = checker.run_next(true);
         assert!(result.content.is_none());
-        assert!(result.next_check >= now + interval);
+        assert!(result.next_check >= now.add(interval).unwrap());
         // If this test takes more than 10 seconds there are other issues
-        assert!(result.next_check < now + 2 * interval);
+        assert!(result.next_check < now.add(2 * interval).unwrap());
     }
 
     // Risk for flakiness
@@ -479,7 +467,7 @@ mod checker_tests {
         let start = Instant::now();
         // Need some end duration that's big enough to allow all checks at least one run but low enough
         // to need cause multiplication overlap
-        let end = start.add(Duration::from_millis(13));
+        let end = start.add(Duration::from_millis(13)).unwrap();
         let mut acquired_check_times = HashSet::new();
 
         let mut checker = Checker::new(&mut checks);
@@ -492,10 +480,11 @@ mod checker_tests {
             acquired_check_times.insert(next);
         }
         assert!(first_check_time.is_some());
-        let years_ago = Instant::now().sub(Duration::from_secs(1_000_000_000));
+        let long_ago = Instant::now().sub(Duration::from_secs(10)).unwrap();
         let first_check = first_check_time
             .unwrap()
-            .duration_since(years_ago)
+            .duration_since(long_ago)
+            .unwrap()
             .as_nanos();
         assert_eq!(9, acquired_check_times.len());
 
@@ -504,7 +493,8 @@ mod checker_tests {
         let mut div_by_seven = 0;
         for time in acquired_check_times {
             // Since next time should be a clean add in the checker we should be able to use nano-time without a problem
-            let nanos_of_check = time.duration_since(years_ago).as_nanos();
+            let nanos_of_check = time.duration_since(long_ago).unwrap().as_nanos();
+            unix_eprintln!("{nanos_of_check} - {first_check}");
             let diff = nanos_of_check - first_check;
             assert_eq!(0, diff % 1_000_000); // All should be millis expanded to nano time, no clock drift
             let compacted = diff / 1_000_000;
@@ -543,8 +533,8 @@ mod checker_tests {
         let mut checker = Checker::new(&mut checks);
         let result = checker.run_next(false);
         assert!(result.content.is_some());
-        assert!(result.next_check >= now + interval);
+        assert!(result.next_check >= now.add(interval).unwrap());
         // If this test takes more than 10 seconds there are other issues
-        assert!(result.next_check < now + 2 * interval);
+        assert!(result.next_check < now.add(2 * interval).unwrap());
     }
 }

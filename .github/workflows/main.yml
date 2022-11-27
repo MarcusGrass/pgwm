@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Run clippy on all feature permutations
-        run: cargo hack clippy --feature-powerset -- -D warnings
+        run: cargo hack clippy -p pgwm-app --feature-powerset -- -D warnings
   deny:
     runs-on: ubuntu-latest
     container: marcusgrass/pgwm-check:latest
@@ -29,11 +29,11 @@ jobs:
       - name: Run tests on core with all feature permutations
         run: cargo hack test -p pgwm-core --feature-powerset
       - name: Run tests on project with default features
-        run: cargo test
+        run: cargo test --all-features -p pgwm
   makefile:
     runs-on: ubuntu-latest
     container: marcusgrass/pgwm-check:latest
     steps:
       - uses: actions/checkout@v3
       - name: Run makefile tests
-        run: ./.local/check_make.sh
+        run: ./.local/make_check.sh

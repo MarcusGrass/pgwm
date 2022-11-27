@@ -1,3 +1,6 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use crate::config::mouse_map::MouseTarget;
 use crate::config::WM_NAME_LIMIT;
 #[cfg(feature = "status-bar")]
@@ -28,7 +31,7 @@ impl BarGeometry {
                 self.window_title_section
                     .position
                     .contains(x)
-                    .then(|| MouseTarget::WindowTitle)
+                    .then_some(MouseTarget::WindowTitle)
             })
         }
         #[cfg(not(feature = "status-bar"))]
@@ -37,7 +40,7 @@ impl BarGeometry {
                 self.window_title_section
                     .position
                     .contains(x)
-                    .then(|| MouseTarget::WindowTitle)
+                    .then_some(MouseTarget::WindowTitle)
             })
         }
     }
@@ -103,7 +106,7 @@ impl ShortcutSection {
                     .find_map(|(ind, component)| {
                         (x >= component.position.start
                             && x <= component.position.start + component.position.length)
-                            .then(|| MouseTarget::ShortcutComponent(ind))
+                            .then_some(MouseTarget::ShortcutComponent(ind))
                     })
             })
             .flatten()
@@ -205,7 +208,7 @@ impl StatusSection {
                     .find_map(|(ind, component)| {
                         (x >= component.position.start
                             && x <= component.position.start + component.position.length)
-                            .then(|| MouseTarget::StatusComponent(ind))
+                            .then_some(MouseTarget::StatusComponent(ind))
                     })
             })
             .flatten()
@@ -223,6 +226,7 @@ pub struct WorkspaceSection {
     pub position: Line,
     pub components: Vec<FixedDisplayComponent>,
 }
+
 impl WorkspaceSection {
     fn hit_component(&self, x: i16) -> Option<MouseTarget> {
         (x >= self.position.start && x <= self.position.start + self.position.length)
@@ -233,12 +237,13 @@ impl WorkspaceSection {
                     .find_map(|(ind, component)| {
                         (x >= component.position.start
                             && x <= component.position.start + component.position.length)
-                            .then(|| MouseTarget::WorkspaceBarComponent(ind))
+                            .then_some(MouseTarget::WorkspaceBarComponent(ind))
                     })
             })
             .flatten()
     }
 }
+
 pub struct FixedDisplayComponent {
     pub position: Line,
     pub write_offset: i16,

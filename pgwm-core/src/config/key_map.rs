@@ -1,5 +1,6 @@
+use xcb_rust_protocol::proto::xproto::ModMask;
+
 use crate::config::Action;
-use x11rb::protocol::xproto::ModMask;
 
 #[derive(Debug)]
 pub struct KeyboardMapping {

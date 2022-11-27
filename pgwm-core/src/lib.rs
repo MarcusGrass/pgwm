@@ -14,6 +14,11 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::module_name_repetitions)]
+// Debug log complaints
+#![allow(clippy::used_underscore_binding)]
+#![cfg_attr(not(test), no_std)]
+extern crate alloc;
+
 pub mod colors;
 pub mod config;
 pub mod error;
@@ -23,19 +28,3 @@ pub mod state;
 #[cfg(feature = "status-bar")]
 pub mod status;
 pub mod util;
-
-#[cfg(test)]
-mod tests {
-    use crate::config::Cfg;
-    use crate::state::State;
-
-    #[test]
-    fn pin_stack_sizes() {
-        let cfg_stack_size = std::mem::size_of::<Cfg>();
-        let state_stack_size = std::mem::size_of::<State>();
-        assert!(cfg_stack_size < 20_000);
-        assert!(state_stack_size < 40_000);
-        println!("{cfg_stack_size}");
-        println!("{state_stack_size}");
-    }
-}

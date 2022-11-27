@@ -3,13 +3,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
-
 ## [Unreleased]
 ### Fixed
 
 ### Added
 
 ### Changed
+
+## [v0.3.0] - 
+### Fixed
+ - Fullscreening causing crashing in some cases, because the destroyed window was cached and then reused
+
+### Added
+ - [Xcb-xsd-parser library](xcb-xsd-parser)
+ - [Xcb-code-generator library](xcb-code-generator)
+ - [Generated code](xcb-rust-protocol)
+ - [New compatibility layer](xcb-rust-connection)
+ - [syscall library](unix-syscalls)
+
+### Changed
+ - Removed all libc dependencies, requiring nightly to run until [naked function stabilization](https://github.com/rust-lang/rust/pull/93587)
+ - Using Dlmalloc as allocator 
+ - Changed WM to be no_std, with the above change, another feature [that seems to be moving towards stabilization was added](https://github.com/rust-lang/rust/pull/102318)
+ - Removed or patched dependencies needing libc or not being no_std compatible
+ - Moved entrypoint and compatibility layers in [pgwm](pgwm) and [pgwm-rt-compat](pgwm-rt-compat) respectively, 
+moving the main WM from a binary project to a library project [pgwm-app](pgwm-app)
+
 
 ## [v0.2.0] - 2022-07-09
 

@@ -3,23 +3,19 @@ name = "pgwm"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0"
-publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [features]
-config-file = ["pgwm-core/config-file"]
+config-file = ["pgwm-app/config-file"]
 default = ["xinerama", "status-bar", "config-file"]
-debug = ["pgwm-core/debug", "x11rb/debug"]
-xinerama = ["x11rb/xinerama"]
-status-bar = ["pgwm-core/status-bar", "time"]
-perf-test = []
+debug = ["pgwm-app/debug"]
+xinerama = ["pgwm-app/xinerama"]
+status-bar = ["pgwm-app/status-bar"]
+perf-test = ["pgwm-app/perf-test"]
 
 [dependencies]
-heapless = { version = "0.7.15", default-features = false }
-fontdue = { version = "0.7.2", default-features = false, features = ["simd"] }
-pgwm-core = { path = "../pgwm-core" }
-smallmap = { version = "1.4.0", default-features = false }
-thiserror = "1.0.31"
-time = { version = "0.3.11", optional = true, default-features = false, features = ["formatting", "local-offset"] }
-x11rb = { version = "0.10.0", features = ["render", "cursor"]}
+compiler_builtins = { version = "0.1.83", default-features = false, features = ["mem"] }
+dlmalloc = { git = "https://github.com/MarcusGrass/dlmalloc-rs.git", rev = "a8e9fc0d2c03a06810530a48abd37fecc71e8109", default-features = false }
+pgwm-app = { path = "../pgwm-app" }
+tiny-std = { version = "0.1", features = ["start", "alloc", "symbols", "aux", "vdso"] }
+unix-print = "0.1.0"

@@ -1,13 +1,15 @@
-use crate::error::{Error, Result};
-use crate::manager::font::FontDrawer;
-use crate::x11::call_wrapper::CallWrapper;
+use xcb_rust_protocol::proto::xproto::Window;
+
 use pgwm_core::config::{Fonts, WM_NAME_LIMIT, WS_WINDOW_LIMIT};
 use pgwm_core::geometry::draw::{Mode, OldDrawMode};
 use pgwm_core::geometry::{layout::Layout, Dimensions};
 use pgwm_core::push_heapless;
 use pgwm_core::state::workspace::{ArrangeKind, ManagedWindow};
 use pgwm_core::state::State;
-use x11rb::protocol::xproto::Window;
+
+use crate::error::{Error, Result};
+use crate::manager::font::FontDrawer;
+use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) struct Drawer<'a> {
     font_manager: &'a FontDrawer<'a>,
@@ -31,7 +33,7 @@ impl<'a> Drawer<'a> {
         dimensions: Dimensions,
         state: &mut State,
     ) -> Result<()> {
-        pgwm_core::debug!("Drawing floating {window} at {dimensions:?}");
+        pgwm_utils::debug!("Drawing floating {window} at {dimensions:?}");
         call_wrapper.configure_window(window, dimensions, state.window_border_width, state)?;
         call_wrapper.send_map(window, state)?;
         Ok(())
@@ -44,7 +46,7 @@ impl<'a> Drawer<'a> {
         y: i32,
         state: &mut State,
     ) -> Result<()> {
-        pgwm_core::debug!("Drawing floating {window} at ({x}, {y})");
+        pgwm_utils::debug!("Drawing floating {window} at ({x}, {y})");
         call_wrapper.move_window(window, x, y, state)?;
         call_wrapper.send_map(window, state)?;
         Ok(())
@@ -78,7 +80,7 @@ impl<'a> Drawer<'a> {
         drop(tiled);
         self.draw(call_wrapper, mon_ind, targets, state)?;
 
-        pgwm_core::debug!("Drawing {} floating on mon = {mon_ind}", floating.len());
+        pgwm_utils::debug!("Drawing {} floating on mon = {mon_ind}", floating.len());
         for (win, arrange) in floating {
             if let ArrangeKind::FloatingInactive(rel_x, rel_y) = arrange {
                 let dimensions = state.monitors[mon_ind].dimensions;
@@ -146,7 +148,7 @@ impl<'a> Drawer<'a> {
         layout: Layout,
         state: &mut State,
     ) -> Result<()> {
-        pgwm_core::debug!("Drawing tiled {targets:?} on mon = {mon_ind}");
+        pgwm_utils::debug!("Drawing tiled {targets:?} on mon = {mon_ind}");
         call_wrapper.send_unmap(state.monitors[mon_ind].tab_bar_win.window.drawable, state)?;
         let mon_dimensions = state.monitors[mon_ind].dimensions;
         let tiling_modifiers = &state.workspaces.get_ws(ws_ind).tiling_modifiers;
@@ -298,7 +300,7 @@ impl<'a> Drawer<'a> {
             let text_dimensions = self
                 .font_manager
                 .text_geometry(name, &self.fonts.tab_bar_section);
-            let text_width = text_dimensions.0 as i16;
+            let text_width = text_dimensions.0;
             let draw_name = if split_width >= text_width { name } else { "" };
             let center_offset = (split_width - text_width) / 2;
 
@@ -309,7 +311,7 @@ impl<'a> Drawer<'a> {
                 &self.fonts.tab_bar_section,
                 Dimensions::new(split_width, state.tab_bar_height, split_width * i as i16, 0),
                 split_width,
-                center_offset as i16,
+                center_offset,
                 0,
                 bg,
                 state.colors.tab_bar_text,

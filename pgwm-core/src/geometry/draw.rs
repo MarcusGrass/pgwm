@@ -1,7 +1,8 @@
+use xcb_rust_protocol::proto::xproto::Window;
+
 use crate::error::Error;
 use crate::error::Result;
 use crate::geometry::layout::Layout;
-use x11rb::protocol::xproto::Window;
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]

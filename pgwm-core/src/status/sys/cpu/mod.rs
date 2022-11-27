@@ -1,7 +1,7 @@
 use crate::error::Error;
-use bstr::ByteSlice;
+use crate::status::sys::find_byte;
 
-const LOAD_FILE: &str = "/proc/stat";
+const LOAD_FILE: &str = "/proc/stat\0";
 
 #[derive(Debug, Default)]
 pub struct Load {
@@ -9,9 +9,10 @@ pub struct Load {
     pub idle: f64,
 }
 
+#[allow(unsafe_code)]
 pub fn read_cpu_load() -> Result<Load, Error> {
-    let content = std::fs::read(LOAD_FILE)?;
-    parse_raw(&content)
+    let buf = tiny_std::fs::read(LOAD_FILE)?;
+    parse_raw(&buf)
 }
 
 pub fn parse_raw(content: &[u8]) -> Result<Load, Error> {
@@ -19,7 +20,7 @@ pub fn parse_raw(content: &[u8]) -> Result<Load, Error> {
     let mut it = 0;
     let mut busy = 0;
     let mut idle = 0;
-    while let Some(space_ind) = content[prev_ind..].find_byte(b' ') {
+    while let Some(space_ind) = find_byte(b' ', &content[prev_ind..]) {
         if prev_ind == 0 {
             prev_ind = space_ind;
             continue;
@@ -39,6 +40,7 @@ pub fn parse_raw(content: &[u8]) -> Result<Load, Error> {
             space_ind
         };
     }
+
     Ok(Load {
         busy: busy as f64,
         idle: idle as f64,

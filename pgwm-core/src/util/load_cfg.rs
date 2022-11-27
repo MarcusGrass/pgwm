@@ -1,40 +1,31 @@
-use crate::config::{Button, ButtonMask, Cfg, ModMaskEnum, ModMasks, WINDOW_MANAGER_NAME};
-use crate::error::{Error, Result};
+use alloc::format;
+use alloc::string::String;
+use core::fmt::{Formatter, Write};
+
 use serde::de::{EnumAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
-use std::fmt::Formatter;
-use std::path::PathBuf;
-use x11rb::protocol::xproto::{ButtonIndex, ModMask};
+use xcb_rust_protocol::proto::xproto::{ButtonIndexEnum, ModMask};
 
-pub(crate) fn load_cfg() -> Result<Cfg> {
-    if let Some(user_cfg_dir) = find_cfg_dir() {
-        let wm_cfg_dir = user_cfg_dir.join(WINDOW_MANAGER_NAME);
-        let file_path = wm_cfg_dir.join(format!("{WINDOW_MANAGER_NAME}.toml"));
-        crate::debug!("Attempting config read at {file_path:?}");
-        match std::fs::read(&file_path) {
-            Ok(content) => Ok(toml::from_slice(content.as_slice())?),
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    Err(Error::ConfigFileFind)
-                } else {
-                    Err(e.into())
-                }
-            }
-        }
+use crate::config::{Button, ButtonMask, Cfg, ModMaskEnum, ModMasks, WINDOW_MANAGER_NAME};
+use crate::error::{Error, Result};
+
+pub fn load_cfg(config_home: Option<&str>, home: Option<&str>) -> Result<Cfg> {
+    if let Some(mut user_cfg_dir) = find_cfg_dir(config_home, home) {
+        let _ = user_cfg_dir.write_fmt(format_args!(
+            "/{WINDOW_MANAGER_NAME}/{WINDOW_MANAGER_NAME}.toml"
+        ));
+        pgwm_utils::debug!("Attempting config read at {user_cfg_dir}");
+        let buf = tiny_std::fs::read(&user_cfg_dir)?;
+        Ok(toml::from_slice(buf.as_slice())?)
     } else {
         Err(Error::ConfigDirFind)
     }
 }
 
-fn find_cfg_dir() -> Option<PathBuf> {
-    std::env::var("XDG_CONFIG_HOME")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var("HOME")
-                .map(|home| PathBuf::from(home).join(".config"))
-                .ok()
-        })
+fn find_cfg_dir(xdg_config_home: Option<&str>, home: Option<&str>) -> Option<String> {
+    xdg_config_home
+        .map(alloc::string::ToString::to_string)
+        .or_else(|| home.map(|dir| format!("{dir}/.config")))
 }
 
 impl ModMaskEnum {
@@ -43,67 +34,69 @@ impl ModMaskEnum {
             ModMaskEnum::Shift => ModMask::SHIFT,
             ModMaskEnum::Lock => ModMask::LOCK,
             ModMaskEnum::Control => ModMask::CONTROL,
-            ModMaskEnum::M1 => ModMask::M1,
-            ModMaskEnum::M2 => ModMask::M2,
-            ModMaskEnum::M3 => ModMask::M3,
-            ModMaskEnum::M4 => ModMask::M4,
-            ModMaskEnum::M5 => ModMask::M5,
+            ModMaskEnum::M1 => ModMask::ONE,
+            ModMaskEnum::M2 => ModMask::TWO,
+            ModMaskEnum::M3 => ModMask::THREE,
+            ModMaskEnum::M4 => ModMask::FOUR,
+            ModMaskEnum::M5 => ModMask::FIVE,
             ModMaskEnum::Any => ModMask::ANY,
         }
     }
 }
 
 impl ButtonMask {
-    pub(crate) fn to_button_index(&self) -> ButtonIndex {
+    pub(crate) fn to_button_index(&self) -> ButtonIndexEnum {
         match self {
-            ButtonMask::Any => ButtonIndex::ANY,
-            ButtonMask::M1 => ButtonIndex::M1,
-            ButtonMask::M2 => ButtonIndex::M2,
-            ButtonMask::M3 => ButtonIndex::M3,
-            ButtonMask::M4 => ButtonIndex::M4,
-            ButtonMask::M5 => ButtonIndex::M5,
+            ButtonMask::Any => ButtonIndexEnum::ANY,
+            ButtonMask::M1 => ButtonIndexEnum::ONE,
+            ButtonMask::M2 => ButtonIndexEnum::TWO,
+            ButtonMask::M3 => ButtonIndexEnum::THREE,
+            ButtonMask::M4 => ButtonIndexEnum::FOUR,
+            ButtonMask::M5 => ButtonIndexEnum::FIVE,
         }
     }
 }
+
 pub(crate) struct ModMaskVisitor;
 
 impl<'de> Visitor<'de> for ModMaskVisitor {
     type Value = ModMasks;
 
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter) -> core::fmt::Result {
         formatter.write_str("Expected an array of ModMaskEnums")
     }
 
-    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+    fn visit_seq<A>(self, mut seq: A) -> core::result::Result<Self::Value, A::Error>
     where
         A: SeqAccess<'de>,
     {
         let mut base = ModMask::from(0u16);
         while let Some(e) = seq.next_element::<ModMaskEnum>()? {
-            base = base | e.to_mod_mask();
+            base |= e.to_mod_mask();
         }
         Ok(ModMasks { inner: base })
     }
 }
 
 impl<'de> Deserialize<'de> for ModMasks {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         deserializer.deserialize_seq(ModMaskVisitor)
     }
 }
+
 struct ButtonVisitor;
 
 impl<'de> Visitor<'de> for ButtonVisitor {
     type Value = Button;
 
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter) -> core::fmt::Result {
         formatter.write_str("Expected one of the ButtonMask enum")
     }
 
-    fn visit_enum<A>(self, data: A) -> std::result::Result<Self::Value, A::Error>
+    fn visit_enum<A>(self, data: A) -> core::result::Result<Self::Value, A::Error>
     where
         A: EnumAccess<'de>,
     {
@@ -115,7 +108,7 @@ impl<'de> Visitor<'de> for ButtonVisitor {
 }
 
 impl<'de> Deserialize<'de> for Button {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -129,24 +122,27 @@ impl<'de> Deserialize<'de> for Button {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{Cfg, WINDOW_MANAGER_NAME};
-    use crate::util::load_cfg::find_cfg_dir;
+    use alloc::string::ToString;
+
     use std::env;
     use std::path::PathBuf;
 
+    use crate::config::{Cfg, WINDOW_MANAGER_NAME};
+    use crate::util::load_cfg::find_cfg_dir;
+
     #[test]
     fn will_read_environment_variables_to_find_config_falling_back() {
-        env::remove_var("XDG_CONFIG_HOME");
-        env::remove_var("HOME");
-        assert!(find_cfg_dir().is_none());
-        env::set_var("HOME", "here");
-        assert_eq!(Some(PathBuf::from("here/.config")), find_cfg_dir());
-        env::set_var("XDG_CONFIG_HOME", "there");
-        assert_eq!(Some(PathBuf::from("there")), find_cfg_dir());
-        env::remove_var("HOME");
-        assert_eq!(Some(PathBuf::from("there")), find_cfg_dir());
-        env::remove_var("XDG_CONFIG_HOME");
-        assert!(find_cfg_dir().is_none());
+        assert!(find_cfg_dir(None, None).is_none());
+        assert_eq!(
+            Some("here/.config".to_string()),
+            find_cfg_dir(None, Some("here"))
+        );
+        assert_eq!(
+            Some("there".to_string()),
+            find_cfg_dir(Some("there"), Some("here"))
+        );
+        assert_eq!(Some("there".to_string()), find_cfg_dir(Some("there"), None));
+        assert!(find_cfg_dir(None, None).is_none());
     }
 
     #[test]
@@ -166,8 +162,8 @@ mod tests {
 
     fn read_cfg_from_root() -> Cfg {
         let project_root = find_project_root();
-        let cfg_path = project_root.join(format!("{WINDOW_MANAGER_NAME}.toml"));
-        let cfg = std::fs::read(&cfg_path).unwrap();
+        let cfg_path = project_root.join(alloc::format!("{WINDOW_MANAGER_NAME}.toml"));
+        let cfg = std::fs::read(cfg_path).unwrap();
         toml::from_slice(cfg.as_slice()).unwrap()
     }
 
@@ -180,7 +176,7 @@ mod tests {
                 let dir_entry = dir_entry.unwrap();
                 let meta = dir_entry.metadata().unwrap();
                 if meta.is_dir() && dir_entry.file_name() == WINDOW_MANAGER_NAME {
-                    let children = std::fs::read_dir(&dir_entry.path()).unwrap();
+                    let children = std::fs::read_dir(dir_entry.path()).unwrap();
                     for child in children {
                         let child = child.unwrap();
                         if child.file_name() == "Cargo.lock" {

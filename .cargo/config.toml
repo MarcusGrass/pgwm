@@ -1,9 +1,15 @@
+[profile.dev]
+panic = "abort" # Smaller binary
+
 [profile.release]
+panic = "abort" # Smaller binary
 overflow-checks = true # I prefer panics over wraps
 
 [profile.lto]
+panic = "abort" # Smaller binary
 codegen-units = 1 # Better optimization
 debug = false # Inherits from release so should actually do nothing but whatever
 inherits = "release"
+overflow-checks = false # I prefer panics over wraps
 lto = true # link time optimization
 strip = true # smaller binary

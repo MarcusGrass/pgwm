@@ -13,8 +13,8 @@ check_clean() {
 }
 
 check_build() {
-  if [ ! -f "target/$1/pgwm" ]; then
-    echo "Build did not produce a binary at expected location target/$1/pgwm"
+  if [ ! -f "target/x86_64-unknown-linux-gnu/$1/pgwm" ]; then
+    echo "Build did not produce a binary at expected location target/x86_64-unknown-linux-gnu/$1/pgwm"
     exit 1
   fi
 }

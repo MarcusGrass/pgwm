@@ -1,6 +1,7 @@
+use xcb_rust_protocol::helpers::properties::{WmHints, WmSizeHints};
+use xcb_rust_protocol::proto::xproto::Window;
+
 use crate::config::{WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT};
-use x11rb::properties::{WmHints, WmSizeHints};
-use x11rb::xcb::xproto::Window;
 
 #[derive(Debug, Clone)]
 pub struct WindowProperties {

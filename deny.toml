@@ -1,8 +1,8 @@
 targets = [
     { triple = "x86_64-unknown-linux-gnu" },
     { triple = "x86_64-unknown-linux-musl" },
-    { triple = "aarch64-apple-darwin" },
-    { triple = "x86_64-apple-darwin" },
+    { triple = "aarch64-unknown-linux-gnu" },
+    { triple = "aarch64-unknown-linux-musl" },
 ]
 
 [advisories]
@@ -25,9 +25,11 @@ skip = [
 
 [sources]
 allow-git = [
-    "https://github.com/MarcusGrass/x11-keysyms",
+    "https://github.com/MarcusGrass/dlmalloc-rs",
     "https://github.com/MarcusGrass/fontdue",
-    "https://github.com/MarcusGrass/x11rb",
+    "https://github.com/MarcusGrass/smallmap",
+    "https://github.com/MarcusGrass/toml",
+    "https://github.com/MarcusGrass/x11-keysyms",
 ]
 
 [licenses]
@@ -39,8 +41,14 @@ copyleft = "deny"
 allow = [
     "Apache-2.0",
     "MIT",
+    "Unicode-DFS-2016",
 ]
 exceptions = [
     { name = "pgwm", allow = ["GPL-3.0"] },
+    { name = "pgwm-app", allow = ["GPL-3.0"] },
     { name = "pgwm-core", allow = ["GPL-3.0"] },
+    { name = "pgwm-utils", allow = ["GPL-3.0"] },
+    { name = "xcb-rust-connection", allow = ["MPL-2.0"] },
+    { name = "tiny-std", allow = ["MPL-2.0"] },
+    { name = "rusl", allow = ["MPL-2.0"] },
 ]

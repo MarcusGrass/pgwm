@@ -1,6 +1,11 @@
 [workspace]
-members = ["pgwm", "pgwm-core"]
+members = ["pgwm", "pgwm-app", "pgwm-core", "pgwm-utils"]
 
 [patch.crates-io]
-fontdue = { git = "https://github.com/MarcusGrass/fontdue", branch = "rasterize-oneshot" }
-x11rb = { git = "https://github.com/MarcusGrass/x11rb", branch = "master"}
+fontdue = { git = "https://github.com/MarcusGrass/fontdue", rev = "3a2819fba5f8b3bb6ffd9207200b19910c399d05" }
+smallmap = { git = "https://github.com/MarcusGrass/smallmap", rev = "a0e7399d09a22753ef9c80aa1f1a34009b364357" }
+toml = { git = "https://github.com/MarcusGrass/toml", rev = "fdc79fc9858c8d60cdcf805208ef4e8bcd8ac57b" }
+rusl = { git = "https://github.com/MarcusGrass/tiny-std.git", rev = "bbd7244a48d6f4e168ae35137222cbca75840be1"}
+tiny-std = { git = "https://github.com/MarcusGrass/tiny-std.git", rev = "bbd7244a48d6f4e168ae35137222cbca75840be1"}
+xcb-rust-connection = { git = "https://github.com/MarcusGrass/xcb-rust.git", rev = "d7110cc13b5768f3164ff328f80d0bf6d5d3deed" }
+xcb-rust-protocol = { git = "https://github.com/MarcusGrass/xcb-rust.git", rev = "d7110cc13b5768f3164ff328f80d0bf6d5d3deed" }

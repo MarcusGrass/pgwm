@@ -58,10 +58,10 @@ DESTDIR :=%s
 CONFIG_DIR :=%s
 PROFILE :=%s
 build:
-\t@cargo build --profile=\$(PROFILE) -p \$(APP)
+\t@./build_wm.sh --profile=\$(PROFILE)
 install:
 \t@test -d \$(DESTDIR) || echo \"Install directory \$(DESTDIR) not found, will try to create it\"; mkdir -p \$(DESTDIR)
-\t@install target/\$(PROFILE)/\$(APP) \$(DESTDIR)/\$(APP)
+\t@install target/x86_64-unknown-linux-gnu/\$(PROFILE)/\$(APP) \$(DESTDIR)/\$(APP)
 \t@if [ -f \$(CONFIG_DIR)/pgwm.toml ]; then \
 \t\techo \"Configuration file exists, will not override with default\"; \
 \telif [ -d \$(CONFIG_DIR) ]; then \
