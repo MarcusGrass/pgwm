@@ -25,7 +25,7 @@ smallmap = { version = "1.4.0", default-features = false }
 time = { version = "0.3.17", optional = true, default-features = false }
 unix-print = "0.1.0"
 tiny-std = { version = "0.1" }
-rusl = { path = "../../tiny-std/rusl" }
+rusl = { version = "0.1" }
 
 xcb-rust-connection = { version = "0.1" }
 xcb-rust-protocol = { version = "0.1" }

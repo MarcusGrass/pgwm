@@ -30,6 +30,8 @@ allow-git = [
     "https://github.com/MarcusGrass/smallmap",
     "https://github.com/MarcusGrass/toml",
     "https://github.com/MarcusGrass/x11-keysyms",
+    "https://github.com/MarcusGrass/tiny-std",
+    "https://github.com/MarcusGrass/xcb-rust",
 ]
 
 [licenses]
@@ -49,6 +51,7 @@ exceptions = [
     { name = "pgwm-core", allow = ["GPL-3.0"] },
     { name = "pgwm-utils", allow = ["GPL-3.0"] },
     { name = "xcb-rust-connection", allow = ["MPL-2.0"] },
+    { name = "xcb-rust-protocol", allow = ["MPL-2.0"] },
     { name = "tiny-std", allow = ["MPL-2.0"] },
     { name = "rusl", allow = ["MPL-2.0"] },
 ]

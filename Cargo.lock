@@ -226,7 +226,7 @@ dependencies = [
  "heapless",
  "pgwm-core",
  "pgwm-utils",
- "rusl 0.1.0",
+ "rusl",
  "smallmap",
  "time",
  "tiny-std",
@@ -314,14 +314,6 @@ checksum = "88aa938cda42a0cf62a20cfe8d139ff1af20c2e681212b5b34adb5a58333f222"
 dependencies = [
  "lazy_static",
  "regex",
-]
-
-[[package]]
-name = "rusl"
-version = "0.1.0"
-dependencies = [
- "sc",
- "unix-print",
 ]
 
 [[package]]
@@ -465,7 +457,7 @@ name = "tiny-std"
 version = "0.1.0"
 source = "git+https://github.com/MarcusGrass/tiny-std.git?rev=bbd7244a48d6f4e168ae35137222cbca75840be1#bbd7244a48d6f4e168ae35137222cbca75840be1"
 dependencies = [
- "rusl 0.1.0 (git+https://github.com/MarcusGrass/tiny-std.git?rev=bbd7244a48d6f4e168ae35137222cbca75840be1)",
+ "rusl",
  "sc",
  "unix-print",
 ]
@@ -540,7 +532,7 @@ name = "xcb-rust-connection"
 version = "0.1.0"
 source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=d7110cc13b5768f3164ff328f80d0bf6d5d3deed#d7110cc13b5768f3164ff328f80d0bf6d5d3deed"
 dependencies = [
- "rusl 0.1.0 (git+https://github.com/MarcusGrass/tiny-std.git?rev=bbd7244a48d6f4e168ae35137222cbca75840be1)",
+ "rusl",
  "sc",
  "smallmap",
  "tiny-std",
