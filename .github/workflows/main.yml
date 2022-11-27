@@ -29,7 +29,7 @@ jobs:
       - name: Run tests on core with all feature permutations
         run: cargo hack test -p pgwm-core --feature-powerset
       - name: Run tests on project with default features
-        run: cargo test --all-features -p pgwm
+        run: cargo test --all-features -p pgwm-core
   makefile:
     runs-on: ubuntu-latest
     container: marcusgrass/pgwm-check:latest
