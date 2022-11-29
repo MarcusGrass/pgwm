@@ -5,7 +5,7 @@
 #![allow(clippy::too_many_lines)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
-#![allow(clippy::let_underscore_drop)]
+#![allow(let_underscore_drop)]
 #![allow(clippy::needless_pass_by_value)]
 // X11 uses inconsistent integer types fairly interchangeably
 #![allow(clippy::cast_lossless)]

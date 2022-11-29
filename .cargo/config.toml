@@ -1,12 +1,11 @@
 [profile.dev]
-panic = "abort" # Smaller binary
+panic = "abort" # No std requirement
 
 [profile.release]
-panic = "abort" # Smaller binary
-overflow-checks = true # I prefer panics over wraps
+panic = "abort" # No std requirement
 
 [profile.lto]
-panic = "abort" # Smaller binary
+panic = "abort" # No std requirement
 codegen-units = 1 # Better optimization
 debug = false # Inherits from release so should actually do nothing but whatever
 inherits = "release"
