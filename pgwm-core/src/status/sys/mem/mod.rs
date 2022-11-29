@@ -1,7 +1,7 @@
 use crate::error::Error;
-use bstr::ByteSlice;
+use crate::status::sys::{find_byte, find_in_haystack};
 
-const MEM_LOAD: &str = "/proc/meminfo";
+const MEM_LOAD: &str = "/proc/meminfo\0";
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Data {
@@ -10,9 +10,21 @@ pub struct Data {
     pub swapped: u64,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct MemChecker;
+
+impl MemChecker {
+    #[inline]
+    pub fn read_mem_info(&mut self) -> Result<Data, Error> {
+        read_mem_info()
+    }
+}
+
+#[allow(unsafe_code)]
+#[inline]
 pub fn read_mem_info() -> Result<Data, Error> {
-    let content = std::fs::read(MEM_LOAD)?;
-    parse_raw(&content)
+    let buf = tiny_std::fs::read(MEM_LOAD)?;
+    parse_raw(&buf)
 }
 
 pub fn parse_raw(mem_info: &[u8]) -> Result<Data, Error> {
@@ -28,7 +40,7 @@ pub fn parse_raw(mem_info: &[u8]) -> Result<Data, Error> {
 }
 
 fn parse_line_containing(haystack: &[u8], needle: &[u8]) -> Result<u64, Error> {
-    if let Some(start) = haystack.find(needle) {
+    if let Some(start) = find_in_haystack(haystack, needle) {
         // We're not even close to the end here
         let sub_target = &haystack[start..];
         parse_kb_value(sub_target)
@@ -40,12 +52,12 @@ fn parse_line_containing(haystack: &[u8], needle: &[u8]) -> Result<u64, Error> {
 }
 
 fn parse_kb_value(target: &[u8]) -> Result<u64, Error> {
-    if let Some(next_space_ind) = target.find_byte(b' ') {
+    if let Some(next_space_ind) = find_byte(b' ', target) {
         let mut next_non_space = next_space_ind;
         while target[next_non_space] == b' ' {
             next_non_space += 1;
         }
-        if let Some(next_space) = target[next_non_space..].find_byte(b' ') {
+        if let Some(next_space) = find_byte(b' ', &target[next_non_space..]) {
             return atoi::atoi(&target[next_non_space..next_non_space + next_space])
                 .ok_or(Error::MemParseError("Failed to parse kb value of mem info"));
         }

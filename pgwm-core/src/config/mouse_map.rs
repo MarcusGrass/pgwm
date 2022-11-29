@@ -1,5 +1,6 @@
+use xcb_rust_protocol::proto::xproto::{ButtonIndexEnum, ModMask};
+
 use crate::config::Action;
-use x11rb::protocol::xproto::{ButtonIndex, ModMask};
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub struct MouseActionKey {
@@ -49,7 +50,7 @@ pub struct MouseMapping {
     pub target: MouseTarget,
     pub action: Action,
     pub mods: ModMask,
-    pub button: ButtonIndex,
+    pub button: ButtonIndexEnum,
 }
 
 impl MouseMapping {
@@ -57,7 +58,7 @@ impl MouseMapping {
     pub const fn new(
         target: MouseTarget,
         mods: ModMask,
-        button: ButtonIndex,
+        button: ButtonIndexEnum,
         action: Action,
     ) -> Self {
         MouseMapping {

@@ -1,3 +1,6 @@
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use crate::config::DefaultDraw;
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]

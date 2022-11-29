@@ -1,4 +1,4 @@
-# PGWM, a DWM-inspired tiling window manager written in pure safe Rust
+# PGWM, a DWM-inspired tiling window manager written in pure Rust
 [![Latest workflow](https://github.com/MarcusGrass/pgwm/workflows/CI/badge.svg)](https://github.com/MarcusGrass/pgwm/actions)
 
 The WM is to my understanding compliant with the [wm-spec](https://specifications.freedesktop.org/wm-spec/wm-spec-1.3.html).
@@ -8,6 +8,7 @@ an explanation in [EWMH.md](docs/EWMH.md), please create an issue if you have th
 Big shout out to [x11rb](https://github.com/psychon/x11rb) which has great safe x11 bindings!
 
 Even Jetbrains IDE's work without freaking out assuming `setwmname LG3D` is in your `~/.xinitrc`.
+
 
 # Why
 I love to build my old tools, so after a few years of running up against bugs that bothered my workflow 
@@ -81,13 +82,12 @@ if there is, please let me know by creating an issue.
 ![multi-monitor-tabbed-float](demo3.png)
 
 # How to build
-To build locally platform build essentials, is required
+To build locally, platform build essentials is required
 see the [min building dockerfile](.docker/minimal-build.dockerfile).  
-To run the same test as the ci locally libssl and perl is also required, 
+To run the same test as the ci locally, libssl and perl is also required, 
 [see the ci dockerfile](.docker/full-checks.dockerfile).
 
-
-The project is tested on x86_64-unknown-linux-gnu but "should" run on any *nix system. 
+The project is tested on x86_64-unknown-linux-gnu but "should" run on more *nix systems. 
 
 ## Install a Rust toolchain
 https://www.rust-lang.org/tools/install
@@ -96,6 +96,15 @@ https://www.rust-lang.org/tools/install
 git clone https://github.com/MarcusGrass/pgwm.git
 
 ## Build the project
+As of 0.3.0 the WM runs in pure Rust with no libc dependencies. In effect this means that the binary will always be 
+statically linked. It also sadly means that the nightly toolchain needs to compile it, and that some use of unsafety is needed.
+Mostly this comes from direct syscalls, which will always be unsafe, as well as the WM entrypoint since we don't include start files.
+
+Another side effect of this is that a target needs to be specified for build-scripts in dependencies to run correctly 
+since the binary will be statically linked anyway it just defaults to --target x86_64-unknown-linux-gnu in [the build script](build_wm.sh).
+
+`lld` is required, if you don't want to change [the small build script](build_wm.sh) and remove it as the default linker there.
+
 The project builds default with xinerama support, a status-bar, and support for a config-file. To compile without either,
 disable default features.
 To build with max optimizations use --profile=lto.
@@ -145,30 +154,24 @@ make uninstall CLEAN_CONFIG=1
 How to build as a regular Rust project.
 
 #### With default features
-`cargo build --release`
+`./build_wm.sh -r`
 or
-`cargo build --profile=lto`
+`./build_wm.sh --profile=lto`
 
 #### With no default features
-`cargo build --release --no-default-features`
+`./build_wm.sh --release --no-default-features`
 or
-`cargo build --profile=lto --no-default-features`
+`./build_wm.sh --profile=lto --no-default-features`
 
 #### Example of some additional features
-`cargo build --release --no-default-features --features xinerama,status-bar`  
+`./build_wm.sh --release --no-default-features --features xinerama,status-bar`  
 or  
-`cargo build --profile=lto --no-default-features --features xinerama,status-bar`
-
-#### Using cargo install
-Installs the binary to `$HOME/.cargo/bin`  
-`cargo install --profile=lto --path pgwm`  
-Remember to add cargo bin to path if you haven't already  
-`PATH="$HOME/.cargo/bin:$PATH"`
+`./build_wm.sh --profile=lto --no-default-features --features xinerama,status-bar`
 
 ### Edit .xinitrc or other file specifying WM entrypoint
-If built with `cargo build` The binary ends up in target/release/pgwm or target/lto/pgwm
+If built with `./build_wm.sh` The binary ends up in target/x86_64-unknown-linux-gnu/release/pgwm or target/x86_64-unknown-linux-gnu/lto/pgwm
 Replace the (probably) last line of .xinitrc with
-`exec $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary, or just `pgwm` if using `cargo install`.   
+`exec $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary.     
 
 # Changing configuration
 ## Config file
@@ -239,5 +242,7 @@ All this being said, it's measured for the running WM binary, all operations on 
 this WM binary could be perfectly efficient but slamming the x11 server with requests that it has problems processing.
 Although I have not noticed any such behaviour.
 
+Note: post migration, pre rip out libc, 931K binary size
+
 # Licensing
-This project is licensed under [GPL v3](LICENSE).
+This project is licensed under [GPL v3](GPL-LICENSE)

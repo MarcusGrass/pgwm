@@ -1,4 +1,23 @@
 # Example cfg, most cfg can be omitted with the exception of `[fonts] fallback`
+# Mapping for specific characters to specific fonts.
+# If a certain render contains a desired icon the mapping for that char-mapping is put below
+char-remap."\uf121" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf120" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf086" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\ue007" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf", size = "13.0" }
+char-remap."\uf1bc" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf", size = "13.0" }
+char-remap."\uf11b" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf7d9" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf02b" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf02c" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf2db" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf538" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf019" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf093" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf073" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf502" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+char-remap."\uf304" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+
 [sizing]
 # Height in pixels of the status_bar
 # Cannot be 0 or larger than any monitor's height
@@ -121,25 +140,7 @@ shortcut_section = [
     { path = "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf", size = "14.0" },
 ]
 
-# Mapping for specific characters to specific fonts.
-# If a certain render contains a desired icon the mapping for that char-mapping is put below
-[char-remap]
-"\uf121" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf120" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf086" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\ue007" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf", size = "13.0" }
-"\uf1bc" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf", size = "13.0" }
-"\uf11b" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf7d9" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf02b" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf02c" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf2db" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf538" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf019" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf093" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf073" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf502" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
-"\uf304" = { path = "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf", size = "13.0" }
+
 
 # Available workspaces and their names and respective class_name mappings
 # The mapped_class_names is an array of wm class names
@@ -203,7 +204,7 @@ check_type = { kind = "Net", args = { icon_up = "\uf093", icon_down = "\uf019", 
 interval = 1000
 # The pattern here can be at most `STATUS_BAR_DATE_PATTERN_LIMIT` bytes of utf8 characters, for reference this one is 85 bytes
 # Your timezone's utc-offset is specified here, mostly because of performance, security, and future-proofing reasons.
-check_type = { kind = "Date", args = { icon = "\uf073", pattern = "[weekday repr:short] [month repr:short] [day] w[week_number] [hour]:[minute]:[second]", utc_offset = [2, 0, 0]}}
+check_type = { kind = "Date", args = { icon = "\uf073", clock_formatter = { format = "{%d%} {%M%} {%D%} v{%W%} {%h%}:{%m%}:{%s%}", utc_offset = [1, 0, 0] }}}
 
 # Mouse mappings
 # M4 is usually super/win
@@ -300,26 +301,26 @@ button = "M1"
 # Press first status component
 target = { kind = "StatusComponent", args = 0 }
 # Pop htop using alacritty as term, close on exit
-on_click = { action = "Spawn", args = ["alacritty", ["-e", "htop"]]}
+on_click = { action = "Spawn", args = ["/usr/bin/xterm", ["-e", "htop"]]}
 [[mouse-mapping]]
 mods = []
 button = "M1"
 # Press fourth
 target = { kind = "StatusComponent", args = 3 }
 # Open a new tab in firefox with a calendar
-on_click = { action = "Spawn", args = ["firefox", ["-new-tab", "https://calendar.google.com"]]}
+on_click = { action = "Spawn", args = ["/usr/bin/firefox", ["-new-tab", "https://calendar.google.com"]]}
 [[mouse-mapping]]
 mods = []
 button = "M1"
 target = { kind = "ShortcutComponent", args = 0 }
 # Pop a term with some configuration open, running with bash to be able to use `~` for home
-on_click = { action = "Spawn", args = ["alacritty", ["-e", "bash", "-c", "nvim ~/.bashrc ~/.xinitrc ~/.config/pgwm/pgwm.toml"]]}
+on_click = { action = "Spawn", args = ["/usr/bin/xterm", ["-e", "/usr/bin/bash", "-c", "nvim ~/.bashrc ~/.xinitrc ~/.config/pgwm/pgwm.toml"]]}
 [[mouse-mapping]]
 mods = []
 button = "M1"
 target = { kind = "ShortcutComponent", args = 1 }
 # Lock screen
-on_click = { action = "Spawn", args = ["xscreensaver-command", ["-lock"]]}
+on_click = { action = "Spawn", args = ["/usr/bin/xscreensaver-command", ["-lock"]]}
 
 # Key mappings
 # Available mods are same as for mouse mappings:
@@ -508,12 +509,12 @@ on_click = { action = "SendToWorkspace", args = 8 }
 [[key-mapping]]
 mods = ["M4", "Shift"]
 key =  0xff0d # <Return/Enter>
-on_click = { action = "Spawn", args = ["alacritty", []] }
+on_click = { action = "Spawn", args = ["/usr/bin/xterm", []] }
 [[key-mapping]]
 mods = ["M4"]
 key =  0x0064 # d
-on_click = { action = "Spawn", args = ["dmenu_run", ["-i", "-p", "Run: "]] }
+on_click = { action = "Spawn", args = ["/usr/bin/dmenu_run", ["-i", "-p", "Run: "]] }
 [[key-mapping]]
 mods = []
 key =  0xff61 # Print
-on_click = { action = "Spawn", args = ["bash", ["-c", "maim -s -u | xclip -selection clipboard -t image/png -i"]] }
+on_click = { action = "Spawn", args = ["/usr/bin/bash", ["-c", "/usr/bin/maim -s -u | xclip -selection clipboard -t image/png -i"]] }

@@ -47,18 +47,6 @@ macro_rules! hvec {
         }
     }
 }
-#[macro_export]
-#[cfg(feature = "debug")]
-macro_rules! debug {
-    ($($arg:tt)*) => {{
-        eprintln!("[{}:L#{}] {}", file!(), line!(), format_args!($($arg)*));
-    }}
-}
-#[macro_export]
-#[cfg(not(feature = "debug"))]
-macro_rules! debug {
-    ($($arg:tt)*) => {{}};
-}
 
 #[macro_export]
 macro_rules! format_heapless {

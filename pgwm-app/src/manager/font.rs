@@ -1,14 +1,20 @@
-use crate::error::{Error, Result};
-use crate::x11::call_wrapper::CallWrapper;
-use fontdue::FontSettings;
-use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use x11rb::protocol::render::{Glyphinfo, Glyphset};
+use alloc::vec;
+use alloc::vec::Vec;
+
+use fontdue::{FontHasherBuilder, FontSettings};
+use hashbrown::hash_map::Entry;
+use hashbrown::HashMap;
+use smallmap::Map;
+use tiny_std::io::Read;
+use xcb_rust_protocol::proto::render::{Glyphinfo, Glyphset};
 
 use pgwm_core::colors::Color;
 use pgwm_core::config::{FontCfg, Fonts};
 use pgwm_core::geometry::Dimensions;
+use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
+
+use crate::error::{Error, Result};
+use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) struct FontDrawer<'a> {
     loaded_render_fonts: &'a LoadedFonts<'a>,
@@ -51,7 +57,7 @@ impl<'a> FontDrawer<'a> {
         let mut drawn_width = 0;
         for chunk in encoded {
             drawn_width += chunk.width;
-            let box_shift = (fill_area.height - chunk.font_height as i16) / 2;
+            let box_shift = (fill_area.height - chunk.font_height) / 2;
 
             call_wrapper.draw_glyphs(
                 offset,
@@ -61,7 +67,7 @@ impl<'a> FontDrawer<'a> {
                 &chunk.glyph_ids,
             )?;
 
-            offset += chunk.width as i16;
+            offset += chunk.width;
         }
 
         Ok(drawn_width)
@@ -72,9 +78,9 @@ pub(crate) fn load_alloc_fonts<'a>(
     call_wrapper: &mut CallWrapper,
     vis_info: &RenderVisualInfo,
     fonts: &'a Fonts,
-    char_remap: &'a HashMap<heapless::String<4>, FontCfg>,
-) -> Result<HashMap<&'a FontCfg, LoadedFont>> {
-    let mut map = HashMap::new();
+    char_remap: &'a Map<heapless::String<4>, FontCfg>,
+) -> Result<HashMap<&'a FontCfg, LoadedFont, FontHasherBuilder>> {
+    let mut map = HashMap::with_hasher(FontHasherBuilder);
     let it = fonts
         .workspace_section
         .iter()
@@ -82,72 +88,121 @@ pub(crate) fn load_alloc_fonts<'a>(
         .chain(fonts.shortcut_section.iter())
         .chain(fonts.tab_bar_section.iter())
         .chain(char_remap.values());
+    call_wrapper.inner_mut().flush()?;
     #[cfg(feature = "status-bar")]
     let it = it.chain(fonts.status_section.iter());
+    // Reuse buffer
+    let mut data = Vec::with_capacity(65536);
     for f_cfg in it {
         // Ugly and kind of dumb
         let mut id = 0;
         if let Entry::Vacant(v) = map.entry(f_cfg) {
-            let data = std::fs::read(&f_cfg.path)?;
-
+            let mut file = tiny_std::fs::OpenOptions::new()
+                .read(true)
+                .open(&f_cfg.path)?;
+            data.clear();
+            let read_bytes = file.read_to_end(&mut data)?;
+            crate::debug!("Read {} bytes of font {}", read_bytes, f_cfg.path);
             let gs = call_wrapper.create_glyphset(vis_info)?;
 
             let mut ids = vec![];
             let mut infos = vec![];
             let mut raw_data = vec![];
-            let mut char_map = HashMap::new();
+            let mut char_map = HashMap::with_hasher(FontHasherBuilder);
             let size = f_cfg.size.parse::<f32>().map_err(|_| Error::ParseFloat)?;
-            let rasterized = fontdue::rasterize_all(
-                data.as_slice(),
-                size,
-                FontSettings {
-                    collection_index: 0,
-                    scale: size, // We're just oneshot rasterizing here so the size we're drawing for = scale without waste
-                },
-            )
-            .map_err(Error::FontLoad)?;
-            for data in rasterized.data {
-                for byte in data.buf {
+            let raster_iter =
+                fontdue::RasterIterator::new(&data[..read_bytes], size, FontSettings::default())
+                    .map_err(|_e| {
+                        crate::debug!("Font load failed {_e}");
+                        Error::FontLoad("Failed to load font")
+                    })?;
+            crate::debug!("Loaded font at {}", f_cfg.path);
+            let mut data = vec![];
+            let mut max_height = 0;
+            // DlMalloc seems to keep our dropped vec on the heap after use, really annoying
+            for rasterized_char in raster_iter {
+                let height =
+                    rasterized_char.metrics.height as i16 + rasterized_char.metrics.ymin as i16;
+                if height > max_height {
+                    max_height = height;
+                }
+                data.push((
+                    rasterized_char.ch,
+                    rasterized_char.metrics,
+                    rasterized_char.buf,
+                ));
+            }
+            for (ch, metrics, buf) in data {
+                for byte in buf {
                     raw_data.extend_from_slice(&[byte, byte, byte, byte]);
                 }
                 // When placing chars next to each other this is the appropriate width to use
-                let horizontal_space = data.metrics.advance_width.ceil() as i16;
+                let horizontal_space = metrics.advance_width as i16;
                 let glyph_info = Glyphinfo {
-                    width: data.metrics.width as u16,
-                    height: data.metrics.height as u16,
-                    x: -data.metrics.xmin as i16,
-                    y: data.metrics.height as i16 - rasterized.max_height as i16
-                        + data.metrics.ymin as i16, // pt2
+                    width: metrics.width as u16,
+                    height: metrics.height as u16,
+                    x: -metrics.xmin as i16,
+                    y: metrics.height as i16 - max_height + metrics.ymin as i16, // pt2
                     x_off: horizontal_space,
-                    y_off: data.metrics.advance_height.ceil() as i16,
+                    y_off: metrics.advance_height as i16,
                 };
                 ids.push(id as u32);
                 infos.push(glyph_info);
                 char_map.insert(
-                    data.ch,
+                    ch,
                     CharInfo {
                         glyph_id: id,
                         horizontal_space,
-                        height: data.metrics.height as u16,
+                        height: metrics.height as u16,
                     },
                 );
+                let current_out_size = current_out_size(ids.len(), infos.len(), raw_data.len());
+                if current_out_size >= 32768 {
+                    call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
+                    call_wrapper.inner_mut().flush()?;
+                    ids.clear();
+                    infos.clear();
+                    raw_data.clear();
+                }
                 id += 1;
             }
             call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
+            call_wrapper.inner_mut().flush()?;
+            crate::debug!("Added {} glyphs", ids.len());
+            crate::debug!(
+                "Storing loaded font with size > {} bytes",
+                calculate_font_size(char_map.len())
+            );
             v.insert(LoadedFont {
                 glyph_set: gs,
                 char_map,
-                font_height: rasterized.max_height as i16,
+                font_height: max_height,
             });
         }
     }
     Ok(map)
 }
 
+#[inline]
+fn current_out_size(ids_len: usize, infos_len: usize, raw_data_len: usize) -> usize {
+    core::mem::size_of::<u32>()
+        + core::mem::size_of::<u32>() * ids_len
+        + core::mem::size_of::<Glyphinfo>() * infos_len
+        + core::mem::size_of::<u8>() * raw_data_len
+}
+
+#[cfg(feature = "debug")]
+#[inline]
+fn calculate_font_size(map_len: usize) -> usize {
+    core::mem::size_of::<u32>()
+        + core::mem::size_of::<i16>()
+        + (core::mem::size_of::<char>() + core::mem::size_of::<CharInfo>()) * map_len
+}
+
 pub struct LoadedFonts<'a> {
-    pub(crate) fonts: HashMap<&'a FontCfg, LoadedFont>,
+    pub(crate) fonts: HashMap<&'a FontCfg, LoadedFont, FontHasherBuilder>,
     // Simple key, use smallmap
-    chars: smallmap::Map<char, LoadedChar>,
+    chars: Map<char, LoadedChar>,
 }
 
 struct LoadedChar {
@@ -158,11 +213,11 @@ struct LoadedChar {
 
 impl<'a> LoadedFonts<'a> {
     pub(crate) fn new(
-        fonts: HashMap<&'a FontCfg, LoadedFont>,
-        char_mapping: &HashMap<heapless::String<4>, FontCfg>,
+        fonts: HashMap<&'a FontCfg, LoadedFont, FontHasherBuilder>,
+        char_mapping: &Map<heapless::String<4>, FontCfg>,
     ) -> Result<Self> {
-        let mut chars = smallmap::Map::new();
-        for (char, font) in char_mapping {
+        let mut chars = Map::new();
+        for (char, font) in char_mapping.iter() {
             let maybe_char = char.chars().next();
             match maybe_char {
                 Some(char) => match fonts.get(font) {
@@ -201,10 +256,10 @@ impl<'a> LoadedFonts<'a> {
             if let Some(lchar) = self.chars.get(&char) {
                 if !cur_glyphs.is_empty() {
                     chunks.push(FontEncodedChunk {
-                        width: std::mem::take(&mut cur_width),
-                        font_height: std::mem::take(&mut cur_font_height),
+                        width: core::mem::take(&mut cur_width),
+                        font_height: core::mem::take(&mut cur_font_height),
                         glyph_set: cur_gs.unwrap(),
-                        glyph_ids: std::mem::take(&mut cur_glyphs),
+                        glyph_ids: core::mem::take(&mut cur_glyphs),
                     });
                 }
                 // Early return if next char would go OOB
@@ -239,10 +294,10 @@ impl<'a> LoadedFonts<'a> {
                         }
                         if gs != cur_gs.unwrap() {
                             chunks.push(FontEncodedChunk {
-                                width: std::mem::take(&mut cur_width),
+                                width: core::mem::take(&mut cur_width),
                                 font_height: mh,
                                 glyph_set: cur_gs.unwrap(),
-                                glyph_ids: std::mem::take(&mut cur_glyphs),
+                                glyph_ids: core::mem::take(&mut cur_glyphs),
                             });
                             cur_gs = Some(gs);
                             cur_width = 0;
@@ -260,7 +315,7 @@ impl<'a> LoadedFonts<'a> {
                             return chunks;
                         }
                         total_width += info.horizontal_space;
-                        cur_width += info.horizontal_space as i16;
+                        cur_width += info.horizontal_space;
                         cur_font_height = mh;
                         cur_glyphs.push(info.glyph_id);
                     }
@@ -322,7 +377,7 @@ pub struct FontEncodedChunk {
 #[allow(clippy::module_name_repetitions)]
 pub struct LoadedFont {
     pub glyph_set: Glyphset,
-    pub char_map: HashMap<char, CharInfo>,
+    pub char_map: HashMap<char, CharInfo, FontHasherBuilder>,
     pub font_height: i16,
 }
 

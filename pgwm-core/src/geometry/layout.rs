@@ -331,6 +331,7 @@ mod tests {
     use crate::config::WS_WINDOW_LIMIT;
     use crate::geometry::layout::Layout;
     use crate::geometry::Dimensions;
+
     const TEST_WIDTH: u32 = 1000;
     const TEST_HEIGHT: u32 = 1000;
     const TEST_PAD: i16 = 5;

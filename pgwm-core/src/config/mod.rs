@@ -1,14 +1,19 @@
-use crate::colors::ColorBuilder;
-use crate::config::key_map::KeyboardMapping;
-use crate::config::mouse_map::{MouseMapping, MouseTarget};
-use crate::config::workspaces::UserWorkspace;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+
+use smallmap::Map;
 use x11_keysyms::{
     XK_Print, XK_Return, XK_b, XK_c, XK_comma, XK_d, XK_f, XK_h, XK_j, XK_k, XK_l, XK_n, XK_period,
     XK_q, XK_r, XK_space, XK_t, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
 };
-use x11rb::protocol::xproto::{ButtonIndex, Keysym, ModMask};
+use xcb_rust_protocol::proto::xproto::{ButtonIndexEnum, Keysym, ModMask};
+
+use crate::colors::ColorBuilder;
+use crate::config::key_map::KeyboardMapping;
+use crate::config::mouse_map::{MouseMapping, MouseTarget};
+use crate::config::workspaces::UserWorkspace;
 
 pub mod key_map;
 pub mod mouse_map;
@@ -43,59 +48,59 @@ pub const WM_NAME_LIMIT: usize = 256;
 pub const WM_CLASS_NAME_LIMIT: usize = 128;
 
 /**
-    The name that the window manager will broadcast itself as. Will also affect where
-    configuration is placed/read from.
-**/
+The name that the window manager will broadcast itself as. Will also affect where
+configuration is placed/read from.
+ **/
 pub const WINDOW_MANAGER_NAME: &str = "pgwm";
 /**
-   Should not be changed, internally used.
-**/
+Should not be changed, internally used.
+ **/
 pub const WINDOW_MANAGER_NAME_BUF_SIZE: usize = WINDOW_MANAGER_NAME.len() * 2;
 /**
-   How many different color segments are used. eg. tab bar text and status bar text makes 2,
-   even if they use the same color,
-   this should not be touched for simple configuration.
-**/
+How many different color segments are used. eg. tab bar text and status bar text makes 2,
+even if they use the same color,
+this should not be touched for simple configuration.
+ **/
 pub const USED_DIFFERENT_COLOR_SEGMENTS: usize = 17;
 // Configuration that necessarily need to be comptime for working with heapless datastructures
 /**
-    How many windows can reside in a workspace, loosely used but if tiling into really small windows
-    is desired, this can be raised an arbitrary amount.
-    Not too harsh on stack space.
-**/
+How many windows can reside in a workspace, loosely used but if tiling into really small windows
+is desired, this can be raised an arbitrary amount.
+Not too harsh on stack space.
+ **/
 pub const WS_WINDOW_LIMIT: usize = 16;
 
 /**
-   How many windows that can be managed simultaneously, can be arbitrarily chosen with risk of
-   crashing if the number is exceeded.
-   Not too harsh on stack space.
-**/
+How many windows that can be managed simultaneously, can be arbitrarily chosen with risk of
+crashing if the number is exceeded.
+Not too harsh on stack space.
+ **/
 pub const APPLICATION_WINDOW_LIMIT: usize = 128;
 
 /**
-    Size of the binary which stores events to ignore. Since it's flushed on every incoming event above
-    the given ignored sequence its max required size could be statically determined, but that's a pain,
-    64 should be enough.
-**/
+Size of the binary which stores events to ignore. Since it's flushed on every incoming event above
+the given ignored sequence its max required size could be statically determined, but that's a pain,
+64 should be enough.
+ **/
 pub const BINARY_HEAP_LIMIT: usize = 64;
 
 /**
-    Cache size of windows that have been closed but not destroyed yet. These will be destroyed
-    and later killed if no destroy-notify is received. Can be arbitrarily chosen but will cause
-    a crash if too low.
-    Only triggered in the event that for some reason a lot of windows that are misbehaving are manually
-    closed at the same time and refuse to die within timeout.
-**/
+Cache size of windows that have been closed but not destroyed yet. These will be destroyed
+and later killed if no destroy-notify is received. Can be arbitrarily chosen but will cause
+a crash if too low.
+Only triggered in the event that for some reason a lot of windows that are misbehaving are manually
+closed at the same time and refuse to die within timeout.
+ **/
 pub const DYING_WINDOW_CACHE: usize = 16;
 
 /**
-    Internally used for writing the render buffer to xft when drawing, 32 gives good performance.
-**/
+Internally used for writing the render buffer to xft when drawing, 32 gives good performance.
+ **/
 pub const FONT_WRITE_BUF_LIMIT: usize = 32;
 
 /**
-    Convenience constant
-**/
+Convenience constant
+ **/
 pub const NUM_TILING_MODIFIERS: usize = WS_WINDOW_LIMIT - 1;
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
@@ -113,7 +118,7 @@ pub struct Cfg {
         feature = "config-file",
         serde(alias = "char-remap", default = "init_char_remap")
     )]
-    pub char_remap: HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, FontCfg>,
+    pub char_remap: Map<heapless::String<UTF8_CHAR_MAX_BYTES>, FontCfg>,
     #[cfg_attr(
         feature = "config-file",
         serde(alias = "workspace", default = "init_workspaces")
@@ -135,20 +140,21 @@ pub struct Cfg {
 }
 
 impl Cfg {
-    pub fn new() -> crate::error::Result<Self> {
+    #[cfg_attr(not(feature = "config-file"), allow(unused_variables))]
+    pub fn new(config_home: Option<&str>, home: Option<&str>) -> crate::error::Result<Self> {
         #[cfg(feature = "config-file")]
         {
-            let mut cfg = match crate::util::load_cfg::load_cfg() {
+            let mut cfg = match crate::util::load_cfg::load_cfg(config_home, home) {
                 Ok(cfg) => Ok(cfg),
                 // Not having a config file is not an error, fallback to default hard-coded
                 Err(e) => match e {
                     crate::error::Error::ConfigDirFind | crate::error::Error::ConfigFileFind => {
-                        crate::debug!("Failed to find config, loading default");
+                        pgwm_utils::debug!("Failed to find config, loading default");
                         Ok(Cfg::default())
                     }
                     #[allow(unused_variables)]
-                    crate::error::Error::Io(e) => {
-                        crate::debug!("Got io error reading config {e}, loading default");
+                    crate::error::Error::Syscall(e) => {
+                        pgwm_utils::debug!("Got syscall error reading config {e}, loading default");
                         Ok(Cfg::default())
                     }
 
@@ -242,7 +248,7 @@ fn validate_config(cfg: &mut Cfg) -> crate::error::Result<()> {
                         return Err(crate::error::Error::ConfigLogic("Key/mouse mapping(s) out of configured workspace bounds and will cause a crash on activation"));
                     }
                 }
-                _ => {},
+                _ => {}
             }
             Ok(())
         })?;
@@ -334,9 +340,11 @@ pub struct Options {
     #[cfg_attr(feature = "config-file", serde(default = "default_pad_while_tabbed"))]
     pub pad_while_tabbed: bool,
     #[cfg_attr(feature = "config-file", serde(default = "default_destroy_after"))]
-    pub destroy_after: u64, // Millis before force-close
+    pub destroy_after: u64,
+    // Millis before force-close
     #[cfg_attr(feature = "config-file", serde(default = "default_kill_after"))]
-    pub kill_after: u64, // Millis before we kill the client
+    pub kill_after: u64,
+    // Millis before we kill the client
     #[cfg_attr(feature = "config-file", serde(default = "default_cursor_name"))]
     pub cursor_name: String,
     #[cfg_attr(feature = "config-file", serde(default = "default_show_bar_initially"))]
@@ -383,6 +391,7 @@ impl Default for Options {
         }
     }
 }
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 pub struct TilingModifiers {
@@ -456,7 +465,7 @@ impl Fonts {
     }
 
     #[must_use]
-    pub fn get_all_font_paths(&self) -> Vec<PathBuf> {
+    pub fn get_all_font_paths(&self) -> Vec<String> {
         let it = self
             .fallback
             .iter()
@@ -466,7 +475,7 @@ impl Fonts {
             .chain(self.window_name_display_section.iter());
         #[cfg(feature = "status-bar")]
         let it = it.chain(self.status_section.iter());
-        it.map(|f_cfg| PathBuf::from(&f_cfg.path)).collect()
+        it.map(|f_cfg| f_cfg.path.clone()).collect()
     }
 }
 
@@ -542,7 +551,7 @@ impl Default for Fonts {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct SimpleMouseMapping {
     target: MouseTarget,
     pub mods: ModMasks,
@@ -564,7 +573,7 @@ impl SimpleMouseMapping {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct SimpleKeyMapping {
     mods: ModMasks,
     key: Keysym,
@@ -590,7 +599,7 @@ impl SimpleKeyMapping {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct ModMasks {
     pub inner: ModMask,
 }
@@ -617,13 +626,13 @@ pub(crate) enum ModMaskEnum {
 }
 
 #[derive(Copy, Clone, Debug)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct Button {
-    pub inner: ButtonIndex,
+    pub inner: ButtonIndexEnum,
 }
 
-impl From<ButtonIndex> for Button {
-    fn from(inner: ButtonIndex) -> Self {
+impl From<ButtonIndexEnum> for Button {
+    fn from(inner: ButtonIndexEnum) -> Self {
         Button { inner }
     }
 }
@@ -656,11 +665,11 @@ impl Default for DefaultDraw {
 }
 
 /**
-    Workspace configuration, names and which window classes should map to each workspace is put here.
-    If the name is longer than `WS_NAME_LIMIT` the wm will crash on startup.
-    Similarly if any class name is longer than `MAX_WM_CLASS_NAME` it will crash.
-    Increase those parameters as needed.
-**/
+Workspace configuration, names and which window classes should map to each workspace is put here.
+If the name is longer than `WS_NAME_LIMIT` the wm will crash on startup.
+Similarly if any class name is longer than `MAX_WM_CLASS_NAME` it will crash.
+Increase those parameters as needed.
+ **/
 fn init_workspaces() -> Vec<UserWorkspace> {
     vec![
         UserWorkspace::new(
@@ -699,115 +708,115 @@ fn init_workspaces() -> Vec<UserWorkspace> {
 }
 
 /** Which mouse-keys will be grabbed and what actions will be executed if they are pressed.
-   Actions:
-   `MoveClient`: Will float a client if tiled and until the pressed button is released the window
-   will be moved along with the client
-   Resize: Will resize the client along its tiling axis if tiled, or both axes if floating, by the contained number.
-   eg. Resize(i16) means that when that button is pressed the window size will increase by 2,
-   while Resize(-2) means that the window size will decrease by 2
-   The unit of 2 is undefined, it's some implementation specific modifier
-   Available modifiers can be found in `ButtonIndex` imported at the top of this file (although it's M1 through M5).
-   `MouseTarget` should likely always be `MouseTarget::ClientWindow`
-**/
+Actions:
+`MoveClient`: Will float a client if tiled and until the pressed button is released the window
+will be moved along with the client
+Resize: Will resize the client along its tiling axis if tiled, or both axes if floating, by the contained number.
+eg. Resize(i16) means that when that button is pressed the window size will increase by 2,
+while Resize(-2) means that the window size will decrease by 2
+The unit of 2 is undefined, it's some implementation specific modifier
+Available modifiers can be found in `ButtonIndex` imported at the top of this file (although it's M1 through M5).
+`MouseTarget` should likely always be `MouseTarget::ClientWindow`
+ **/
 fn init_mouse_mappings() -> Vec<SimpleMouseMapping> {
     vec![
         SimpleMouseMapping {
             target: MouseTarget::ClientWindow,
             mods: ModMasks::from(MOD_KEY),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::MoveWindow,
         },
         SimpleMouseMapping {
             target: MouseTarget::ClientWindow,
             mods: ModMasks::from(MOD_KEY),
-            button: Button::from(ButtonIndex::M4),
+            button: Button::from(ButtonIndexEnum::FOUR),
             on_click: Action::ResizeWindow(4),
         },
         SimpleMouseMapping {
             target: MouseTarget::ClientWindow,
             mods: ModMasks::from(MOD_KEY),
-            button: Button::from(ButtonIndex::M5),
+            button: Button::from(ButtonIndexEnum::FIVE),
             on_click: Action::ResizeWindow(-4),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(0),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(0),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(1),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(1),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(2),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(2),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(3),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(3),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(4),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(4),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(5),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(5),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(6),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(6),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(7),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(7),
         },
         SimpleMouseMapping {
             target: MouseTarget::WorkspaceBarComponent(8),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::ToggleWorkspace(8),
         },
         SimpleMouseMapping {
             target: MouseTarget::StatusComponent(0),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
-            on_click: Action::Spawn("alacritty".into(), vec!["-e".into(), "htop".into()]),
+            button: Button::from(ButtonIndexEnum::ONE),
+            on_click: Action::Spawn("/usr/bin/xterm".into(), vec!["-e".into(), "htop".into()]),
         },
         SimpleMouseMapping {
             target: MouseTarget::StatusComponent(3),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::Spawn(
-                "firefox".into(),
+                "/usr/bin/firefox".into(),
                 vec!["-new-tab".into(), "https://calendar.google.com".into()],
             ),
         },
         SimpleMouseMapping {
             target: MouseTarget::ShortcutComponent(0),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
+            button: Button::from(ButtonIndexEnum::ONE),
             on_click: Action::Spawn(
-                "alacritty".into(),
+                "/usr/bin/xterm".into(),
                 vec![
                     "-e".into(),
                     // Using bash to access '~' as home
-                    "bash".into(),
+                    "/usr/bin/bash".into(),
                     "-c".into(),
                     // Pop some configuration files in a new terminal
                     "nvim ~/.bashrc ~/.xinitrc ~/.config/pgwm/pgwm.toml".into(),
@@ -817,8 +826,8 @@ fn init_mouse_mappings() -> Vec<SimpleMouseMapping> {
         SimpleMouseMapping {
             target: MouseTarget::ShortcutComponent(1),
             mods: ModMasks::from(ModMask::from(0u16)),
-            button: Button::from(ButtonIndex::M1),
-            on_click: Action::Spawn("xscreensaver-command".into(), vec!["-lock".into()]),
+            button: Button::from(ButtonIndexEnum::ONE),
+            on_click: Action::Spawn("/usr/bin/xscreensaver-command".into(), vec!["-lock".into()]),
         },
     ]
 }
@@ -831,6 +840,7 @@ The checks all take an `icon` parameter which is an arbitrary string drawn next 
 fn init_status_checks(
 ) -> heapless::Vec<crate::status::checker::Check, STATUS_BAR_UNIQUE_CHECK_LIMIT> {
     use crate::status::checker::{Check, CheckType, CpuFormat, DateFormat, MemFormat, NetFormat};
+    use crate::status::time::{ClockFormatter, Format};
     let mut checks = heapless::Vec::new();
     /* Commented out because I'm usually not using a computer with batteries and configure those with config files
     let mut battery_threshholds = heapless::Vec::new();
@@ -904,38 +914,37 @@ fn init_status_checks(
     )
     .unwrap();
     crate::push_heapless!(
-            checks,
-            // The Dateformat takes a format string, over-engineered explanation here
-            // https://time-rs.github.io/book/api/format-description.html
-            // Hopefully the below examples will help
-            Check {
-                check_type: CheckType::Date(DateFormat::new(
+        checks,
+        Check {
+            check_type: CheckType::Date(DateFormat::new(
                 heapless::String::from("\u{f073}"),
-                heapless::String::from("[weekday repr:short] [month repr:short] [day] w[week_number] [hour]:[minute]:[second]"),
-                time::UtcOffset::from_hms(2, 0, 0).unwrap(),
+                ClockFormatter::new(
+                    Format::new("{%d%} {%M%} {%D%} v{%W%} {%h%}:{%m%}:{%s%}").unwrap(),
+                    time::UtcOffset::from_hms(1, 0, 0).unwrap()
+                ),
             )),
-                interval: 1000
-            }
-
-        )
-            .unwrap();
+            interval: 1000
+        }
+    )
+    .unwrap();
     checks
 }
 
 /**
-    The mod key, maps to super on my machine/key_board, can be changed to any of the available
-    ModMasks, check the ModMask struct.
-**/
-const MOD_KEY: ModMask = ModMask::M4;
+The mod key, maps to super on my machine's keyboard, can be changed to any of the available
+`ModMasks`, check the `ModMask` struct.
+ **/
+const MOD_KEY: ModMask = ModMask::FOUR;
+
 /**
-    Keyboard mapping.
-    The first argument is a bitwise or of all applied masks or `ModMask::from(0u16)` denoting none.
-    The second argument is the x11 Keysyms, found here https://cgit.freedesktop.org/xorg/proto/x11proto/tree/keysymdef.h
-    if more are needed they can be qualified as `x11::keysym::XK_b` or imported at the top of the file with the
-    others and used more concisely as `XK_b`.
-    The third parameter is the action that should be taken when the mods and key gets pressed.
-    It's an enum of which all values are exemplified in the below default configuration.
-**/
+Keyboard mapping.
+The first argument is a bitwise or of all applied masks or `ModMask::from(0u16)` denoting none.
+The second argument is the x11 Keysyms, [found here](https://cgit.freedesktop.org/xorg/proto/x11proto/tree/keysymdef.h)
+if more are needed they can be qualified as `x11::keysym::XK_b` or imported at the top of the file with the
+others and used more concisely as `XK_b`.
+The third parameter is the action that should be taken when the mods and key gets pressed.
+It's an enum of which all values are exemplified in the below default configuration.
+ **/
 fn init_key_mappings() -> Vec<SimpleKeyMapping> {
     vec![
         // Shows or hides the top bar
@@ -1012,13 +1021,13 @@ fn init_key_mappings() -> Vec<SimpleKeyMapping> {
         SimpleKeyMapping::new(
             MOD_KEY | ModMask::SHIFT,
             XK_Return,
-            Action::Spawn("alacritty".to_owned(), vec![]),
+            Action::Spawn("/usr/bin/xterm".to_owned(), vec![]),
         ),
         SimpleKeyMapping::new(
             MOD_KEY,
             XK_d,
             Action::Spawn(
-                "dmenu_run".to_owned(),
+                "/usr/bin/dmenu_run".to_owned(),
                 vec!["-i".into(), "-p".into(), "Run: ".into()],
             ),
         ),
@@ -1026,11 +1035,11 @@ fn init_key_mappings() -> Vec<SimpleKeyMapping> {
             ModMask::from(0u16),
             XK_Print,
             Action::Spawn(
-                "bash".into(),
+                "/usr/bin/bash".into(),
                 vec![
                     "-c".into(),
                     // Piping through string pipes ('|') is not valid Rust, just send it to shell instead
-                    "maim -s -u | xclip -selection clipboard -t image/png -i".into(),
+                    "/usr/bin/maim -s -u | xclip -selection clipboard -t image/png -i".into(),
                 ],
             ),
         ),
@@ -1038,11 +1047,11 @@ fn init_key_mappings() -> Vec<SimpleKeyMapping> {
 }
 
 /**
-    Overrides specific character drawing.
-    If some character needs icons from a certain render, they should be mapped below.
-**/
-fn init_char_remap() -> HashMap<heapless::String<UTF8_CHAR_MAX_BYTES>, FontCfg> {
-    let mut icon_map = HashMap::new();
+Overrides specific character drawing.
+If some character needs icons from a certain render, they should be mapped below.
+ **/
+fn init_char_remap() -> Map<heapless::String<UTF8_CHAR_MAX_BYTES>, FontCfg> {
+    let mut icon_map = Map::new();
     let icon_font = FontCfg::new(
         "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf",
         "13.0",

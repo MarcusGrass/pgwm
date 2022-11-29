@@ -1,21 +1,24 @@
 use crate::error::Error;
-use bstr::ByteSlice;
+use crate::status::sys::{find_byte, find_in_haystack};
 
-const NET_STAT: &str = "/proc/net/netstat";
+const NET_STAT: &str = "/proc/net/netstat\0";
 
+#[allow(unsafe_code)]
 pub fn read_net_stats() -> Result<Data, Error> {
-    let content = std::fs::read(NET_STAT)?;
-    parse_raw(&content)
+    let buf = tiny_std::fs::read(NET_STAT)?;
+    parse_raw(&buf)
 }
 
 pub fn parse_raw(raw_data: &[u8]) -> Result<Data, Error> {
-    if let Some(label_line_start) = raw_data.find(b"IpExt: ") {
-        if let Some(real_line_start) = raw_data[label_line_start + 1..].find(b"IpExt: ") {
+    if let Some(label_line_start) = find_in_haystack(raw_data, b"IpExt: ") {
+        if let Some(real_line_start) =
+            find_in_haystack(&raw_data[label_line_start + 1..], b"IpExt: ")
+        {
             let real_line_start = label_line_start + real_line_start;
             let mut prev_ind = real_line_start;
             let mut it = 0;
             let mut bytes_in = 0;
-            while let Some(space_ind) = raw_data[prev_ind..].find_byte(b' ') {
+            while let Some(space_ind) = find_byte(b' ', &raw_data[prev_ind..]) {
                 prev_ind += if space_ind == 0 {
                     1
                 } else {

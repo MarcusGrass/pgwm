@@ -1,4 +1,4 @@
-use x11rb::protocol::xproto::Rectangle;
+use xcb_rust_protocol::proto::xproto::Rectangle;
 
 pub mod draw;
 pub mod layout;

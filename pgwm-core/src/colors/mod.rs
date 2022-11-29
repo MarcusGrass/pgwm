@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 use crate::config::USED_DIFFERENT_COLOR_SEGMENTS;
 
@@ -10,8 +10,9 @@ pub struct Color {
 
 impl Color {
     #[must_use]
-    pub fn as_render_color(&self) -> x11rb::protocol::render::Color {
-        x11rb::protocol::render::Color {
+    #[inline]
+    pub fn as_render_color(&self) -> xcb_rust_protocol::proto::render::Color {
+        xcb_rust_protocol::proto::render::Color {
             red: convert_up(self.bgra8[2]),
             green: convert_up(self.bgra8[1]),
             blue: convert_up(self.bgra8[0]),
@@ -47,12 +48,13 @@ impl Rgba8 for (u8, u8, u8, u8) {
 }
 
 pub type RGBA = (u8, u8, u8, u8);
+
 /**
 Color configuration, Here colors are set for different segments that the WM draws.
 Naming is hopefully fairly self-explanatory for what each color does.
 A constant can be declared as above for reuse.
  **/
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Copy, Clone)]
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct ColorBuilder {

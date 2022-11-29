@@ -1,6 +1,8 @@
+use tiny_bench::*;
+
 use pgwm_core::config::NUM_TILING_MODIFIERS;
 use pgwm_core::geometry::layout::Layout;
-use tiny_bench::*;
+
 const VERTICAL_TILING_MODIFIERS: [f32; NUM_TILING_MODIFIERS] = [1.0; NUM_TILING_MODIFIERS];
 
 pub fn main() {

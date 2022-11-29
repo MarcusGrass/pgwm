@@ -1,3 +1,22 @@
+use alloc::vec::Vec;
+use core::time::Duration;
+use smallmap::Map;
+use tiny_std::signal::{CatchSignal, SaSignalaction};
+use xcb_rust_protocol::connection::render::RenderConnection;
+use xcb_rust_protocol::proto::render::{PictTypeEnum, Pictformat, Pictforminfo};
+use xcb_rust_protocol::proto::xproto::{
+    ButtonPressEvent, ButtonReleaseEvent, ClientMessageEvent, ConfigureNotifyEvent,
+    ConfigureRequestEvent, DestroyNotifyEvent, EnterNotifyEvent, KeyPressEvent, MapRequestEvent,
+    MotionNotifyEvent, PropertyNotifyEvent, Screen, UnmapNotifyEvent, VisibilityNotifyEvent,
+    Visualid,
+};
+use xcb_rust_protocol::util::FixedLengthFromBytes;
+use xcb_rust_protocol::{XcbConnection, XcbEnv};
+
+use pgwm_core::config::{BarCfg, Cfg, Options, Sizing};
+use pgwm_core::render::{RenderVisualInfo, VisualInfo};
+use pgwm_core::state::State;
+
 use crate::error::{Error, Result};
 use crate::manager;
 use crate::manager::bar::BarManager;
@@ -6,21 +25,8 @@ use crate::manager::font::{load_alloc_fonts, FontDrawer, LoadedFonts};
 use crate::manager::Manager;
 use crate::x11::call_wrapper::CallWrapper;
 use crate::x11::colors::alloc_colors;
-use pgwm_core::config::{BarCfg, Cfg, Options, Sizing};
-use pgwm_core::render::{RenderVisualInfo, VisualInfo};
-use pgwm_core::state::State;
-use std::collections::HashMap;
-use std::time::Duration;
-use x11rb::protocol::render::{PictType, Pictformat, Pictforminfo};
-use x11rb::protocol::xproto::{
-    ButtonPressEvent, ButtonReleaseEvent, ClientMessageEvent, ConfigureNotifyEvent,
-    ConfigureRequestEvent, DestroyNotifyEvent, EnterNotifyEvent, KeyPressEvent, MapRequestEvent,
-    MotionNotifyEvent, PropertyNotifyEvent, Screen, UnmapNotifyEvent, VisibilityNotifyEvent,
-    Visualid,
-};
-pub type XorgConnection = x11rb::SocketConnection;
 
-use x11rb::x11_utils::TryParse;
+pub type XorgConnection = xcb_rust_connection::connection::SocketConnection;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
@@ -36,7 +42,10 @@ pub(crate) fn run_wm() -> Result<()> {
         mouse_mappings,
         key_mappings,
         bar,
-    } = Cfg::new()?;
+    } = Cfg::new(
+        tiny_std::env::var("XDG_CONFIG_HOME").ok(),
+        tiny_std::env::var("HOME").ok(),
+    )?;
     #[cfg(not(feature = "status-bar"))]
     let Cfg {
         sizing,
@@ -49,7 +58,10 @@ pub(crate) fn run_wm() -> Result<()> {
         mouse_mappings,
         key_mappings,
         bar,
-    } = Cfg::new()?;
+    } = Cfg::new(
+        tiny_std::env::var("XDG_CONFIG_HOME").ok(),
+        tiny_std::env::var("HOME").ok(),
+    )?;
     let Sizing {
         status_bar_height,
         tab_bar_height,
@@ -73,25 +85,45 @@ pub(crate) fn run_wm() -> Result<()> {
     let dpy = Some(":4");
     #[cfg(not(feature = "perf-test"))]
     let dpy = None;
-    let (connection, screen_num) = XorgConnection::connect(dpy)?;
+    // We just spawn user stuff, we don't care when they terminate, could signalfd -> poll if we did
+    // without the raw unsafety of setting up a signal handler
+    unsafe {
+        tiny_std::signal::add_signal_action(CatchSignal::SIGCHLD, SaSignalaction::Ign)?;
+    }
+    let xcb_env = env_to_xcb_env();
+    let (mut connection, screen_num) = XorgConnection::connect(dpy, xcb_env)?;
     let setup = connection.setup().clone();
-
+    connection.flush()?;
+    pgwm_utils::debug!("Connected");
     let screen = &setup.roots[screen_num];
     let mut call_wrapper = CallWrapper::new(connection)?;
-
+    pgwm_utils::debug!("Set up call wrapper");
+    call_wrapper.inner_mut().sync()?;
     call_wrapper.try_become_wm(screen)?;
-    pgwm_core::debug!("Became wm");
-    pgwm_core::debug!("Got resource database properties");
-    let resource_db = x11rb::resource_manager::new_from_default(call_wrapper.inner_mut())?;
-    let cursor_handle = x11rb::cursor::Handle::new(call_wrapper.inner_mut(), 0, &resource_db)?;
+    pgwm_utils::debug!("Became wm");
+    pgwm_utils::debug!("Got resource database properties");
+    let resource_db = xcb_rust_protocol::helpers::resource_manager::new_from_default(
+        call_wrapper.inner_mut(),
+        tiny_std::env::var("HOME").ok(),
+        tiny_std::env::var("XENVIRONMENT").ok(),
+    )?;
+    let cursor_handle = xcb_rust_protocol::helpers::cursor::Handle::new(
+        call_wrapper.inner_mut(),
+        screen_num,
+        &resource_db,
+        xcb_env,
+    )?;
     let visual = find_render_visual_info(call_wrapper.inner_mut(), screen)?;
     let loaded = load_alloc_fonts(&mut call_wrapper, &visual, &fonts, &char_remap)?;
+    crate::debug!("Loaded {} fonts", loaded.len());
     let lf = LoadedFonts::new(loaded, &char_remap)?;
-
     let font_drawer = FontDrawer::new(&lf);
+    call_wrapper.inner_mut().flush()?;
+    crate::debug!("Font drawer initialized");
     let colors = alloc_colors(call_wrapper.inner_mut(), screen.default_colormap, colors)?;
+    crate::debug!("Allocated colors");
 
-    pgwm_core::debug!("Creating state");
+    pgwm_utils::debug!("Creating state");
     let mut state = crate::x11::state_lifecycle::create_state(
         &mut call_wrapper,
         &font_drawer,
@@ -151,6 +183,7 @@ pub(crate) fn run_wm() -> Result<()> {
             match e {
                 Error::StateInvalidated => {
                     crate::x11::state_lifecycle::teardown_dynamic_state(&mut call_wrapper, &state)?;
+                    call_wrapper.inner_mut().sync()?;
                     state = crate::x11::state_lifecycle::reinit_state(
                         &mut call_wrapper,
                         &font_drawer,
@@ -172,7 +205,9 @@ pub(crate) fn run_wm() -> Result<()> {
                         &state,
                         &lf,
                     )?;
-                    call_wrapper.reset_root_focus(&state)?;
+                    call_wrapper.reset_root_window(&state)?;
+                    call_wrapper.inner_mut().sync()?;
+                    drop(call_wrapper);
                     return Ok(());
                 }
                 Error::FullRestart => {
@@ -181,7 +216,9 @@ pub(crate) fn run_wm() -> Result<()> {
                         &state,
                         &lf,
                     )?;
-                    call_wrapper.reset_root_focus(&state)?;
+                    call_wrapper.reset_root_window(&state)?;
+                    call_wrapper.inner_mut().sync()?;
+                    drop(call_wrapper);
                     return Err(Error::FullRestart);
                 }
                 _ => {
@@ -192,23 +229,35 @@ pub(crate) fn run_wm() -> Result<()> {
     }
 }
 
+fn env_to_xcb_env() -> XcbEnv<'static> {
+    XcbEnv {
+        home_dir: tiny_std::env::var("HOME").ok(),
+        x_environment: tiny_std::env::var("XENVIRONMENT").ok(),
+        x_authority: tiny_std::env::var("XAUTHORITY").ok(),
+        display: tiny_std::env::var("DISPLAY").ok(),
+        x_cursor_size: tiny_std::env::var("XCURSOR_SIZE").ok(),
+    }
+}
+
 #[cfg(feature = "status-bar")]
-fn loop_with_status<'a>(
+fn loop_with_status(
     call_wrapper: &mut CallWrapper,
-    manager: &Manager<'a>,
+    manager: &Manager,
     checker: &mut pgwm_core::status::checker::Checker,
     state: &mut State,
 ) -> Result<()> {
-    let mut next_check = std::time::Instant::now();
+    let mut next_check = tiny_std::time::Instant::now();
     // Extremely hot place in the code, should bench the checker
     loop {
         // This looks dumb... Anyway, avoiding an unnecessary poll and going straight to status update
         // if no new events or duration is now.
-        while let Some(event) = call_wrapper
-            .inner_mut()
-            .read_next_event(next_check.duration_since(std::time::Instant::now()))?
-        {
+        while let Some(event) = call_wrapper.inner_mut().read_next_event(
+            next_check
+                .duration_since(tiny_std::time::Instant::now())
+                .unwrap_or_default(),
+        )? {
             handle_event(event, call_wrapper, manager, state)?;
+            call_wrapper.inner_mut().flush()?;
         }
         // Status wants redraw and no new events.
         let dry_run = !state.any_monitors_showing_status();
@@ -219,6 +268,7 @@ fn loop_with_status<'a>(
         next_check = next.next_check;
         // Check destroyed, not that important so moved from event handling flow
         Manager::destroy_marked(call_wrapper, state)?;
+        call_wrapper.inner_mut().flush()?;
         #[cfg(feature = "debug")]
         call_wrapper.inner_mut().clear_cache()?;
     }
@@ -234,8 +284,10 @@ fn loop_without_status<'a>(
     loop {
         while let Some(event) = call_wrapper.inner_mut().read_next_event(DEADLINE)? {
             handle_event(event, call_wrapper, manager, state)?;
+            call_wrapper.inner_mut().flush()?;
         }
         Manager::destroy_marked(call_wrapper, state)?;
+        call_wrapper.inner_mut().flush()?;
         #[cfg(feature = "debug")]
         call_wrapper.inner_mut().clear_cache()?;
     }
@@ -259,96 +311,96 @@ fn handle_event<'a>(
     dbg_event(&raw, &call_wrapper.inner_mut().extensions);
     // Unmap and enter are caused by upstream actions, causing unwanted focusing behaviour etc.
     if state.should_ignore_sequence(seq)
-        && (response_type == x11rb::protocol::xproto::ENTER_NOTIFY_EVENT
-            || response_type == x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT)
+        && (response_type == xcb_rust_protocol::proto::xproto::ENTER_NOTIFY_EVENT
+            || response_type == xcb_rust_protocol::proto::xproto::UNMAP_NOTIFY_EVENT)
     {
-        pgwm_core::debug!("[Ignored]");
+        pgwm_utils::debug!("[Ignored]");
         return Ok(());
     }
 
     match response_type {
-        x11rb::protocol::xproto::KEY_PRESS_EVENT => {
+        xcb_rust_protocol::proto::xproto::KEY_PRESS_EVENT => {
             manager.handle_key_press(
                 call_wrapper,
-                KeyPressEvent::try_parse(&raw).unwrap().0,
+                KeyPressEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::MAP_REQUEST_EVENT => {
+        xcb_rust_protocol::proto::xproto::MAP_REQUEST_EVENT => {
             manager.handle_map_request(
                 call_wrapper,
-                MapRequestEvent::try_parse(&raw).unwrap().0,
+                MapRequestEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::UNMAP_NOTIFY_EVENT => {
-            let evt = UnmapNotifyEvent::try_parse(&raw).unwrap().0;
+        xcb_rust_protocol::proto::xproto::UNMAP_NOTIFY_EVENT => {
+            let evt = UnmapNotifyEvent::from_bytes(&raw).unwrap();
             manager.handle_unmap_notify(call_wrapper, evt, state)?;
         }
-        x11rb::protocol::xproto::DESTROY_NOTIFY_EVENT => {
+        xcb_rust_protocol::proto::xproto::DESTROY_NOTIFY_EVENT => {
             manager.handle_destroy_notify(
                 call_wrapper,
-                DestroyNotifyEvent::try_parse(&raw).unwrap().0,
+                DestroyNotifyEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::CONFIGURE_NOTIFY_EVENT => {
+        xcb_rust_protocol::proto::xproto::CONFIGURE_NOTIFY_EVENT => {
             Manager::handle_configure_notify(
                 call_wrapper,
-                ConfigureNotifyEvent::try_parse(&raw).unwrap().0,
+                ConfigureNotifyEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::CONFIGURE_REQUEST_EVENT => {
+        xcb_rust_protocol::proto::xproto::CONFIGURE_REQUEST_EVENT => {
             Manager::handle_configure_request(
                 call_wrapper,
-                ConfigureRequestEvent::try_parse(&raw).unwrap().0,
+                ConfigureRequestEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::BUTTON_PRESS_EVENT => {
+        xcb_rust_protocol::proto::xproto::BUTTON_PRESS_EVENT => {
             manager.handle_button_press(
                 call_wrapper,
-                ButtonPressEvent::try_parse(&raw).unwrap().0,
+                ButtonPressEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::BUTTON_RELEASE_EVENT => {
+        xcb_rust_protocol::proto::xproto::BUTTON_RELEASE_EVENT => {
             manager.handle_button_release(
                 call_wrapper,
-                ButtonReleaseEvent::try_parse(&raw).unwrap().0,
+                ButtonReleaseEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::MOTION_NOTIFY_EVENT => {
+        xcb_rust_protocol::proto::xproto::MOTION_NOTIFY_EVENT => {
             manager.handle_motion_notify(
                 call_wrapper,
-                MotionNotifyEvent::try_parse(&raw).unwrap().0,
+                MotionNotifyEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::ENTER_NOTIFY_EVENT => {
-            let evt = EnterNotifyEvent::try_parse(&raw).unwrap().0;
+        xcb_rust_protocol::proto::xproto::ENTER_NOTIFY_EVENT => {
+            let evt = EnterNotifyEvent::from_bytes(&raw).unwrap();
             manager.handle_enter(call_wrapper, evt, state)?;
         }
-        x11rb::protocol::xproto::CLIENT_MESSAGE_EVENT => {
+        xcb_rust_protocol::proto::xproto::CLIENT_MESSAGE_EVENT => {
             manager.handle_client_message(
                 call_wrapper,
-                ClientMessageEvent::try_parse(&raw).unwrap().0,
+                ClientMessageEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::PROPERTY_NOTIFY_EVENT => {
+        xcb_rust_protocol::proto::xproto::PROPERTY_NOTIFY_EVENT => {
             manager.handle_property_notify(
                 call_wrapper,
-                PropertyNotifyEvent::try_parse(&raw).unwrap().0,
+                PropertyNotifyEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        x11rb::protocol::xproto::VISIBILITY_NOTIFY_EVENT => {
+        xcb_rust_protocol::proto::xproto::VISIBILITY_NOTIFY_EVENT => {
             manager.handle_visibility_change(
                 call_wrapper,
-                VisibilityNotifyEvent::try_parse(&raw).unwrap().0,
+                VisibilityNotifyEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
@@ -358,13 +410,16 @@ fn handle_event<'a>(
 }
 
 #[cfg(feature = "debug")]
-fn dbg_event(raw: &[u8], ext_info_provider: &x11rb::x11_utils::ExtensionInfoProvider) {
-    match x11rb::xcb::Event::parse(raw, ext_info_provider) {
+fn dbg_event(
+    raw: &[u8],
+    ext_info_provider: &xcb_rust_connection::helpers::basic_info_provider::BasicExtensionInfoProvider,
+) {
+    match xcb_rust_protocol::proto::Event::from_bytes(raw, ext_info_provider) {
         Ok(evt) => {
-            eprintln!("{evt:?}");
+            crate::debug!("Got event: {evt:?}");
         }
         Err(e) => {
-            eprintln!("Failed to parse event {e}");
+            crate::debug!("Failed to parse event {e}");
         }
     }
 }
@@ -384,15 +439,15 @@ fn find_appropriate_visual(
     depth: u8,
     match_visual_id: Option<Visualid>,
 ) -> Result<VisualInfo> {
-    let formats = x11rb::xcb::render::query_pict_formats(connection, false)?.reply(connection)?;
+    let formats = connection.query_pict_formats(false)?.reply(connection)?;
     let candidates = formats
         .formats
         .into_iter()
         // Need a 32 bit depth visual
         .filter_map(|pfi| {
-            (pfi.type_ == PictType::DIRECT && pfi.depth == depth).then(|| (pfi.id, pfi))
+            (pfi.r#type == PictTypeEnum::DIRECT && pfi.depth == depth).then_some((pfi.id, pfi))
         })
-        .collect::<HashMap<Pictformat, Pictforminfo>>();
+        .collect::<Map<Pictformat, Pictforminfo>>();
     // Should only be one
     for screen in formats.screens {
         let candidate = screen.depths.into_iter().find_map(|pd| {

@@ -1,87 +1,81 @@
-#![deny(unsafe_code)]
-#![warn(clippy::all)]
-#![warn(clippy::pedantic)]
-#![allow(clippy::too_many_arguments)]
-#![allow(clippy::needless_pass_by_value)]
-#![allow(clippy::let_underscore_drop)]
-#![allow(clippy::too_many_lines)]
-// X11 uses inconsistent integer types fairly interchangeably
-#![allow(clippy::cast_lossless)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_sign_loss)]
-#![allow(clippy::cast_possible_wrap)]
-#![allow(clippy::cast_precision_loss)]
-#![allow(clippy::module_name_repetitions)]
+#![no_std]
+#![no_main]
+// Start function, looks promising for stabilization https://github.com/rust-lang/rust/pull/93587
+#![feature(naked_functions)]
+// Seemingly moving towards stability https://github.com/rust-lang/rust/pull/102318
+// Would be a lot nicer to just accept a symbol instead of forcing #[alloc_error_handler]
+// Could fork the compiler and remove this check https://github.com/rust-lang/rust/blob/56074b5231ceef266a1097ea355f62c951e1b468/compiler/rustc_metadata/src/creader.rs#L1063 but ugh
+#![feature(default_alloc_error_handler)]
 
-pub(crate) mod error;
-mod manager;
-pub(crate) mod util;
-mod wm;
-mod x11;
+extern crate alloc;
 
-use crate::error::{Error, Result};
-use crate::wm::run_wm;
-use pgwm_core::debug;
-use std::path::PathBuf;
+use core::alloc::{GlobalAlloc, Layout};
+use core::cell::UnsafeCell;
 
-fn main() -> Result<()> {
-    debug!("Starting pgwm");
-    if check_cfg() {
-        return Ok(());
-    }
-    loop {
-        return match run_wm() {
-            Ok(_) => {
-                debug!("Exiting WM");
-                Ok(())
-            }
-            Err(e) => {
-                if let Error::FullRestart = e {
-                    debug!("Restarting WM");
-                    continue;
-                }
-                debug!("Fatal error {e}");
-                Err(e)
-            }
-        };
+use dlmalloc::Dlmalloc;
+use tiny_std::process::exit;
+use unix_print::unix_eprintln;
+
+use pgwm_app::main_loop;
+
+#[global_allocator]
+static ALLOCATOR: SingleThreadedAlloc = SingleThreadedAlloc::new();
+
+struct SingleThreadedAlloc {
+    inner: UnsafeCell<Dlmalloc>,
+}
+
+impl SingleThreadedAlloc {
+    pub(crate) const fn new() -> Self {
+        SingleThreadedAlloc {
+            inner: UnsafeCell::new(Dlmalloc::new()),
+        }
     }
 }
 
-fn check_cfg() -> bool {
-    let mut args = std::env::args();
-    args.next(); // drain program argument
-    if let Some(k) = args.next() {
-        if k.as_str() == "--check-cfg" {
-            match pgwm_core::config::Cfg::new() {
-                Ok(cfg) => {
-                    let collected_fonts = cfg
-                        .fonts
-                        .get_all_font_paths()
-                        .into_iter()
-                        .chain(cfg.char_remap.values().map(|v| PathBuf::from(&v.path)));
-                    for font in collected_fonts {
-                        match std::fs::metadata(&font) {
-                            Ok(meta) => {
-                                if !meta.is_file() {
-                                    eprintln!("Invalid configuration, specified font {font:?} points to something that isn't a file.");
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!("Invalid configuration, could not read metadata for font {font:?}: {e}");
-                            }
-                        }
-                    }
-                    println!("Configuration valid!");
-                }
-                Err(e) => {
-                    println!("Invalid configuration: {e}");
-                }
-            }
-        } else {
-            println!("The only valid argument is `--check-cfg` to check if configuration is valid and can be found");
-        }
-        true
-    } else {
-        false
+unsafe impl GlobalAlloc for SingleThreadedAlloc {
+    #[inline]
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        (*self.inner.get()).malloc(layout.size(), layout.align())
     }
+
+    #[inline]
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        (*self.inner.get()).free(ptr, layout.size(), layout.align())
+    }
+
+    #[inline]
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        (*self.inner.get()).calloc(layout.size(), layout.align())
+    }
+
+    #[inline]
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        (*self.inner.get()).realloc(ptr, layout.size(), layout.align(), new_size)
+    }
+}
+
+/// Extremely unsafe, this program is not thread safe at all will immediately segfault on more threads
+unsafe impl Sync for SingleThreadedAlloc {}
+
+unsafe impl Send for SingleThreadedAlloc {}
+
+#[panic_handler]
+fn on_panic(info: &core::panic::PanicInfo) -> ! {
+    unix_eprintln!("{info}");
+    exit(1)
+}
+
+/// Compiler complains about this symbol being missing for some reason
+/// we don't unwind anyway so it shouldn't be needed.
+/// # Safety
+/// Just another necessary symbol
+#[no_mangle]
+pub unsafe extern "C" fn _Unwind_Resume() -> ! {
+    exit(2);
+}
+
+#[no_mangle]
+fn main() -> i32 {
+    main_loop()
 }
