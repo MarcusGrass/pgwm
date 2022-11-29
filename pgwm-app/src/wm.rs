@@ -240,9 +240,9 @@ fn env_to_xcb_env() -> XcbEnv<'static> {
 }
 
 #[cfg(feature = "status-bar")]
-fn loop_with_status<'a>(
+fn loop_with_status(
     call_wrapper: &mut CallWrapper,
-    manager: &Manager<'a>,
+    manager: &Manager,
     checker: &mut pgwm_core::status::checker::Checker,
     state: &mut State,
 ) -> Result<()> {

@@ -1032,9 +1032,7 @@ impl<'a> Manager<'a> {
         event: xcb_rust_protocol::proto::xproto::ClientMessageEvent,
         state: &mut State,
     ) -> Result<()> {
-        let atom = if let Some(atom) = call_wrapper.resolve_atom(event.r#type) {
-            atom
-        } else {
+        let Some(atom) = call_wrapper.resolve_atom(event.r#type) else {
             pgwm_utils::debug!(
                 "Got client message for unresolved atom with name {:?}",
                 call_wrapper.get_atom_name(event.r#type)
@@ -1592,9 +1590,7 @@ impl<'a> Manager<'a> {
         if event.window == state.screen.root {
             return Ok(());
         }
-        let resolved = if let Some(supported_atom) = call_wrapper.resolve_atom(event.atom) {
-            supported_atom
-        } else {
+        let Some(resolved) = call_wrapper.resolve_atom(event.atom) else {
             pgwm_utils::debug!(
                 "Got unsupported atom on property change {:?}",
                 call_wrapper.get_atom_name(event.atom)
