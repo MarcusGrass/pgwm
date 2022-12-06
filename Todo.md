@@ -1,2 +1,2 @@
-1. Reap child processes
-2. Weird windows disappearing sometimes, mostly happens with Firefox on restarts
+1. Weird windows disappearing sometimes, mostly happens with Firefox on hot-reload
+2. Current workspace highlighting disappears, finally found repro: urgent window highlighted go from selected ws to urgent ws by click. Both ws' lose highlighting, whereas new ws should get 'selected' highlighting.

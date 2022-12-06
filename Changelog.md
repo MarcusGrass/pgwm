@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
-## [v0.3.0] - 
+## [v0.3.0] - 2022-12-06
 ### Fixed
  - Fullscreening causing crashing in some cases, because the destroyed window was cached and then reused
 
