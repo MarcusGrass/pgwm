@@ -198,8 +198,8 @@ impl<'a> Manager<'a> {
                 pgwm_utils::debug!("Spawning {} with args {:?}", cmd, args);
                 #[cfg(not(feature = "perf-test"))]
                 {
-                    tiny_std::process::Command::new(cmd)
-                        .args(&args)
+                    tiny_std::process::Command::new(cmd)?
+                        .args(&args)?
                         .stdin(tiny_std::process::Stdio::Null)
                         .stdout(tiny_std::process::Stdio::Null)
                         .stderr(tiny_std::process::Stdio::Null)

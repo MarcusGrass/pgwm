@@ -11,4 +11,4 @@ default = []
 debug = []
 
 [dependencies]
-unix-print = "0.1.0"
+unix-print = { workspace = true }

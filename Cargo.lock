@@ -3,15 +3,6 @@
 version = 3
 
 [[package]]
-name = "aho-corasick"
-version = "0.7.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4f55bd91a0978cbfd91c457a164bab8b4001c833b7f323132c0a4e1922dd44e"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "atoi"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "atomic-polyfill"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c041a8d9751a520ee19656232a18971f18946a7900f1520ee4400002244dd89"
+checksum = "e3ff7eb3f316534d83a8a2c3d1674ace8a5a71198eba31e2e2b597833f699b28"
 dependencies = [
  "critical-section",
 ]
@@ -36,73 +27,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "bare-metal"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5deb64efa5bd81e31fcd1938615a6d98c82eafcbcd787162b6f63b91d6bac5b3"
-dependencies = [
- "rustc_version 0.2.3",
-]
-
-[[package]]
-name = "bare-metal"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8fe8f5a8a398345e52358e18ff07cc17a568fbca5c6f73873d3a62056309603"
-
-[[package]]
-name = "bit_field"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcb6dd1c2376d2e096796e234a70e17e94cc2d5d54ff8ce42b28cef1d0d359a4"
-
-[[package]]
-name = "bitfield"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46afbd2983a5d5a7bd740ccb198caf5b82f45c40c09c0eed36052d91cb92e719"
-
-[[package]]
 name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
-name = "cfg-if"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
-
-[[package]]
 name = "compiler_builtins"
-version = "0.1.84"
+version = "0.1.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "989b2c1ca6e90ad06fdc69d1d1862fa28d27a977be6d92ae2fa762cf61fe0b10"
-
-[[package]]
-name = "cortex-m"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70858629a458fdfd39f9675c4dc309411f2a3f83bede76988d81bf1a0ecee9e0"
-dependencies = [
- "bare-metal 0.2.5",
- "bitfield",
- "embedded-hal",
- "volatile-register",
-]
+checksum = "13e81c6cd7ab79f51a0c927d22858d61ad12bd0b3865f0b13ece02a4486aeabb"
 
 [[package]]
 name = "critical-section"
-version = "0.2.7"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95da181745b56d4bd339530ec393508910c909c784e8962d15d722bacf0bcbcd"
-dependencies = [
- "bare-metal 1.0.0",
- "cfg-if",
- "cortex-m",
- "riscv",
-]
+checksum = "6548a0ad5d2549e111e1f6a11a6c2e2d00ce6a3dafe22948d67c2b443f775e52"
 
 [[package]]
 name = "dlmalloc"
@@ -113,19 +53,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "embedded-hal"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35949884794ad573cf46071e41c9b60efb0cb311e3ca01f7af807af1debc66ff"
-dependencies = [
- "nb 0.1.3",
- "void",
-]
-
-[[package]]
 name = "fontdue"
 version = "0.7.2"
-source = "git+https://github.com/MarcusGrass/fontdue?rev=3a2819fba5f8b3bb6ffd9207200b19910c399d05#3a2819fba5f8b3bb6ffd9207200b19910c399d05"
+source = "git+https://github.com/MarcusGrass/fontdue?rev=667b807a41be43213e55b5a8e4e1db0f80253c36#667b807a41be43213e55b5a8e4e1db0f80253c36"
 dependencies = [
  "hashbrown",
  "ttf-parser",
@@ -142,9 +72,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.12.3"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+checksum = "33ff8ae62cd3a9102e5637afc8452c55acf3844001bd5374e0b0bd7b6616c038"
 
 [[package]]
 name = "heapless"
@@ -161,10 +91,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "lazy_static"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+name = "linux-rust-bindings"
+version = "0.1.0"
+source = "git+https://github.com/MarcusGrass/linux-rust-bindings?rev=c22f9d8f47805a14612251aabd6e8b19baf2083f#c22f9d8f47805a14612251aabd6e8b19baf2083f"
 
 [[package]]
 name = "lock_api"
@@ -175,27 +104,6 @@ dependencies = [
  "autocfg",
  "scopeguard",
 ]
-
-[[package]]
-name = "memchr"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
-
-[[package]]
-name = "nb"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "801d31da0513b6ec5214e9bf433a77966320625a37860f910be265be6e18d06f"
-dependencies = [
- "nb 1.0.0",
-]
-
-[[package]]
-name = "nb"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "546c37ac5d9e56f55e73b677106873d9d9f5190605e41a856503623648488cae"
 
 [[package]]
 name = "num-traits"
@@ -279,48 +187,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "regex"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e076559ef8e241f2ae3479e36f97bd5741c0330689e217ad51ce2c76808b868a"
-dependencies = [
- "aho-corasick",
- "memchr",
- "regex-syntax",
-]
-
-[[package]]
-name = "regex-syntax"
-version = "0.6.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
-
-[[package]]
-name = "riscv"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6907ccdd7a31012b70faf2af85cd9e5ba97657cc3987c4f13f8e4d2c2a088aba"
-dependencies = [
- "bare-metal 1.0.0",
- "bit_field",
- "riscv-target",
-]
-
-[[package]]
-name = "riscv-target"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88aa938cda42a0cf62a20cfe8d139ff1af20c2e681212b5b34adb5a58333f222"
-dependencies = [
- "lazy_static",
- "regex",
-]
-
-[[package]]
 name = "rusl"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/tiny-std.git?rev=bbd7244a48d6f4e168ae35137222cbca75840be1#bbd7244a48d6f4e168ae35137222cbca75840be1"
+source = "git+https://github.com/MarcusGrass/tiny-std?rev=8bf34350de08b3500b6d0038a0eb0bc56693beb7#8bf34350de08b3500b6d0038a0eb0bc56693beb7"
 dependencies = [
+ "linux-rust-bindings",
  "sc",
  "unix-print",
 ]
@@ -378,18 +249,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.147"
+version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d193d69bae983fc11a79df82342761dfbf28a99fc8d203dca4c3c1b590948965"
+checksum = "97fed41fc1a24994d044e6db6935e69511a1153b52c15eb42493b26fa87feba0"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.147"
+version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f1d362ca8fc9c3e3a7484440752472d68a6caa98f1ab81d99b5dfe517cec852"
+checksum = "255abe9a125a985c05190d687b320c12f9b1f0b99445e608c21ba0782c719ad8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -422,9 +293,9 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "syn"
-version = "1.0.103"
+version = "1.0.105"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a864042229133ada95abf3b54fdc62ef5ccabe9515b64717bcb9a1919e59445d"
+checksum = "60b9b43d45702de4c839cb9b51d9f529c5dd26a4aff255b42b1ebc03e88ee908"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -455,7 +326,7 @@ checksum = "0b5d366a619c58cc621169d481d049b286553c87ba10c17f1ceef2274f9b8ab7"
 [[package]]
 name = "tiny-std"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/tiny-std.git?rev=bbd7244a48d6f4e168ae35137222cbca75840be1#bbd7244a48d6f4e168ae35137222cbca75840be1"
+source = "git+https://github.com/MarcusGrass/tiny-std?rev=8bf34350de08b3500b6d0038a0eb0bc56693beb7#8bf34350de08b3500b6d0038a0eb0bc56693beb7"
 dependencies = [
  "rusl",
  "sc",
@@ -465,7 +336,7 @@ dependencies = [
 [[package]]
 name = "toml"
 version = "0.5.9"
-source = "git+https://github.com/MarcusGrass/toml?rev=fdc79fc9858c8d60cdcf805208ef4e8bcd8ac57b#fdc79fc9858c8d60cdcf805208ef4e8bcd8ac57b"
+source = "git+https://github.com/MarcusGrass/toml?rev=aa8fae65d99dbc6bd808631800ac8e182300622c#aa8fae65d99dbc6bd808631800ac8e182300622c"
 dependencies = [
  "hashbrown",
  "serde",
@@ -475,7 +346,7 @@ dependencies = [
 [[package]]
 name = "toml_datetime"
 version = "0.5.0"
-source = "git+https://github.com/MarcusGrass/toml?rev=fdc79fc9858c8d60cdcf805208ef4e8bcd8ac57b#fdc79fc9858c8d60cdcf805208ef4e8bcd8ac57b"
+source = "git+https://github.com/MarcusGrass/toml?rev=aa8fae65d99dbc6bd808631800ac8e182300622c#aa8fae65d99dbc6bd808631800ac8e182300622c"
 dependencies = [
  "serde",
 ]
@@ -502,27 +373,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vcell"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77439c1b53d2303b20d9459b1ade71a83c716e3f9c34f3228c00e6f185d6c002"
-
-[[package]]
-name = "void"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
-
-[[package]]
-name = "volatile-register"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ee8f19f9d74293faf70901bc20ad067dc1ad390d2cbf1e3f75f721ffee908b6"
-dependencies = [
- "vcell",
-]
-
-[[package]]
 name = "x11-keysyms"
 version = "0.1.0"
 source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=da4634c071fdc547772cd4dc7892d857b29dd6e5#da4634c071fdc547772cd4dc7892d857b29dd6e5"
@@ -530,7 +380,7 @@ source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=da4634c071fdc547772
 [[package]]
 name = "xcb-rust-connection"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=d7110cc13b5768f3164ff328f80d0bf6d5d3deed#d7110cc13b5768f3164ff328f80d0bf6d5d3deed"
+source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=3b005137f76b52d6a0750d86e5780da2b61bbfa2#3b005137f76b52d6a0750d86e5780da2b61bbfa2"
 dependencies = [
  "rusl",
  "sc",
@@ -543,7 +393,7 @@ dependencies = [
 [[package]]
 name = "xcb-rust-protocol"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=d7110cc13b5768f3164ff328f80d0bf6d5d3deed#d7110cc13b5768f3164ff328f80d0bf6d5d3deed"
+source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=3b005137f76b52d6a0750d86e5780da2b61bbfa2#3b005137f76b52d6a0750d86e5780da2b61bbfa2"
 dependencies = [
  "tiny-std",
  "unix-print",

@@ -16,19 +16,19 @@ status-bar = ["pgwm-core/status-bar", "time"]
 perf-test = []
 
 [dependencies]
-hashbrown = { version = "0.12.3", default-features = false }
+hashbrown = { version = "0.13.1", default-features = false }
 heapless = { version = "0.7.16", default-features = false }
-fontdue = { version = "0.7.2", default-features = false, features = ["simd"] }
-pgwm-core = { path = "../pgwm-core" }
-pgwm-utils = { path = "../pgwm-utils" }
-smallmap = { version = "1.4.0", default-features = false }
+fontdue = { workspace = true, default-features = false, features = ["simd"] }
+pgwm-core = { path = "../pgwm-core", default-features = false }
+pgwm-utils = { path = "../pgwm-utils", default-features = false }
+smallmap = { workspace = true, default-features = false }
 time = { version = "0.3.17", optional = true, default-features = false }
 unix-print = "0.1.0"
-tiny-std = { version = "0.1" }
-rusl = { version = "0.1" }
+tiny-std = { workspace = true }
+rusl = { workspace = true }
 
-xcb-rust-connection = { version = "0.1" }
-xcb-rust-protocol = { version = "0.1" }
+xcb-rust-connection = { workspace = true }
+xcb-rust-protocol = { workspace = true }
 
 [dev-dependencies]
-tiny-std = { version = "0.1", features = ["start", "alloc"] }
+tiny-std = { workspace = true, features = ["start", "alloc"] }

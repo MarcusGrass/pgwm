@@ -14,8 +14,8 @@ status-bar = ["pgwm-app/status-bar"]
 perf-test = ["pgwm-app/perf-test"]
 
 [dependencies]
-compiler_builtins = { version = "0.1.83", default-features = false, features = ["mem"] }
+compiler_builtins = { version = "0.1.85", default-features = false, features = ["mem"] }
 dlmalloc = { git = "https://github.com/MarcusGrass/dlmalloc-rs.git", rev = "a8e9fc0d2c03a06810530a48abd37fecc71e8109", default-features = false }
-pgwm-app = { path = "../pgwm-app" }
-tiny-std = { version = "0.1", features = ["start", "alloc", "symbols", "aux", "vdso"] }
-unix-print = "0.1.0"
+pgwm-app = { path = "../pgwm-app", default-features = false }
+tiny-std = { workspace = true, features = ["start", "alloc", "symbols", "aux", "vdso"] }
+unix-print = { workspace = true }

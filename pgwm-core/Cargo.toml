@@ -15,20 +15,20 @@ config-file = ["serde", "heapless/serde", "toml"]
 atoi = { version = "2.0.0", default-features = false }
 heapless = { version = "0.7.16", default-features = false }
 pgwm-utils = { path = "../pgwm-utils" }
-toml = { version = "0.5.9", default-features = false, optional = true }
+toml = { workspace = true, default-features = false, optional = true }
 x11-keysyms = { git = "https://github.com/MarcusGrass/x11-keysyms", rev = "da4634c071fdc547772cd4dc7892d857b29dd6e5", features = ["miscellany", "latin1"] }
 
-xcb-rust-connection = { version = "0.1" }
-xcb-rust-protocol = { version = "0.1" }
-tiny-std = { version = "0.1" , features = ["start", "alloc"] }
+xcb-rust-connection = { workspace = true }
+xcb-rust-protocol = { workspace = true }
+tiny-std = { workspace = true , features = ["start", "alloc"] }
 
 time = { version = "0.3.17", optional = true, default-features = false }
 serde = { version = "1.0.147", default-features = false, features = ["derive"], optional = true }
-smallmap = { version = "1.4.0", default-features = false, features = ["serde"] }
+smallmap = { workspace = true, default-features = false, features = ["serde"] }
 
 [dev-dependencies]
 tiny-bench = "0.2.0"
-tiny-std = { version = "0.1", features = ["start", "alloc"] }
+tiny-std = { workspace = true, features = ["start", "alloc"] }
 
 [[bench]]
 name = "benchmark"
