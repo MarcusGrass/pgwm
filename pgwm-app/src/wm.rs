@@ -1,5 +1,9 @@
+use alloc::vec;
 use alloc::vec::Vec;
 use core::time::Duration;
+use rusl::io_uring::{io_uring_register_buffers, io_uring_register_files, setup_io_uring};
+use rusl::platform::{IoSliceMut, IoUringParamFlags, OpenFlags};
+use rusl::unistd::open;
 use smallmap::Map;
 use tiny_std::signal::{CatchSignal, SaSignalaction};
 use xcb_rust_protocol::connection::render::RenderConnection;
@@ -16,6 +20,10 @@ use xcb_rust_protocol::{XcbConnection, XcbEnv};
 use pgwm_core::config::{BarCfg, Cfg, Options, Sizing};
 use pgwm_core::render::{RenderVisualInfo, VisualInfo};
 use pgwm_core::state::State;
+use pgwm_core::status::sys::bat::BAT_FILE;
+use pgwm_core::status::sys::cpu::CPU_LOAD_FILE;
+use pgwm_core::status::sys::mem::MEM_LOAD_FILE;
+use pgwm_core::status::sys::net::NET_STAT_FILE;
 
 use crate::error::{Error, Result};
 use crate::manager;
@@ -27,6 +35,13 @@ use crate::x11::call_wrapper::CallWrapper;
 use crate::x11::colors::alloc_colors;
 
 pub type XorgConnection = xcb_rust_connection::connection::SocketConnection;
+
+const SOCK_IN_INDEX: usize = 0;
+const SOCK_OUT_INDEX: usize = 1;
+const BAT_INDEX: usize = 2;
+const NET_INDEX: usize = 3;
+const MEM_INDEX: usize = 4;
+const CPU_INDEX: usize = 5;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
@@ -91,34 +106,56 @@ pub(crate) fn run_wm() -> Result<()> {
         tiny_std::signal::add_signal_action(CatchSignal::SIGCHLD, SaSignalaction::Ign)?;
     }
     let xcb_env = env_to_xcb_env();
-    let (mut connection, screen_num) = XorgConnection::connect(dpy, xcb_env)?;
+    let mut xcb_socket_in_buffer = vec![0u8; 65536];
+    let mut xcb_socket_out_buffer = vec![0u8; 65536];
+    let (mut connection, screen_num, socket_fd) = XorgConnection::connect(
+        dpy,
+        &mut xcb_socket_in_buffer,
+        &mut xcb_socket_out_buffer,
+        xcb_env,
+    )?;
     let setup = connection.setup().clone();
-    connection.flush()?;
+    connection.flush(&mut xcb_socket_out_buffer)?;
     pgwm_utils::debug!("Connected");
     let screen = &setup.roots[screen_num];
     let mut call_wrapper = CallWrapper::new(connection)?;
     pgwm_utils::debug!("Set up call wrapper");
-    call_wrapper.inner_mut().sync()?;
-    call_wrapper.try_become_wm(screen)?;
+    call_wrapper
+        .inner_mut()
+        .sync(&mut xcb_socket_in_buffer, &mut xcb_socket_out_buffer)?;
+    call_wrapper.try_become_wm(
+        &mut xcb_socket_in_buffer,
+        &mut xcb_socket_out_buffer,
+        screen,
+    )?;
     pgwm_utils::debug!("Became wm");
     pgwm_utils::debug!("Got resource database properties");
     let resource_db = xcb_rust_protocol::helpers::resource_manager::new_from_default(
         call_wrapper.inner_mut(),
+        &mut xcb_socket_in_buffer,
+        &mut xcb_socket_out_buffer,
         tiny_std::env::var("HOME").ok(),
         tiny_std::env::var("XENVIRONMENT").ok(),
     )?;
     let cursor_handle = xcb_rust_protocol::helpers::cursor::Handle::new(
         call_wrapper.inner_mut(),
+        &mut xcb_socket_in_buffer,
+        &mut xcb_socket_out_buffer,
         screen_num,
         &resource_db,
         xcb_env,
     )?;
-    let visual = find_render_visual_info(call_wrapper.inner_mut(), screen)?;
+    let visual = find_render_visual_info(
+        call_wrapper.inner_mut(),
+        &mut xcb_socket_in_buffer,
+        &mut xcb_socket_out_buffer,
+        screen,
+    )?;
     let loaded = load_alloc_fonts(&mut call_wrapper, &visual, &fonts, &char_remap)?;
     crate::debug!("Loaded {} fonts", loaded.len());
     let lf = LoadedFonts::new(loaded, &char_remap)?;
     let font_drawer = FontDrawer::new(&lf);
-    call_wrapper.inner_mut().flush()?;
+    call_wrapper.inner_mut().flush(&mut xcb_socket_out_buffer)?;
     crate::debug!("Font drawer initialized");
     let colors = alloc_colors(call_wrapper.inner_mut(), screen.default_colormap, colors)?;
     crate::debug!("Allocated colors");
@@ -126,6 +163,8 @@ pub(crate) fn run_wm() -> Result<()> {
     pgwm_utils::debug!("Creating state");
     let mut state = crate::x11::state_lifecycle::create_state(
         &mut call_wrapper,
+        &mut xcb_socket_in_buffer,
+        &mut xcb_socket_out_buffer,
         &font_drawer,
         visual,
         &fonts,
@@ -169,12 +208,47 @@ pub(crate) fn run_wm() -> Result<()> {
     crate::debug!("Initialized manager state");
     manager.scan(&mut call_wrapper, &mut state)?;
     crate::debug!("Initialized, starting loop");
+    let mut uring = setup_io_uring(8, IoUringParamFlags::IORING_SETUP_SINGLE_ISSUER)?;
+    let mut bat_buf = [0u8; 64];
+    let mut net_buf = vec![0u8; 4096];
+    let mut mem_buf = vec![0u8; 4096];
+    let mut cpu_buf = vec![0u8; 4096];
+    unsafe {
+        io_uring_register_buffers(
+            uring.fd,
+            &[
+                IoSliceMut::new(&mut bat_buf),
+                IoSliceMut::new(&mut net_buf),
+                IoSliceMut::new(&mut mem_buf),
+                IoSliceMut::new(&mut cpu_buf),
+            ],
+        )?;
+    }
+    let bat_fd = open(BAT_FILE, OpenFlags::O_RDONLY)?;
+    let net_fd = open(NET_STAT_FILE, OpenFlags::O_RDONLY)?;
+    let mem_fd = open(MEM_LOAD_FILE, OpenFlags::O_RDONLY)?;
+    let cpu_fd = open(CPU_LOAD_FILE, OpenFlags::O_RDONLY)?;
+    io_uring_register_files(uring.fd, &[bat_fd, net_fd, mem_fd, cpu_fd])?;
+
     loop {
         #[cfg(feature = "status-bar")]
         let loop_result = if should_check {
-            loop_with_status(&mut call_wrapper, &manager, &mut checker, &mut state)
+            loop_with_status(
+                &mut call_wrapper,
+                &mut xcb_socket_in_buffer,
+                &mut xcb_socket_out_buffer,
+                &manager,
+                &mut checker,
+                &mut state,
+            )
         } else {
-            loop_without_status(&mut call_wrapper, &manager, &mut state)
+            loop_without_status(
+                &mut call_wrapper,
+                &mut xcb_socket_in_buffer,
+                &mut xcb_socket_out_buffer,
+                &manager,
+                &mut state,
+            )
         };
         #[cfg(not(feature = "status-bar"))]
         let loop_result = loop_without_status(&mut call_wrapper, &manager, &mut state);
@@ -182,10 +256,18 @@ pub(crate) fn run_wm() -> Result<()> {
         if let Err(e) = loop_result {
             match e {
                 Error::StateInvalidated => {
-                    crate::x11::state_lifecycle::teardown_dynamic_state(&mut call_wrapper, &state)?;
-                    call_wrapper.inner_mut().sync()?;
+                    crate::x11::state_lifecycle::teardown_dynamic_state(
+                        &mut call_wrapper,
+                        &mut xcb_socket_out_buffer,
+                        &state,
+                    )?;
+                    call_wrapper
+                        .inner_mut()
+                        .sync(&mut xcb_socket_in_buffer, &mut xcb_socket_out_buffer)?;
                     state = crate::x11::state_lifecycle::reinit_state(
                         &mut call_wrapper,
+                        &mut xcb_socket_in_buffer,
+                        &mut xcb_socket_out_buffer,
                         &font_drawer,
                         &fonts,
                         visual,
@@ -202,22 +284,30 @@ pub(crate) fn run_wm() -> Result<()> {
                 Error::GracefulShutdown => {
                     crate::x11::state_lifecycle::teardown_full_state(
                         &mut call_wrapper,
+                        &mut xcb_socket_in_buffer,
+                        &mut xcb_socket_out_buffer,
                         &state,
                         &lf,
                     )?;
-                    call_wrapper.reset_root_window(&state)?;
-                    call_wrapper.inner_mut().sync()?;
+                    call_wrapper.reset_root_window(&mut xcb_socket_out_buffer, &state)?;
+                    call_wrapper
+                        .inner_mut()
+                        .sync(&mut xcb_socket_in_buffer, &mut xcb_socket_out_buffer)?;
                     drop(call_wrapper);
                     return Ok(());
                 }
                 Error::FullRestart => {
                     crate::x11::state_lifecycle::teardown_full_state(
                         &mut call_wrapper,
+                        &mut xcb_socket_in_buffer,
+                        &mut xcb_socket_out_buffer,
                         &state,
                         &lf,
                     )?;
-                    call_wrapper.reset_root_window(&state)?;
-                    call_wrapper.inner_mut().sync()?;
+                    call_wrapper.reset_root_window(&mut xcb_socket_out_buffer, &state)?;
+                    call_wrapper
+                        .inner_mut()
+                        .sync(&mut xcb_socket_in_buffer, &mut xcb_socket_out_buffer)?;
                     drop(call_wrapper);
                     return Err(Error::FullRestart);
                 }
@@ -242,6 +332,8 @@ fn env_to_xcb_env() -> XcbEnv<'static> {
 #[cfg(feature = "status-bar")]
 fn loop_with_status(
     call_wrapper: &mut CallWrapper,
+    xcb_socket_in_buffer: &mut [u8],
+    xcb_socket_out_buffer: &mut [u8],
     manager: &Manager,
     checker: &mut pgwm_core::status::checker::Checker,
     state: &mut State,
@@ -252,12 +344,13 @@ fn loop_with_status(
         // This looks dumb... Anyway, avoiding an unnecessary poll and going straight to status update
         // if no new events or duration is now.
         while let Some(event) = call_wrapper.inner_mut().read_next_event(
+            xcb_socket_in_buffer,
             next_check
                 .duration_since(tiny_std::time::Instant::now())
                 .unwrap_or_default(),
         )? {
             handle_event(event, call_wrapper, manager, state)?;
-            call_wrapper.inner_mut().flush()?;
+            call_wrapper.inner_mut().flush(xcb_socket_out_buffer)?;
         }
         // Status wants redraw and no new events.
         let dry_run = !state.any_monitors_showing_status();
@@ -268,28 +361,37 @@ fn loop_with_status(
         next_check = next.next_check;
         // Check destroyed, not that important so moved from event handling flow
         Manager::destroy_marked(call_wrapper, state)?;
-        call_wrapper.inner_mut().flush()?;
+        call_wrapper.inner_mut().flush(xcb_socket_out_buffer)?;
         #[cfg(feature = "debug")]
-        call_wrapper.inner_mut().clear_cache()?;
+        call_wrapper
+            .inner_mut()
+            .clear_cache(xcb_socket_in_buffer, xcb_socket_out_buffer)?;
     }
 }
 
 fn loop_without_status<'a>(
     call_wrapper: &mut CallWrapper,
+    xcb_socket_in_buffer: &mut [u8],
+    xcb_socket_out_buffer: &mut [u8],
     manager: &'a Manager<'a>,
     state: &mut State,
 ) -> Result<()> {
     // Arbitrarily chosen
     const DEADLINE: Duration = Duration::from_secs(10_000);
     loop {
-        while let Some(event) = call_wrapper.inner_mut().read_next_event(DEADLINE)? {
+        while let Some(event) = call_wrapper
+            .inner_mut()
+            .read_next_event(xcb_socket_in_buffer, DEADLINE)?
+        {
             handle_event(event, call_wrapper, manager, state)?;
-            call_wrapper.inner_mut().flush()?;
+            call_wrapper.inner_mut().flush(xcb_socket_out_buffer)?;
         }
         Manager::destroy_marked(call_wrapper, state)?;
-        call_wrapper.inner_mut().flush()?;
+        call_wrapper.inner_mut().flush(xcb_socket_out_buffer)?;
         #[cfg(feature = "debug")]
-        call_wrapper.inner_mut().clear_cache()?;
+        call_wrapper
+            .inner_mut()
+            .clear_cache(xcb_socket_in_buffer, xcb_socket_out_buffer)?;
     }
 }
 
@@ -426,20 +528,38 @@ fn dbg_event(
 
 fn find_render_visual_info(
     connection: &mut XorgConnection,
+    xcb_socket_in_buffer: &mut [u8],
+    xcb_socket_out_buffer: &mut [u8],
     screen: &Screen,
 ) -> Result<RenderVisualInfo> {
     Ok(RenderVisualInfo {
-        root: find_appropriate_visual(connection, screen.root_depth, Some(screen.root_visual))?,
-        render: find_appropriate_visual(connection, 32, None)?,
+        root: find_appropriate_visual(
+            connection,
+            xcb_socket_in_buffer,
+            xcb_socket_out_buffer,
+            screen.root_depth,
+            Some(screen.root_visual),
+        )?,
+        render: find_appropriate_visual(
+            connection,
+            xcb_socket_in_buffer,
+            xcb_socket_out_buffer,
+            32,
+            None,
+        )?,
     })
 }
 
 fn find_appropriate_visual(
     connection: &mut XorgConnection,
+    xcb_socket_in_buffer: &mut [u8],
+    xcb_socket_out_buffer: &mut [u8],
     depth: u8,
     match_visual_id: Option<Visualid>,
 ) -> Result<VisualInfo> {
-    let formats = connection.query_pict_formats(false)?.reply(connection)?;
+    let formats = connection
+        .query_pict_formats(xcb_socket_out_buffer, false)?
+        .reply(connection, xcb_socket_in_buffer, xcb_socket_out_buffer)?;
     let candidates = formats
         .formats
         .into_iter()

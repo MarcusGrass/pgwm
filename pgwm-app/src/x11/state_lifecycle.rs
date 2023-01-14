@@ -45,6 +45,8 @@ const COOKIE_CONTAINER_CAPACITY: usize = 64;
 
 pub(crate) fn create_state<'a>(
     call_wrapper: &'a mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     font_manager: &'a FontDrawer<'a>,
     visual: RenderVisualInfo,
     fonts: &'a Fonts,
@@ -70,6 +72,8 @@ pub(crate) fn create_state<'a>(
     let mut cookie_container = heapless::Vec::new();
     let static_state = create_static_state(
         call_wrapper,
+        xcb_in_buf,
+        xcb_out_buf,
         screen,
         &colors,
         tab_bar_height as u16,
@@ -77,6 +81,8 @@ pub(crate) fn create_state<'a>(
     )?;
     do_create_state(
         call_wrapper,
+        xcb_in_buf,
+        xcb_out_buf,
         font_manager,
         fonts,
         visual,
@@ -110,6 +116,8 @@ pub(crate) fn create_state<'a>(
 
 pub(crate) fn reinit_state<'a>(
     call_wrapper: &'a mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     visual: RenderVisualInfo,
@@ -123,6 +131,8 @@ pub(crate) fn reinit_state<'a>(
     let cookie_container = heapless::Vec::new();
     do_create_state(
         call_wrapper,
+        xcb_in_buf,
+        xcb_out_buf,
         font_manager,
         fonts,
         visual,
@@ -154,13 +164,23 @@ pub(crate) fn reinit_state<'a>(
     )
 }
 
-pub(crate) fn teardown_dynamic_state(call_wrapper: &mut CallWrapper, state: &State) -> Result<()> {
+pub(crate) fn teardown_dynamic_state(
+    call_wrapper: &mut CallWrapper,
+    xcb_out_buf: &mut [u8],
+    state: &State,
+) -> Result<()> {
     for mon in &state.monitors {
-        call_wrapper.send_destroy(mon.bar_win.window.drawable)?;
-        RenderConnection::free_picture(call_wrapper.inner_mut(), mon.bar_win.window.picture, true)?;
-        call_wrapper.send_destroy(mon.tab_bar_win.window.drawable)?;
+        call_wrapper.send_destroy(xcb_out_buf, mon.bar_win.window.drawable)?;
         RenderConnection::free_picture(
             call_wrapper.inner_mut(),
+            xcb_out_buf,
+            mon.bar_win.window.picture,
+            true,
+        )?;
+        call_wrapper.send_destroy(xcb_out_buf, mon.tab_bar_win.window.drawable)?;
+        RenderConnection::free_picture(
+            call_wrapper.inner_mut(),
+            xcb_out_buf,
             mon.tab_bar_win.window.picture,
             true,
         )?;
@@ -170,18 +190,31 @@ pub(crate) fn teardown_dynamic_state(call_wrapper: &mut CallWrapper, state: &Sta
 
 pub(crate) fn teardown_full_state(
     call_wrapper: &mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     state: &State,
     loaded_fonts: &LoadedFonts,
 ) -> Result<()> {
-    let _ = teardown_dynamic_state(call_wrapper, state);
-    call_wrapper.send_destroy(state.wm_check_win)?;
+    let _ = teardown_dynamic_state(call_wrapper, xcb_out_buf, state);
+    call_wrapper.send_destroy(xcb_out_buf, state.wm_check_win)?;
     for font in loaded_fonts.fonts.values() {
-        RenderConnection::free_glyph_set(call_wrapper.inner_mut(), font.glyph_set, true)?;
+        RenderConnection::free_glyph_set(
+            call_wrapper.inner_mut(),
+            xcb_out_buf,
+            font.glyph_set,
+            true,
+        )?;
     }
-    ungrab_keys(call_wrapper, &state.key_mapping, state.screen.root)?;
+    ungrab_keys(
+        call_wrapper,
+        xcb_out_buf,
+        &state.key_mapping,
+        state.screen.root,
+    )?;
     for mon in &state.monitors {
         ungrab_mouse(
             call_wrapper,
+            xcb_out_buf,
             mon.bar_win.window.drawable,
             state.screen.root,
             &state.mouse_mapping,
@@ -194,6 +227,8 @@ pub(crate) fn teardown_full_state(
 #[allow(clippy::too_many_lines)]
 fn do_create_state<'a>(
     call_wrapper: &'a mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     vis_info: RenderVisualInfo,
@@ -222,7 +257,7 @@ fn do_create_state<'a>(
     #[cfg(feature = "status-bar")] checks: &[Check],
     mut cookie_container: heapless::Vec<VoidCookie, COOKIE_CONTAINER_CAPACITY>,
 ) -> Result<State> {
-    let screen_dimensions = get_screen_dimensions(call_wrapper, &screen)?;
+    let screen_dimensions = get_screen_dimensions(call_wrapper, xcb_in_buf, xcb_out_buf, &screen)?;
     let mut monitors = Vec::with_capacity(8);
     let mut max_bar_width = 0;
     for (i, dimensions) in screen_dimensions.into_iter().enumerate() {
@@ -238,7 +273,9 @@ fn do_create_state<'a>(
             break;
         }
 
-        let tab_bar_win = call_wrapper.inner_mut().generate_id()?;
+        let tab_bar_win = call_wrapper
+            .inner_mut()
+            .generate_id(xcb_in_buf, xcb_out_buf)?;
         intern_created_windows.insert(tab_bar_win).unwrap();
         push_heapless!(
             cookie_container,
@@ -250,7 +287,9 @@ fn do_create_state<'a>(
                 tab_bar_height
             )?
         )?;
-        let bar_win = call_wrapper.inner_mut().generate_id()?;
+        let bar_win = call_wrapper
+            .inner_mut()
+            .generate_id(xcb_in_buf, xcb_out_buf)?;
         intern_created_windows.insert(bar_win).unwrap();
         push_heapless!(
             cookie_container,
@@ -262,7 +301,9 @@ fn do_create_state<'a>(
                 status_bar_height as u16
             )?
         )?;
-        let bar_pixmap = call_wrapper.inner_mut().generate_id()?;
+        let bar_pixmap = call_wrapper
+            .inner_mut()
+            .generate_id(xcb_in_buf, xcb_out_buf)?;
         push_heapless!(
             cookie_container,
             create_workspace_bar_pixmap(
@@ -274,12 +315,27 @@ fn do_create_state<'a>(
             )?
         )?;
         if show_bar_initially {
-            call_wrapper.inner_mut().map_window(bar_win, true)?;
+            call_wrapper
+                .inner_mut()
+                .map_window(xcb_out_buf, bar_win, true)?;
         }
 
-        let bar_win = init_xrender_double_buffered(call_wrapper, screen.root, bar_win, &vis_info)?;
-        let tab_bar_win =
-            init_xrender_double_buffered(call_wrapper, screen.root, tab_bar_win, &vis_info)?;
+        let bar_win = init_xrender_double_buffered(
+            call_wrapper,
+            xcb_in_buf,
+            xcb_out_buf,
+            screen.root,
+            bar_win,
+            &vis_info,
+        )?;
+        let tab_bar_win = init_xrender_double_buffered(
+            call_wrapper,
+            xcb_in_buf,
+            xcb_out_buf,
+            screen.root,
+            tab_bar_win,
+            &vis_info,
+        )?;
         let bar_geometry = create_bar_geometry(
             font_manager,
             fonts,
@@ -307,12 +363,19 @@ fn do_create_state<'a>(
     pgwm_utils::debug!("Initializing mouse");
     let mouse_mapping = init_mouse(mouse_mappings);
     pgwm_utils::debug!("Initializing keys");
-    let key_mapping = init_keys(call_wrapper, key_mappings)?;
-    grab_keys(call_wrapper, &key_mapping, screen.root)?;
+    let key_mapping = init_keys(call_wrapper, xcb_in_buf, xcb_out_buf, key_mappings)?;
+    grab_keys(
+        call_wrapper,
+        xcb_in_buf,
+        xcb_out_buf,
+        &key_mapping,
+        screen.root,
+    )?;
     for bar_win in monitors.iter().map(|mon| &mon.bar_win) {
         pgwm_utils::debug!("Grabbing mouse keys on bar_win");
         grab_mouse(
             call_wrapper,
+            xcb_out_buf,
             bar_win.window.drawable,
             screen.root,
             &mouse_mapping,
@@ -321,7 +384,9 @@ fn do_create_state<'a>(
 
     pgwm_utils::debug!("Creating status bar pixmap");
     #[cfg(feature = "status-bar")]
-    let status_pixmap = call_wrapper.inner_mut().generate_id()?;
+    let status_pixmap = call_wrapper
+        .inner_mut()
+        .generate_id(xcb_in_buf, xcb_out_buf)?;
 
     #[cfg(feature = "status-bar")]
     push_heapless!(
@@ -336,7 +401,7 @@ fn do_create_state<'a>(
     )?;
 
     for cookie in cookie_container {
-        cookie.check(call_wrapper.inner_mut())?;
+        cookie.check(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?;
     }
     pgwm_utils::debug!("Created state");
     Ok(State {
@@ -370,6 +435,8 @@ fn do_create_state<'a>(
 
 fn create_static_state<'a>(
     call_wrapper: &'a mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     screen: &'a Screen,
     colors: &Colors,
     tab_bar_height: u16,
@@ -377,14 +444,18 @@ fn create_static_state<'a>(
 ) -> Result<StaticState> {
     let mut intern_created_windows = FnvIndexSet::new();
     let gcs = create_gcs(call_wrapper, screen, colors)?;
-    let tab_pixmap = call_wrapper.inner_mut().generate_id()?;
+    let tab_pixmap = call_wrapper
+        .inner_mut()
+        .generate_id(xcb_in_buf, xcb_out_buf)?;
     push_heapless!(
         cookie_container,
         create_tab_pixmap(call_wrapper, screen, tab_pixmap, tab_bar_height)?
     )?;
 
     let sequences_to_ignore = heapless::BinaryHeap::new();
-    let check_win = call_wrapper.inner_mut().generate_id()?;
+    let check_win = call_wrapper
+        .inner_mut()
+        .generate_id(xcb_in_buf, xcb_out_buf)?;
     intern_created_windows.insert(check_win).unwrap();
     push_heapless!(
         cookie_container,
@@ -409,6 +480,7 @@ struct StaticState {
 
 fn create_tab_bar_win(
     call_wrapper: &mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     screen: &Screen,
     tab_bar_win: Window,
     dimensions: Dimensions,
@@ -418,6 +490,7 @@ fn create_tab_bar_win(
         .event_mask(EventMask::BUTTON_PRESS)
         .background_pixel(0);
     Ok(call_wrapper.inner_mut().create_window(
+        xcb_out_buf,
         COPY_DEPTH_FROM_PARENT,
         tab_bar_win,
         screen.root,
@@ -435,6 +508,7 @@ fn create_tab_bar_win(
 
 fn create_workspace_bar_win(
     call_wrapper: &mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     screen: &Screen,
     ws_bar_win: Window,
     dimensions: Dimensions,
@@ -450,6 +524,7 @@ fn create_workspace_bar_win(
                 | EventMask::LEAVE_WINDOW,
         );
     Ok(call_wrapper.inner_mut().create_window(
+        xcb_out_buf,
         COPY_DEPTH_FROM_PARENT,
         ws_bar_win,
         screen.root,
@@ -467,12 +542,14 @@ fn create_workspace_bar_win(
 
 fn create_workspace_bar_pixmap(
     call_wrapper: &mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     screen: &Screen,
     bar_pixmap: Pixmap,
     dimensions: Dimensions,
     status_bar_height: u16,
 ) -> Result<VoidCookie> {
     Ok(call_wrapper.inner_mut().create_pixmap(
+        xcb_out_buf,
         screen.root_depth,
         bar_pixmap,
         screen.root,
@@ -484,6 +561,7 @@ fn create_workspace_bar_pixmap(
 
 fn create_wm_check_win<'a>(
     call_wrapper: &'a mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     screen: &'a Screen,
     check_win: Window,
 ) -> Result<VoidCookie> {
@@ -492,6 +570,7 @@ fn create_wm_check_win<'a>(
         .background_pixel(0);
     Ok(XprotoConnection::create_window(
         call_wrapper.inner_mut(),
+        xcb_out_buf,
         COPY_DEPTH_FROM_PARENT,
         check_win,
         screen.root,
@@ -535,10 +614,14 @@ fn create_gcs<'a>(
 
 fn create_background_gc(
     call_wrapper: &mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     win: Window,
     pixel: u32,
 ) -> Result<(Gcontext, VoidCookie)> {
-    let gc = call_wrapper.inner_mut().generate_id()?;
+    let gc = call_wrapper
+        .inner_mut()
+        .generate_id(xcb_in_buf, xcb_out_buf)?;
     let gc_aux = CreateGCValueList::default()
         .graphics_exposures(0)
         .line_style(LineStyleEnum::SOLID)
@@ -547,7 +630,14 @@ fn create_background_gc(
         .foreground(pixel)
         .background(pixel);
 
-    let cookie = XprotoConnection::create_g_c(call_wrapper.inner_mut(), gc, win, gc_aux, false)?;
+    let cookie = XprotoConnection::create_g_c(
+        call_wrapper.inner_mut(),
+        xcb_out_buf,
+        gc,
+        win,
+        gc_aux,
+        false,
+    )?;
     Ok((gc, cookie))
 }
 
@@ -568,14 +658,17 @@ fn get_screen_dimensions(
 #[cfg(feature = "xinerama")]
 fn get_screen_dimensions(
     call_wrapper: &mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     _screen: &Screen,
 ) -> Result<Vec<Dimensions>> {
     Ok(
         xcb_rust_protocol::connection::xinerama::XineramaConnection::query_screens(
             call_wrapper.inner_mut(),
+            xcb_out_buf,
             false,
         )?
-        .reply(call_wrapper.inner_mut())?
+        .reply(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?
         .screen_info
         .iter()
         .map(|screen_info| {
@@ -592,12 +685,14 @@ fn get_screen_dimensions(
 
 fn create_tab_pixmap<'a>(
     call_wrapper: &'a mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     screen: &'a Screen,
     pixmap: Pixmap,
     tab_bar_height: u16,
 ) -> Result<VoidCookie> {
     Ok(XprotoConnection::create_pixmap(
         call_wrapper.inner_mut(),
+        xcb_out_buf,
         screen.root_depth,
         pixmap,
         screen.root,
@@ -610,6 +705,7 @@ fn create_tab_pixmap<'a>(
 #[cfg(feature = "status-bar")]
 fn create_status_bar_pixmap(
     call_wrapper: &mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     screen: &Screen,
     pixmap: Pixmap,
     max_bar_width: u16,
@@ -617,6 +713,7 @@ fn create_status_bar_pixmap(
 ) -> Result<VoidCookie> {
     Ok(XprotoConnection::create_pixmap(
         call_wrapper.inner_mut(),
+        xcb_out_buf,
         screen.root_depth,
         pixmap,
         screen.root,
@@ -810,6 +907,8 @@ fn create_fixed_components<It: Iterator<Item = String>>(
 
 fn init_keys(
     call_wrapper: &mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     simple_key_mappings: &[SimpleKeyMapping],
 ) -> Result<Map<KeyBoardMappingKey, Action>> {
     let setup = call_wrapper.inner_mut().setup();
@@ -817,9 +916,14 @@ fn init_keys(
     let hi = setup.max_keycode;
     let capacity = hi - lo + 1;
 
-    let mapping =
-        XprotoConnection::get_keyboard_mapping(call_wrapper.inner_mut(), lo, capacity, false)?
-            .reply(call_wrapper.inner_mut())?;
+    let mapping = XprotoConnection::get_keyboard_mapping(
+        call_wrapper.inner_mut(),
+        xcb_out_buf,
+        lo,
+        capacity,
+        false,
+    )?
+    .reply(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?;
     pgwm_utils::debug!("Got key mapping");
     let syms = mapping.keysyms;
     let mut map = Map::new();
@@ -844,12 +948,15 @@ fn init_keys(
 
 fn grab_keys(
     call_wrapper: &mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     key_map: &Map<KeyBoardMappingKey, Action>,
     root_win: Window,
 ) -> Result<()> {
     for key in key_map.keys() {
         XprotoConnection::grab_key(
             call_wrapper.inner_mut(),
+            xcb_out_buf,
             0,
             root_win,
             key.mods.into(),
@@ -858,20 +965,25 @@ fn grab_keys(
             GrabModeEnum::ASYNC,
             false,
         )?
-        .check(call_wrapper.inner_mut())?;
+        .check(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?;
     }
     Ok(())
 }
 
 fn ungrab_keys(
     call_wrapper: &mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     key_map: &Map<KeyBoardMappingKey, Action>,
     root_win: Window,
 ) -> Result<()> {
     for key in key_map.keys() {
-        call_wrapper
-            .inner_mut()
-            .ungrab_key(GrabEnum(key.code), root_win, key.mods.into(), true)?;
+        call_wrapper.inner_mut().ungrab_key(
+            xcb_out_buf,
+            GrabEnum(key.code),
+            root_win,
+            key.mods.into(),
+            true,
+        )?;
     }
     Ok(())
 }
@@ -896,6 +1008,7 @@ fn init_mouse(simple_mouse_mappings: &[SimpleMouseMapping]) -> Map<MouseActionKe
 
 fn grab_mouse(
     call_wrapper: &mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     bar_win: Window,
     root_win: Window,
     mouse_map: &Map<MouseActionKey, Action>,
@@ -903,6 +1016,7 @@ fn grab_mouse(
     for key in mouse_map.keys() {
         XprotoConnection::grab_button(
             call_wrapper.inner_mut(),
+            xcb_out_buf,
             0,
             if key.target.on_bar() {
                 bar_win
@@ -924,12 +1038,14 @@ fn grab_mouse(
 
 fn ungrab_mouse(
     call_wrapper: &mut CallWrapper,
+    xcb_out_buf: &mut [u8],
     bar_win: Window,
     root_win: Window,
     mouse_map: &Map<MouseActionKey, Action>,
 ) -> Result<()> {
     for key in mouse_map.keys() {
         call_wrapper.inner_mut().ungrab_button(
+            xcb_out_buf,
             key.detail.into(),
             if key.target.on_bar() {
                 bar_win
@@ -945,14 +1061,19 @@ fn ungrab_mouse(
 
 fn init_xrender_double_buffered(
     call_wrapper: &mut CallWrapper,
+    xcb_in_buf: &mut [u8],
+    xcb_out_buf: &mut [u8],
     root: Window,
     window: Window,
     vis_info: &RenderVisualInfo,
 ) -> Result<DoubleBufferedRenderPicture> {
-    let direct = call_wrapper.window_mapped_picture(window, vis_info)?;
-    let write_buf_pixmap = call_wrapper.inner_mut().generate_id()?;
+    let direct = call_wrapper.window_mapped_picture(xcb_out_buf, window, vis_info)?;
+    let write_buf_pixmap = call_wrapper
+        .inner_mut()
+        .generate_id(xcb_in_buf, xcb_out_buf)?;
     XprotoConnection::create_pixmap(
         call_wrapper.inner_mut(),
+        xcb_out_buf,
         vis_info.render.depth,
         write_buf_pixmap,
         root,
@@ -960,8 +1081,10 @@ fn init_xrender_double_buffered(
         1,
         true,
     )?;
-    let write_buf_picture = call_wrapper.pixmap_mapped_picture(write_buf_pixmap, vis_info)?;
+    let write_buf_picture =
+        call_wrapper.pixmap_mapped_picture(xcb_out_buf, write_buf_pixmap, vis_info)?;
     call_wrapper.fill_xrender_rectangle(
+        xcb_out_buf,
         write_buf_picture,
         xcb_rust_protocol::proto::render::Color {
             red: 0xffff,
@@ -971,7 +1094,12 @@ fn init_xrender_double_buffered(
         },
         Dimensions::new(1, 1, 0, 0),
     )?;
-    XprotoConnection::free_pixmap(call_wrapper.inner_mut(), write_buf_pixmap, true)?;
+    XprotoConnection::free_pixmap(
+        call_wrapper.inner_mut(),
+        xcb_out_buf,
+        write_buf_pixmap,
+        true,
+    )?;
     Ok(DoubleBufferedRenderPicture {
         window: RenderPicture {
             drawable: window,

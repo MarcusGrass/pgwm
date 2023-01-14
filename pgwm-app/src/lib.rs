@@ -26,6 +26,7 @@ use crate::wm::run_wm;
 
 pub(crate) mod error;
 mod manager;
+mod uring;
 pub(crate) mod util;
 mod wm;
 mod x11;

@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::status::sys::find_byte;
 
-const LOAD_FILE: &str = "/proc/stat\0";
+pub const CPU_LOAD_FILE: &str = "/proc/stat\0";
 
 #[derive(Debug, Default)]
 pub struct Load {
@@ -11,7 +11,7 @@ pub struct Load {
 
 #[allow(unsafe_code)]
 pub fn read_cpu_load() -> Result<Load, Error> {
-    let buf = tiny_std::fs::read(LOAD_FILE)?;
+    let buf = tiny_std::fs::read(CPU_LOAD_FILE)?;
     parse_raw(&buf)
 }
 

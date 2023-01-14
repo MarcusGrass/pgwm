@@ -3,7 +3,7 @@ use tiny_std::io::Read;
 
 use crate::error::Error;
 
-const BAT_FILE: &str = "/sys/class/power_supply/BAT0/capacity\0";
+pub const BAT_FILE: &str = "/sys/class/power_supply/BAT0/capacity\0";
 
 #[derive(Debug, Default)]
 pub struct BatChecker {

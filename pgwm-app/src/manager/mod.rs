@@ -57,13 +57,24 @@ impl<'a> Manager<'a> {
         }
     }
 
-    pub(crate) fn init(&self, call_wrapper: &mut CallWrapper, state: &mut State) -> Result<()> {
-        let ch_wa = call_wrapper.set_root_event_mask(&self.cursor_handle, state)?;
-        ch_wa.check(call_wrapper.inner_mut())?;
+    pub(crate) fn init(
+        &self,
+        call_wrapper: &mut CallWrapper,
+        xcb_in_buf: &mut [u8],
+        xcb_out_buf: &mut [u8],
+        state: &mut State,
+    ) -> Result<()> {
+        let ch_wa = call_wrapper.set_root_event_mask(
+            xcb_in_buf,
+            xcb_out_buf,
+            &self.cursor_handle,
+            state,
+        )?;
+        ch_wa.check(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?;
         pgwm_utils::debug!("Set root event mask");
         self.bar_manager.draw_static(call_wrapper, state)?;
         pgwm_utils::debug!("Drew workspace sections");
-        call_wrapper.set_default_manager_props(state)?;
+        call_wrapper.set_default_manager_props(xcb_out_buf, state)?;
         pgwm_utils::debug!("Drew default manager properties");
         Ok(())
     }

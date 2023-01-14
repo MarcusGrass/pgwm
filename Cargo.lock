@@ -93,7 +93,6 @@ dependencies = [
 [[package]]
 name = "linux-rust-bindings"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/linux-rust-bindings?rev=c22f9d8f47805a14612251aabd6e8b19baf2083f#c22f9d8f47805a14612251aabd6e8b19baf2083f"
 
 [[package]]
 name = "lock_api"
@@ -189,7 +188,6 @@ dependencies = [
 [[package]]
 name = "rusl"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/tiny-std?rev=8bf34350de08b3500b6d0038a0eb0bc56693beb7#8bf34350de08b3500b6d0038a0eb0bc56693beb7"
 dependencies = [
  "linux-rust-bindings",
  "sc",
@@ -326,7 +324,6 @@ checksum = "0b5d366a619c58cc621169d481d049b286553c87ba10c17f1ceef2274f9b8ab7"
 [[package]]
 name = "tiny-std"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/tiny-std?rev=8bf34350de08b3500b6d0038a0eb0bc56693beb7#8bf34350de08b3500b6d0038a0eb0bc56693beb7"
 dependencies = [
  "rusl",
  "sc",
@@ -380,7 +377,6 @@ source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=da4634c071fdc547772
 [[package]]
 name = "xcb-rust-connection"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=3b005137f76b52d6a0750d86e5780da2b61bbfa2#3b005137f76b52d6a0750d86e5780da2b61bbfa2"
 dependencies = [
  "rusl",
  "sc",
@@ -393,7 +389,6 @@ dependencies = [
 [[package]]
 name = "xcb-rust-protocol"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=3b005137f76b52d6a0750d86e5780da2b61bbfa2#3b005137f76b52d6a0750d86e5780da2b61bbfa2"
 dependencies = [
  "tiny-std",
  "unix-print",

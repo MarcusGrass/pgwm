@@ -34,6 +34,7 @@ impl<'a> FontDrawer<'a> {
     pub(crate) fn draw(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         dbw: &DoubleBufferedRenderPicture,
         text: &str,
         fonts: &[FontCfg],
@@ -48,11 +49,17 @@ impl<'a> FontDrawer<'a> {
             .loaded_render_fonts
             .encode(text, fonts, text_width - text_x);
         call_wrapper.fill_xrender_rectangle(
+            xcb_out_buf,
             dbw.pixmap.picture,
             text_color.as_render_color(),
             Dimensions::new(1, 1, 0, 0),
         )?;
-        call_wrapper.fill_xrender_rectangle(dbw.window.picture, bg.as_render_color(), fill_area)?;
+        call_wrapper.fill_xrender_rectangle(
+            xcb_out_buf,
+            dbw.window.picture,
+            bg.as_render_color(),
+            fill_area,
+        )?;
         let mut offset = fill_area.x + text_x;
         let mut drawn_width = 0;
         for chunk in encoded {
@@ -60,6 +67,7 @@ impl<'a> FontDrawer<'a> {
             let box_shift = (fill_area.height - chunk.font_height) / 2;
 
             call_wrapper.draw_glyphs(
+                xcb_out_buf,
                 offset,
                 fill_area.y + text_y + box_shift,
                 chunk.glyph_set,

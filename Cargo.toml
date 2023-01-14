@@ -3,10 +3,14 @@ members = ["pgwm", "pgwm-app", "pgwm-core", "pgwm-utils"]
 
 [workspace.dependencies]
 fontdue = { git = "https://github.com/MarcusGrass/fontdue", rev = "667b807a41be43213e55b5a8e4e1db0f80253c36", default-features = false }
-rusl = { git = "https://github.com/MarcusGrass/tiny-std", rev = "8bf34350de08b3500b6d0038a0eb0bc56693beb7", default-features = false }
 smallmap = { git = "https://github.com/MarcusGrass/smallmap", rev = "a0e7399d09a22753ef9c80aa1f1a34009b364357", default-features = false }
-tiny-std = { git = "https://github.com/MarcusGrass/tiny-std", rev = "8bf34350de08b3500b6d0038a0eb0bc56693beb7", default-features = false }
+# rusl = { git = "https://github.com/MarcusGrass/tiny-std", rev = "8bf34350de08b3500b6d0038a0eb0bc56693beb7", default-features = false }
+# tiny-std = { git = "https://github.com/MarcusGrass/tiny-std", rev = "8bf34350de08b3500b6d0038a0eb0bc56693beb7", default-features = false }
 toml = { git = "https://github.com/MarcusGrass/toml", rev = "aa8fae65d99dbc6bd808631800ac8e182300622c", default-features = false }
+rusl = { path = "../tiny-std/rusl", default-features = false }
+tiny-std = { path = "../tiny-std/tiny-std", default-features = false }
 unix-print = "0.1.0"
-xcb-rust-connection = { git = "https://github.com/MarcusGrass/xcb-rust.git", rev = "3b005137f76b52d6a0750d86e5780da2b61bbfa2", default-features = false }
-xcb-rust-protocol = { git = "https://github.com/MarcusGrass/xcb-rust.git", rev = "3b005137f76b52d6a0750d86e5780da2b61bbfa2", default-features = false }
+# xcb-rust-connection = { git = "https://github.com/MarcusGrass/xcb-rust.git", rev = "3b005137f76b52d6a0750d86e5780da2b61bbfa2", default-features = false }
+# xcb-rust-protocol = { git = "https://github.com/MarcusGrass/xcb-rust.git", rev = "3b005137f76b52d6a0750d86e5780da2b61bbfa2", default-features = false }
+xcb-rust-connection = { path = "../xcb-rust/xcb-rust-connection", default-features = false }
+xcb-rust-protocol = { path = "../xcb-rust/xcb-rust-protocol", default-features = false }

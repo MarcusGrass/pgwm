@@ -1,7 +1,8 @@
 use alloc::ffi::NulError;
-use alloc::string::FromUtf8Error;
-use core::fmt::Formatter;
+use alloc::string::{FromUtf8Error, String};
+use core::fmt::{Formatter, Write};
 
+use rusl::Error as RuslError;
 use tiny_std::error::Error as StdError;
 use xcb_rust_connection::{ConnectError, ConnectionError};
 
@@ -29,7 +30,9 @@ pub(crate) enum Error {
     ParseFloat,
     FontLoad(&'static str),
     BadCharFontMapping(&'static str),
+    Uring(String),
     Syscall(StdError),
+    Rusl(RuslError),
 }
 from_error!(pgwm_core::error::Error, Error, Core);
 from_error!(ConnectError, Error, X11Connect);
@@ -39,6 +42,7 @@ from_error!(NulError, Error, ContentToCstr);
 from_error!(FromUtf8Error, Error, ConvertToUtf8);
 from_error!(core::str::Utf8Error, Error, ConvertCoreToUtf8);
 from_error!(StdError, Error, Syscall);
+from_error!(RuslError, Error, Rusl);
 
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -72,6 +76,8 @@ impl core::fmt::Display for Error {
                 f.write_fmt(format_args!("Invalid char to font mapping {s}"))
             }
             Error::Syscall(e) => f.write_fmt(format_args!("Syscall error {e}")),
+            Error::Rusl(e) => f.write_fmt(format_args!("Rusl error {e}")),
+            Error::Uring(e) => f.write_fmt(format_args!("Uring error {e}")),
         }
     }
 }

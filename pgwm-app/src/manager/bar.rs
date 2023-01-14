@@ -350,15 +350,24 @@ impl<'a> BarManager<'a> {
 
     pub(crate) fn toggle_bar(
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         state: &mut State,
     ) -> Result<bool> {
         if state.monitors[mon_ind].show_bar {
             state.monitors[mon_ind].show_bar = false;
-            call_wrapper.send_unmap(state.monitors[mon_ind].bar_win.window.drawable, state)?;
+            call_wrapper.send_unmap(
+                xcb_out_buf,
+                state.monitors[mon_ind].bar_win.window.drawable,
+                state,
+            )?;
             Ok(false)
         } else {
-            call_wrapper.send_map(state.monitors[mon_ind].bar_win.window.drawable, state)?;
+            call_wrapper.send_map(
+                xcb_out_buf,
+                state.monitors[mon_ind].bar_win.window.drawable,
+                state,
+            )?;
             state.monitors[mon_ind].show_bar = true;
             Ok(true)
         }

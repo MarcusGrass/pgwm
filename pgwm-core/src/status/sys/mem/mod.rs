@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::status::sys::{find_byte, find_in_haystack};
 
-const MEM_LOAD: &str = "/proc/meminfo\0";
+pub const MEM_LOAD_FILE: &str = "/proc/meminfo\0";
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Data {
@@ -23,7 +23,7 @@ impl MemChecker {
 #[allow(unsafe_code)]
 #[inline]
 pub fn read_mem_info() -> Result<Data, Error> {
-    let buf = tiny_std::fs::read(MEM_LOAD)?;
+    let buf = tiny_std::fs::read(MEM_LOAD_FILE)?;
     parse_raw(&buf)
 }
 
