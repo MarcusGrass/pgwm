@@ -10,6 +10,7 @@ use rusl::platform::{
 };
 use tiny_std::unix::fd::RawFd;
 use xcb_rust_connection::connection::SocketConnection;
+use xcb_rust_protocol::con::XcbBuffers;
 use xcb_rust_protocol::XcbConnection;
 
 const SOCK_IN_INDEX: usize = 0;
@@ -25,8 +26,7 @@ const OUT_BUF_SIZE: usize = 65536;
 pub struct UringWrapper<'a> {
     inner: IoUring,
     counter: UringCounter,
-    xcb_sock_in_buf: &'a mut [u8],
-    xcb_sock_out_buf: &'a mut [u8],
+    xcb_sock_buffers: XcbBuffers<'a>,
     bat_buf: &'a mut [u8],
     net_buf: &'a mut [u8],
     mem_buf: &'a mut [u8],
@@ -61,7 +61,7 @@ enum ReadStatus {
 impl<'a> UringWrapper<'a> {
     #[inline]
     pub fn submit_socket_write(&mut self, con: &mut SocketConnection) {
-        let addr = self.xcb_sock_out_buf.as_ptr() as usize + con.buf.out_offset;
+        let addr = self.xcb_out_buffer().as_ptr() as usize + con.buf.out_offset;
         let to_write = OUT_BUF_SIZE - con.buf.out_offset;
         let entry = unsafe {
             IoUringSubmissionQueueEntry::new_writev_fixed(
@@ -76,6 +76,7 @@ impl<'a> UringWrapper<'a> {
         unsafe { self.inner.get_next_sqe_slot().unwrap().write(entry) };
         con.advance_writer(to_write);
         self.counter.pending_sock_writes += 1;
+        self.finish_submit()?;
     }
 
     pub fn submit_sock_read(&mut self, con: &mut SocketConnection) -> Result<()> {
@@ -98,6 +99,7 @@ impl<'a> UringWrapper<'a> {
         };
         unsafe { self.inner.get_next_sqe_slot().unwrap().write(entry) };
         self.counter.pending_sock_read = ReadStatus::Pending;
+        self.finish_submit()?;
         Ok(())
     }
 
@@ -111,6 +113,7 @@ impl<'a> UringWrapper<'a> {
         let space = self.bat_buf.len();
         self.submit_indexed_read(BAT_INDEX, addr, space)?;
         self.counter.pending_bat_read = ReadStatus::Pending;
+        self.finish_submit()?;
         Ok(())
     }
 
@@ -127,6 +130,24 @@ impl<'a> UringWrapper<'a> {
             )
         };
         unsafe { self.inner.get_next_sqe_slot().unwrap().write(entry) };
+        Ok(())
+    }
+
+    #[inline]
+    fn finish_submit(&mut self) -> Result<()> {
+        // Flush queue, could optimize this a bit on the tiny-std side
+        // with something like `flush_new` but that has some negatives if we've added
+        // more than one submission
+        self.inner.flush_submission_queue();
+        if self.inner.needs_wakeup() {
+            // Needs to wakeup the SQ thread if not still awake
+            io_uring_enter(
+                self.inner.fd,
+                0,
+                0,
+                IoUringEnterFlags::IORING_ENTER_SQ_WAKEUP,
+            )?;
+        }
         Ok(())
     }
 
@@ -189,7 +210,10 @@ impl<'a> UringWrapper<'a> {
     }
 
     #[inline]
-    pub fn flush_writes(&mut self) -> Result<()> {
+    pub fn await_write_completions(&mut self) -> Result<()> {
+        if self.counter.pending_sock_writes == 0 {
+            return Ok(());
+        }
         loop {
             io_uring_enter(
                 self.inner.fd,
@@ -228,9 +252,23 @@ impl<'a> UringWrapper<'a> {
         }
     }
 
+    #[inline]
+    pub fn xcb_buffers_mut(&mut self) -> &mut XcbBuffers {
+        &mut self.xcb_sock_buffers
+    }
+
+    #[inline]
+    pub fn xcb_out_buffer(&mut self) -> &mut [u8] {
+        &mut self.xcb_sock_buffers.out_buffer
+    }
+
+    #[inline]
+    pub fn xcb_in_buffer(&mut self) -> &mut [u8] {
+        &mut self.xcb_sock_buffers.in_buffer
+    }
+
     pub fn new(
-        xcb_sock_in_buf: &'a mut [u8],
-        xcb_sock_out_buf: &'a mut [u8],
+        xcb_buffers: XcbBuffers,
         bat_buf: &'a mut [u8],
         net_buf: &'a mut [u8],
         mem_buf: &'a mut [u8],
@@ -250,8 +288,8 @@ impl<'a> UringWrapper<'a> {
             io_uring_register_buffers(
                 inner.fd,
                 &[
-                    IoSliceMut::new(xcb_sock_in_buf),
-                    IoSliceMut::new(xcb_sock_out_buf),
+                    IoSliceMut::new(xcb_buffers.in_buffer),
+                    IoSliceMut::new(xcb_buffers.out_buffer),
                     IoSliceMut::new(bat_buf),
                     IoSliceMut::new(net_buf),
                     IoSliceMut::new(mem_buf),
@@ -270,8 +308,7 @@ impl<'a> UringWrapper<'a> {
                 pending_mem_read: ReadStatus::Inactive,
                 pending_cpu_read: ReadStatus::Inactive,
             },
-            xcb_sock_in_buf,
-            xcb_sock_out_buf,
+            xcb_sock_buffers: xcb_buffers,
             bat_buf,
             net_buf,
             mem_buf,

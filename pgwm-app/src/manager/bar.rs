@@ -7,6 +7,7 @@ use pgwm_core::state::State;
 
 use crate::error::Result;
 use crate::manager::font::FontDrawer;
+use crate::uring::UringWrapper;
 use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) struct BarManager<'a> {
@@ -18,6 +19,7 @@ impl<'a> BarManager<'a> {
     pub(crate) fn draw_focused_window_title(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         state: &mut State,
     ) -> Result<()> {
@@ -27,6 +29,7 @@ impl<'a> BarManager<'a> {
         pgwm_utils::debug!("Starting window title draw");
         let draw_width = self.font_drawer.draw(
             call_wrapper,
+            xcb_out_buf,
             &mon.bar_win,
             &section.display,
             &self.fonts.workspace_section,
@@ -52,12 +55,14 @@ impl<'a> BarManager<'a> {
     pub(crate) fn set_workspace_focused(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.draw_ws(
             call_wrapper,
+            xcb_out_buf,
             mon_ind,
             ws_ind,
             state.colors.workspace_bar_focused_workspace_background,
@@ -68,12 +73,14 @@ impl<'a> BarManager<'a> {
     pub(crate) fn set_workspace_unfocused(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.draw_ws(
             call_wrapper,
+            xcb_out_buf,
             mon_ind,
             ws_ind,
             state.colors.workspace_bar_unfocused_workspace_background,
@@ -84,12 +91,14 @@ impl<'a> BarManager<'a> {
     pub(crate) fn set_workspace_urgent(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.draw_ws(
             call_wrapper,
+            xcb_out_buf,
             mon_ind,
             ws_ind,
             state.colors.workspace_bar_urgent_workspace_background,
@@ -100,12 +109,14 @@ impl<'a> BarManager<'a> {
     pub(crate) fn set_workspace_selected_not_focused(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.draw_ws(
             call_wrapper,
+            xcb_out_buf,
             mon_ind,
             ws_ind,
             state
@@ -118,6 +129,7 @@ impl<'a> BarManager<'a> {
     fn draw_ws(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         ws_ind: usize,
         bg_color: Color,
@@ -129,6 +141,7 @@ impl<'a> BarManager<'a> {
         pgwm_utils::debug!("Starting workspace draw");
         self.font_drawer.draw(
             call_wrapper,
+            xcb_out_buf,
             &mon.bar_win,
             name,
             &self.fonts.workspace_section,
@@ -150,6 +163,7 @@ impl<'a> BarManager<'a> {
     fn init_workspace(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         ws_ind: usize,
         state: &mut State,
@@ -175,6 +189,7 @@ impl<'a> BarManager<'a> {
             };
             self.font_drawer.draw(
                 call_wrapper,
+                xcb_out_buf,
                 &mon.bar_win,
                 name,
                 &self.fonts.workspace_section,
@@ -197,16 +212,18 @@ impl<'a> BarManager<'a> {
     pub(crate) fn draw_static(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         state: &mut State,
     ) -> Result<()> {
         for mon_ind in 0..state.monitors.len() {
             self.init_workspace(
                 call_wrapper,
+                xcb_out_buf,
                 mon_ind,
                 state.monitors[mon_ind].hosted_workspace,
                 state,
             )?;
-            self.draw_shortcuts(call_wrapper, mon_ind, state)?;
+            self.draw_shortcuts(call_wrapper, xcb_out_buf, mon_ind, state)?;
         }
         Ok(())
     }
@@ -215,17 +232,19 @@ impl<'a> BarManager<'a> {
     pub(crate) fn update_status(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
         content_ind: usize,
         state: &mut State,
     ) -> Result<()> {
-        self.draw_status(call_wrapper, content, content_ind, state)
+        self.draw_status(call_wrapper, xcb_out_buf, content, content_ind, state)
     }
 
     #[cfg(feature = "status-bar")]
     fn draw_status(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
         content_ind: usize,
         state: &mut State,
@@ -240,6 +259,7 @@ impl<'a> BarManager<'a> {
             let src_y = state.monitors[mon_ind].dimensions.y;
             self.font_drawer.draw(
                 call_wrapper,
+                xcb_out_buf,
                 &state.monitors[mon_ind].bar_win,
                 &content,
                 &self.fonts.status_section,
@@ -258,6 +278,7 @@ impl<'a> BarManager<'a> {
     fn draw_status_with_internal_data(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         state: &State,
     ) -> Result<()> {
         let bg = state.colors.status_bar_background();
@@ -269,6 +290,7 @@ impl<'a> BarManager<'a> {
                 let src_y = state.monitors[i].dimensions.y;
                 self.font_drawer.draw(
                     call_wrapper,
+                    xcb_out_buf,
                     &state.monitors[i].bar_win,
                     &section.display,
                     &self.fonts.status_section,
@@ -292,6 +314,7 @@ impl<'a> BarManager<'a> {
     pub(crate) fn draw_shortcuts(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         state: &mut State,
     ) -> Result<()> {
@@ -305,6 +328,7 @@ impl<'a> BarManager<'a> {
             let name = &shortcut.text;
             self.font_drawer.draw(
                 call_wrapper,
+                xcb_out_buf,
                 &mon.bar_win,
                 name,
                 &self.fonts.shortcut_section,
@@ -323,17 +347,19 @@ impl<'a> BarManager<'a> {
     pub(crate) fn redraw_on(
         &self,
         call_wrapper: &mut CallWrapper,
+        xcb_out_buf: &mut [u8],
         mon_ind: usize,
         state: &mut State,
     ) -> Result<()> {
         self.init_workspace(
             call_wrapper,
+            xcb_out_buf,
             mon_ind,
             state.monitors[mon_ind].hosted_workspace,
             state,
         )?;
         #[cfg(feature = "status-bar")]
-        self.draw_status_with_internal_data(call_wrapper, state)?;
+        self.draw_status_with_internal_data(call_wrapper, xcb_out_buf, state)?;
         // Make sure to cover the entire bar with a background again
         state.monitors[mon_ind]
             .bar_geometry
@@ -343,8 +369,8 @@ impl<'a> BarManager<'a> {
             .window_title_section
             .position
             .length;
-        self.draw_focused_window_title(call_wrapper, mon_ind, state)?;
-        self.draw_shortcuts(call_wrapper, mon_ind, state)?;
+        self.draw_focused_window_title(call_wrapper, xcb_out_buf, mon_ind, state)?;
+        self.draw_shortcuts(call_wrapper, xcb_out_buf, mon_ind, state)?;
         Ok(())
     }
 

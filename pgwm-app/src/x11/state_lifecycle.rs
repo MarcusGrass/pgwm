@@ -39,14 +39,14 @@ use pgwm_core::status::checker::{Check, CheckType};
 
 use crate::error::Result;
 use crate::manager::font::{FontDrawer, LoadedFonts};
+use crate::uring::UringWrapper;
 use crate::x11::call_wrapper::CallWrapper;
 
 const COOKIE_CONTAINER_CAPACITY: usize = 64;
 
 pub(crate) fn create_state<'a>(
     call_wrapper: &'a mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &'a mut UringWrapper,
     font_manager: &'a FontDrawer<'a>,
     visual: RenderVisualInfo,
     fonts: &'a Fonts,
@@ -72,8 +72,7 @@ pub(crate) fn create_state<'a>(
     let mut cookie_container = heapless::Vec::new();
     let static_state = create_static_state(
         call_wrapper,
-        xcb_in_buf,
-        xcb_out_buf,
+        uring_wrapper,
         screen,
         &colors,
         tab_bar_height as u16,
@@ -81,8 +80,7 @@ pub(crate) fn create_state<'a>(
     )?;
     do_create_state(
         call_wrapper,
-        xcb_in_buf,
-        xcb_out_buf,
+        uring_wrapper,
         font_manager,
         fonts,
         visual,
@@ -116,8 +114,7 @@ pub(crate) fn create_state<'a>(
 
 pub(crate) fn reinit_state<'a>(
     call_wrapper: &'a mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &'a mut UringWrapper,
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     visual: RenderVisualInfo,
@@ -131,8 +128,7 @@ pub(crate) fn reinit_state<'a>(
     let cookie_container = heapless::Vec::new();
     do_create_state(
         call_wrapper,
-        xcb_in_buf,
-        xcb_out_buf,
+        uring_wrapper,
         font_manager,
         fonts,
         visual,
@@ -190,7 +186,6 @@ pub(crate) fn teardown_dynamic_state(
 
 pub(crate) fn teardown_full_state(
     call_wrapper: &mut CallWrapper,
-    xcb_in_buf: &mut [u8],
     xcb_out_buf: &mut [u8],
     state: &State,
     loaded_fonts: &LoadedFonts,
@@ -225,10 +220,10 @@ pub(crate) fn teardown_full_state(
 
 #[allow(clippy::fn_params_excessive_bools)]
 #[allow(clippy::too_many_lines)]
+#[inline(Always)] // definitely need this inlined, it's a monster
 fn do_create_state<'a>(
     call_wrapper: &'a mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &'a mut UringWrapper,
     font_manager: &'a FontDrawer<'a>,
     fonts: &'a Fonts,
     vis_info: RenderVisualInfo,
@@ -257,7 +252,7 @@ fn do_create_state<'a>(
     #[cfg(feature = "status-bar")] checks: &[Check],
     mut cookie_container: heapless::Vec<VoidCookie, COOKIE_CONTAINER_CAPACITY>,
 ) -> Result<State> {
-    let screen_dimensions = get_screen_dimensions(call_wrapper, xcb_in_buf, xcb_out_buf, &screen)?;
+    let screen_dimensions = get_screen_dimensions(call_wrapper, uring_wrapper, &screen)?;
     let mut monitors = Vec::with_capacity(8);
     let mut max_bar_width = 0;
     for (i, dimensions) in screen_dimensions.into_iter().enumerate() {
@@ -275,7 +270,7 @@ fn do_create_state<'a>(
 
         let tab_bar_win = call_wrapper
             .inner_mut()
-            .generate_id(xcb_in_buf, xcb_out_buf)?;
+            .generate_id(uring_wrapper.xcb_buffers_mut())?;
         intern_created_windows.insert(tab_bar_win).unwrap();
         push_heapless!(
             cookie_container,
@@ -289,7 +284,7 @@ fn do_create_state<'a>(
         )?;
         let bar_win = call_wrapper
             .inner_mut()
-            .generate_id(xcb_in_buf, xcb_out_buf)?;
+            .generate_id(uring_wrapper.xcb_buffers_mut())?;
         intern_created_windows.insert(bar_win).unwrap();
         push_heapless!(
             cookie_container,
@@ -303,7 +298,7 @@ fn do_create_state<'a>(
         )?;
         let bar_pixmap = call_wrapper
             .inner_mut()
-            .generate_id(xcb_in_buf, xcb_out_buf)?;
+            .generate_id(uring_wrapper.xcb_buffers_mut())?;
         push_heapless!(
             cookie_container,
             create_workspace_bar_pixmap(
@@ -317,21 +312,19 @@ fn do_create_state<'a>(
         if show_bar_initially {
             call_wrapper
                 .inner_mut()
-                .map_window(xcb_out_buf, bar_win, true)?;
+                .map_window(uring_wrapper.xcb_out_buffer(), bar_win, true)?;
         }
 
         let bar_win = init_xrender_double_buffered(
             call_wrapper,
-            xcb_in_buf,
-            xcb_out_buf,
+            uring_wrapper,
             screen.root,
             bar_win,
             &vis_info,
         )?;
         let tab_bar_win = init_xrender_double_buffered(
             call_wrapper,
-            xcb_in_buf,
-            xcb_out_buf,
+            uring_wrapper,
             screen.root,
             tab_bar_win,
             &vis_info,
@@ -363,19 +356,13 @@ fn do_create_state<'a>(
     pgwm_utils::debug!("Initializing mouse");
     let mouse_mapping = init_mouse(mouse_mappings);
     pgwm_utils::debug!("Initializing keys");
-    let key_mapping = init_keys(call_wrapper, xcb_in_buf, xcb_out_buf, key_mappings)?;
-    grab_keys(
-        call_wrapper,
-        xcb_in_buf,
-        xcb_out_buf,
-        &key_mapping,
-        screen.root,
-    )?;
+    let key_mapping = init_keys(call_wrapper, uring_wrapper, key_mappings)?;
+    grab_keys(call_wrapper, uring_wrapper, &key_mapping, screen.root)?;
     for bar_win in monitors.iter().map(|mon| &mon.bar_win) {
         pgwm_utils::debug!("Grabbing mouse keys on bar_win");
         grab_mouse(
             call_wrapper,
-            xcb_out_buf,
+            uring_wrapper.xcb_out_buffer(),
             bar_win.window.drawable,
             screen.root,
             &mouse_mapping,
@@ -386,7 +373,7 @@ fn do_create_state<'a>(
     #[cfg(feature = "status-bar")]
     let status_pixmap = call_wrapper
         .inner_mut()
-        .generate_id(xcb_in_buf, xcb_out_buf)?;
+        .generate_id(uring_wrapper.xcb_buffers_mut())?;
 
     #[cfg(feature = "status-bar")]
     push_heapless!(
@@ -401,7 +388,7 @@ fn do_create_state<'a>(
     )?;
 
     for cookie in cookie_container {
-        cookie.check(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?;
+        cookie.check(call_wrapper.inner_mut(), uring_wrapper.xcb_buffers_mut())?;
     }
     pgwm_utils::debug!("Created state");
     Ok(State {
@@ -435,8 +422,7 @@ fn do_create_state<'a>(
 
 fn create_static_state<'a>(
     call_wrapper: &'a mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &mut UringWrapper,
     screen: &'a Screen,
     colors: &Colors,
     tab_bar_height: u16,
@@ -446,7 +432,7 @@ fn create_static_state<'a>(
     let gcs = create_gcs(call_wrapper, screen, colors)?;
     let tab_pixmap = call_wrapper
         .inner_mut()
-        .generate_id(xcb_in_buf, xcb_out_buf)?;
+        .generate_id(uring_wrapper.xcb_buffers_mut())?;
     push_heapless!(
         cookie_container,
         create_tab_pixmap(call_wrapper, screen, tab_pixmap, tab_bar_height)?
@@ -455,7 +441,7 @@ fn create_static_state<'a>(
     let sequences_to_ignore = heapless::BinaryHeap::new();
     let check_win = call_wrapper
         .inner_mut()
-        .generate_id(xcb_in_buf, xcb_out_buf)?;
+        .generate_id(uring_wrapper.xcb_buffers_mut())?;
     intern_created_windows.insert(check_win).unwrap();
     push_heapless!(
         cookie_container,
@@ -614,14 +600,13 @@ fn create_gcs<'a>(
 
 fn create_background_gc(
     call_wrapper: &mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &mut UringWrapper,
     win: Window,
     pixel: u32,
 ) -> Result<(Gcontext, VoidCookie)> {
     let gc = call_wrapper
         .inner_mut()
-        .generate_id(xcb_in_buf, xcb_out_buf)?;
+        .generate_id(uring_wrapper.xcb_buffers_mut())?;
     let gc_aux = CreateGCValueList::default()
         .graphics_exposures(0)
         .line_style(LineStyleEnum::SOLID)
@@ -658,17 +643,17 @@ fn get_screen_dimensions(
 #[cfg(feature = "xinerama")]
 fn get_screen_dimensions(
     call_wrapper: &mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &mut UringWrapper,
     _screen: &Screen,
 ) -> Result<Vec<Dimensions>> {
+    uring_wrapper.await_write_completions()?;
     Ok(
         xcb_rust_protocol::connection::xinerama::XineramaConnection::query_screens(
             call_wrapper.inner_mut(),
             xcb_out_buf,
             false,
         )?
-        .reply(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?
+        .reply(call_wrapper.inner_mut(), uring_wrapper.xcb_buffers_mut())?
         .screen_info
         .iter()
         .map(|screen_info| {
@@ -907,8 +892,7 @@ fn create_fixed_components<It: Iterator<Item = String>>(
 
 fn init_keys(
     call_wrapper: &mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &mut UringWrapper,
     simple_key_mappings: &[SimpleKeyMapping],
 ) -> Result<Map<KeyBoardMappingKey, Action>> {
     let setup = call_wrapper.inner_mut().setup();
@@ -916,6 +900,7 @@ fn init_keys(
     let hi = setup.max_keycode;
     let capacity = hi - lo + 1;
 
+    uring_wrapper.await_write_completions()?;
     let mapping = XprotoConnection::get_keyboard_mapping(
         call_wrapper.inner_mut(),
         xcb_out_buf,
@@ -923,7 +908,7 @@ fn init_keys(
         capacity,
         false,
     )?
-    .reply(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?;
+    .reply(call_wrapper.inner_mut(), uring_wrapper.xcb_buffers_mut())?;
     pgwm_utils::debug!("Got key mapping");
     let syms = mapping.keysyms;
     let mut map = Map::new();
@@ -948,15 +933,15 @@ fn init_keys(
 
 fn grab_keys(
     call_wrapper: &mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &mut UringWrapper,
     key_map: &Map<KeyBoardMappingKey, Action>,
     root_win: Window,
 ) -> Result<()> {
+    uring_wrapper.await_write_completions()?;
     for key in key_map.keys() {
         XprotoConnection::grab_key(
             call_wrapper.inner_mut(),
-            xcb_out_buf,
+            uring_wrapper.xcb_out_buffer(),
             0,
             root_win,
             key.mods.into(),
@@ -965,7 +950,7 @@ fn grab_keys(
             GrabModeEnum::ASYNC,
             false,
         )?
-        .check(call_wrapper.inner_mut(), xcb_in_buf, xcb_out_buf)?;
+        .check(call_wrapper.inner_mut(), uring_wrapper.xcb_buffers_mut())?;
     }
     Ok(())
 }
@@ -1061,19 +1046,19 @@ fn ungrab_mouse(
 
 fn init_xrender_double_buffered(
     call_wrapper: &mut CallWrapper,
-    xcb_in_buf: &mut [u8],
-    xcb_out_buf: &mut [u8],
+    uring_wrapper: &mut UringWrapper,
     root: Window,
     window: Window,
     vis_info: &RenderVisualInfo,
 ) -> Result<DoubleBufferedRenderPicture> {
-    let direct = call_wrapper.window_mapped_picture(xcb_out_buf, window, vis_info)?;
+    let direct =
+        call_wrapper.window_mapped_picture(uring_wrapper.xcb_out_buffer(), window, vis_info)?;
     let write_buf_pixmap = call_wrapper
         .inner_mut()
-        .generate_id(xcb_in_buf, xcb_out_buf)?;
+        .generate_id(uring_wrapper.xcb_buffers_mut())?;
     XprotoConnection::create_pixmap(
         call_wrapper.inner_mut(),
-        xcb_out_buf,
+        uring_wrapper.xcb_out_buffer(),
         vis_info.render.depth,
         write_buf_pixmap,
         root,
@@ -1081,10 +1066,13 @@ fn init_xrender_double_buffered(
         1,
         true,
     )?;
-    let write_buf_picture =
-        call_wrapper.pixmap_mapped_picture(xcb_out_buf, write_buf_pixmap, vis_info)?;
+    let write_buf_picture = call_wrapper.pixmap_mapped_picture(
+        uring_wrapper.xcb_out_buffer(),
+        write_buf_pixmap,
+        vis_info,
+    )?;
     call_wrapper.fill_xrender_rectangle(
-        xcb_out_buf,
+        uring_wrapper.xcb_out_buffer(),
         write_buf_picture,
         xcb_rust_protocol::proto::render::Color {
             red: 0xffff,
@@ -1096,7 +1084,7 @@ fn init_xrender_double_buffered(
     )?;
     XprotoConnection::free_pixmap(
         call_wrapper.inner_mut(),
-        xcb_out_buf,
+        uring_wrapper.xcb_out_buffer(),
         write_buf_pixmap,
         true,
     )?;

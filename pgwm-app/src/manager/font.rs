@@ -14,6 +14,7 @@ use pgwm_core::geometry::Dimensions;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
 
 use crate::error::{Error, Result};
+use crate::uring::UringWrapper;
 use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) struct FontDrawer<'a> {
@@ -84,6 +85,7 @@ impl<'a> FontDrawer<'a> {
 
 pub(crate) fn load_alloc_fonts<'a>(
     call_wrapper: &mut CallWrapper,
+    uring_wrapper: &mut UringWrapper,
     vis_info: &RenderVisualInfo,
     fonts: &'a Fonts,
     char_remap: &'a Map<heapless::String<4>, FontCfg>,
@@ -96,7 +98,7 @@ pub(crate) fn load_alloc_fonts<'a>(
         .chain(fonts.shortcut_section.iter())
         .chain(fonts.tab_bar_section.iter())
         .chain(char_remap.values());
-    call_wrapper.inner_mut().flush()?;
+    uring_wrapper.await_write_completions()?;
     #[cfg(feature = "status-bar")]
     let it = it.chain(fonts.status_section.iter());
     // Reuse buffer
@@ -111,7 +113,7 @@ pub(crate) fn load_alloc_fonts<'a>(
             data.clear();
             let read_bytes = file.read_to_end(&mut data)?;
             crate::debug!("Read {} bytes of font {}", read_bytes, f_cfg.path);
-            let gs = call_wrapper.create_glyphset(vis_info)?;
+            let gs = call_wrapper.create_glyphset(uring_wrapper, vis_info)?;
 
             let mut ids = vec![];
             let mut infos = vec![];
@@ -166,16 +168,22 @@ pub(crate) fn load_alloc_fonts<'a>(
                 );
                 let current_out_size = current_out_size(ids.len(), infos.len(), raw_data.len());
                 if current_out_size >= 32768 {
-                    call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
-                    call_wrapper.inner_mut().flush()?;
+                    call_wrapper.add_glyphs(
+                        uring_wrapper.xcb_out_buffer(),
+                        gs,
+                        &ids,
+                        &infos,
+                        &raw_data,
+                    )?;
+                    uring_wrapper.await_write_completions()?;
                     ids.clear();
                     infos.clear();
                     raw_data.clear();
                 }
                 id += 1;
             }
-            call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
-            call_wrapper.inner_mut().flush()?;
+            call_wrapper.add_glyphs(uring_wrapper.xcb_out_buffer(), gs, &ids, &infos, &raw_data)?;
+            uring_wrapper.await_write_completions()?;
             crate::debug!("Added {} glyphs", ids.len());
             crate::debug!(
                 "Storing loaded font with size > {} bytes",
