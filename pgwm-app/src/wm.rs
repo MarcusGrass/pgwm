@@ -112,6 +112,8 @@ pub(crate) fn run_wm() -> Result<()> {
         #[cfg(feature = "status-bar")]
         &status_checks,
     )?;
+    // On connect we'll start the listening loop
+    uring_wrapper.submit_sock_read()?;
     let screen_num = dpy_info.screen;
     let evt_state = xcb_rust_connection::connection::setup(&mut uring_wrapper, xcb_env, dpy_info)?;
     let setup = evt_state.setup().clone();
@@ -349,13 +351,6 @@ fn loop_with_status(
     checker: &mut pgwm_core::status::checker::Checker,
     state: &mut State,
 ) -> Result<()> {
-    // Kick off with a read.
-    crate::debug!("Submitting initial read");
-    call_wrapper.uring.submit_sock_read()?;
-    crate::debug!(
-        "Counter after initial sock read submit {:?}",
-        call_wrapper.uring.counter
-    );
     for (next, when) in checker.get_all_check_submits() {
         match next {
             pgwm_core::status::checker::NextCheck::BAT => {
@@ -416,7 +411,6 @@ fn handle_read_event(
             )? {
                 handle_event(event, call_wrapper, manager, state)?;
             }
-            call_wrapper.uring.submit_sock_read()?;
         }
         #[cfg(feature = "status-bar")]
         UringReadEvent::Bat => {
@@ -493,8 +487,6 @@ fn loop_without_status<'a>(
     manager: &'a Manager<'a>,
     state: &mut State,
 ) -> Result<()> {
-    crate::debug!("Submitting initial read");
-    call_wrapper.uring.submit_sock_read()?;
     crate::debug!(
         "Counter after initial sock read submit {:?}",
         call_wrapper.uring.counter

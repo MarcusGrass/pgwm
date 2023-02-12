@@ -1,3 +1,4 @@
+use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
@@ -307,7 +308,9 @@ impl UringWrapper {
     pub fn submit_socket_write(&mut self) -> Result<()> {
         let to_write = self.sock_write_buffer.kernel_readable().len();
         if to_write == 0 {
-            return Ok(());
+            return Err(Error::Uring(
+                "[BUG] Attempted to submit an empty socket write".to_owned(),
+            ));
         }
         // It's possible that we want to block for prev writes to finish before issuing another,
         // even though we're writing from different offsets of the buffer, depending on which execution
@@ -341,11 +344,10 @@ impl UringWrapper {
     /// Same as `submit_socket_write` but a read operation
     pub fn submit_sock_read(&mut self) -> Result<()> {
         if self.counter.pending_sock_read != ReadStatus::Inactive {
-            crate::debug!(
+            return Err(Error::Uring(format!(
                 "Tried to submit multiple sock reads, status: {:?}",
                 self.counter.pending_sock_read
-            );
-            return Ok(());
+            )));
         }
         let addr = self.sock_read_buffer.kernel_writeable().as_mut_ptr();
         let space = self.sock_read_buffer.kernel_writeable().len();
@@ -652,6 +654,7 @@ impl UringWrapper {
             if let Some(next) = self.handle_next_completion()? {
                 return Ok(next);
             }
+            crate::debug!("Blocking for next completion");
             io_uring_enter(
                 self.inner.fd,
                 0,
@@ -662,7 +665,6 @@ impl UringWrapper {
     }
 
     pub fn await_write_completions(&mut self) -> Result<()> {
-        self.submit_socket_write()?;
         if self.counter.pending_sock_writes == 0 {
             unsafe {
                 self.sock_write_buffer.clear();
@@ -677,6 +679,7 @@ impl UringWrapper {
                 }
                 return Ok(());
             }
+            crate::debug!("Blocking for next write completion");
             io_uring_enter(
                 self.inner.fd,
                 0,
@@ -785,8 +788,6 @@ impl SocketIo for UringWrapper {
     ) -> core::result::Result<(), E> {
         let consumed_bytes = (read_op)(self.sock_read_buffer.user_readable())?;
         self.sock_read_buffer.advance_read(consumed_bytes);
-        // TODO: Don't want this, submit should be directly after getting a read cqe ideally
-        self.submit_sock_read().unwrap();
         Ok(())
     }
 
