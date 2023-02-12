@@ -1,6 +1,6 @@
 use alloc::ffi::NulError;
 use alloc::string::{FromUtf8Error, String};
-use core::fmt::{Formatter, Write};
+use core::fmt::Formatter;
 
 use rusl::Error as RuslError;
 use tiny_std::error::Error as StdError;

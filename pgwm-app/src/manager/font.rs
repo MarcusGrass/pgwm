@@ -14,7 +14,6 @@ use pgwm_core::geometry::Dimensions;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
 
 use crate::error::{Error, Result};
-use crate::uring::UringWrapper;
 use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) struct FontDrawer<'a> {
@@ -35,7 +34,6 @@ impl<'a> FontDrawer<'a> {
     pub(crate) fn draw(
         &self,
         call_wrapper: &mut CallWrapper,
-        xcb_out_buf: &mut [u8],
         dbw: &DoubleBufferedRenderPicture,
         text: &str,
         fonts: &[FontCfg],
@@ -50,17 +48,11 @@ impl<'a> FontDrawer<'a> {
             .loaded_render_fonts
             .encode(text, fonts, text_width - text_x);
         call_wrapper.fill_xrender_rectangle(
-            xcb_out_buf,
             dbw.pixmap.picture,
             text_color.as_render_color(),
             Dimensions::new(1, 1, 0, 0),
         )?;
-        call_wrapper.fill_xrender_rectangle(
-            xcb_out_buf,
-            dbw.window.picture,
-            bg.as_render_color(),
-            fill_area,
-        )?;
+        call_wrapper.fill_xrender_rectangle(dbw.window.picture, bg.as_render_color(), fill_area)?;
         let mut offset = fill_area.x + text_x;
         let mut drawn_width = 0;
         for chunk in encoded {
@@ -68,7 +60,6 @@ impl<'a> FontDrawer<'a> {
             let box_shift = (fill_area.height - chunk.font_height) / 2;
 
             call_wrapper.draw_glyphs(
-                xcb_out_buf,
                 offset,
                 fill_area.y + text_y + box_shift,
                 chunk.glyph_set,
@@ -85,7 +76,6 @@ impl<'a> FontDrawer<'a> {
 
 pub(crate) fn load_alloc_fonts<'a>(
     call_wrapper: &mut CallWrapper,
-    uring_wrapper: &mut UringWrapper,
     vis_info: &RenderVisualInfo,
     fonts: &'a Fonts,
     char_remap: &'a Map<heapless::String<4>, FontCfg>,
@@ -98,7 +88,6 @@ pub(crate) fn load_alloc_fonts<'a>(
         .chain(fonts.shortcut_section.iter())
         .chain(fonts.tab_bar_section.iter())
         .chain(char_remap.values());
-    uring_wrapper.await_write_completions()?;
     #[cfg(feature = "status-bar")]
     let it = it.chain(fonts.status_section.iter());
     // Reuse buffer
@@ -113,7 +102,7 @@ pub(crate) fn load_alloc_fonts<'a>(
             data.clear();
             let read_bytes = file.read_to_end(&mut data)?;
             crate::debug!("Read {} bytes of font {}", read_bytes, f_cfg.path);
-            let gs = call_wrapper.create_glyphset(uring_wrapper, vis_info)?;
+            let gs = call_wrapper.create_glyphset(vis_info)?;
 
             let mut ids = vec![];
             let mut infos = vec![];
@@ -167,23 +156,18 @@ pub(crate) fn load_alloc_fonts<'a>(
                     },
                 );
                 let current_out_size = current_out_size(ids.len(), infos.len(), raw_data.len());
+
                 if current_out_size >= 32768 {
-                    call_wrapper.add_glyphs(
-                        uring_wrapper.xcb_out_buffer(),
-                        gs,
-                        &ids,
-                        &infos,
-                        &raw_data,
-                    )?;
-                    uring_wrapper.await_write_completions()?;
+                    call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
+                    // Have to flush here or we'll blow out the buffer
+                    call_wrapper.uring.await_write_completions()?;
                     ids.clear();
                     infos.clear();
                     raw_data.clear();
                 }
                 id += 1;
             }
-            call_wrapper.add_glyphs(uring_wrapper.xcb_out_buffer(), gs, &ids, &infos, &raw_data)?;
-            uring_wrapper.await_write_completions()?;
+            call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
             crate::debug!("Added {} glyphs", ids.len());
             crate::debug!(
                 "Storing loaded font with size > {} bytes",

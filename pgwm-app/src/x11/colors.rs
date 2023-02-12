@@ -1,4 +1,4 @@
-use xcb_rust_protocol::connection::xproto::XprotoConnection;
+use xcb_rust_protocol::connection::xproto::alloc_color;
 use xcb_rust_protocol::cookie::FixedCookie;
 use xcb_rust_protocol::proto::xproto::{AllocColorReply, Colormap};
 
@@ -7,11 +7,11 @@ use pgwm_core::config::USED_DIFFERENT_COLOR_SEGMENTS;
 use pgwm_core::push_heapless;
 
 use crate::error::Result;
-use crate::wm::XorgConnection;
+use crate::x11::call_wrapper::CallWrapper;
 
 #[allow(clippy::type_complexity)]
 pub(crate) fn alloc_colors(
-    connection: &mut XorgConnection,
+    call_wrapper: &mut CallWrapper,
     color_map: Colormap,
     colors: pgwm_core::colors::ColorBuilder,
 ) -> Result<Colors> {
@@ -26,18 +26,27 @@ pub(crate) fn alloc_colors(
             alloc_rgba_cookies,
             (
                 color,
-                XprotoConnection::alloc_color(connection, color_map, r, g, b, false)?
+                alloc_color(
+                    &mut call_wrapper.uring,
+                    &mut call_wrapper.xcb_state,
+                    color_map,
+                    r,
+                    g,
+                    b,
+                    false
+                )?
             )
         )?;
     }
-    connection.flush()?;
     let mut allocated_colors: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
         heapless::Vec::new();
     for ((r, g, b, a), cookie) in alloc_rgba_cookies {
         push_heapless!(
             allocated_colors,
             Color {
-                pixel: cookie.reply(connection)?.pixel,
+                pixel: cookie
+                    .reply(&mut call_wrapper.uring, &mut call_wrapper.xcb_state)?
+                    .pixel,
                 bgra8: [b, g, r, a]
             }
         )?;

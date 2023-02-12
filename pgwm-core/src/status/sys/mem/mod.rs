@@ -10,16 +10,6 @@ pub struct Data {
     pub swapped: u64,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct MemChecker;
-
-impl MemChecker {
-    #[inline]
-    pub fn read_mem_info(&mut self) -> Result<Data, Error> {
-        read_mem_info()
-    }
-}
-
 #[allow(unsafe_code)]
 #[inline]
 pub fn read_mem_info() -> Result<Data, Error> {
