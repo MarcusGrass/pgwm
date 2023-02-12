@@ -651,17 +651,12 @@ pub(crate) enum ButtonMask {
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[cfg_attr(test, derive(Eq, PartialEq))]
-#[derive(Debug, Copy, Clone)]
+#[derive(Default, Debug, Copy, Clone)]
 pub enum DefaultDraw {
+    #[default]
     LeftLeader,
     CenterLeader,
     Tabbed,
-}
-
-impl Default for DefaultDraw {
-    fn default() -> Self {
-        DefaultDraw::LeftLeader
-    }
 }
 
 /**

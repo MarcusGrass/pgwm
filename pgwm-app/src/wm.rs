@@ -1,8 +1,11 @@
+use alloc::vec;
 use alloc::vec::Vec;
-use core::time::Duration;
+use rusl::platform::{AddressFamily, SocketAddress, SocketType};
 use smallmap::Map;
 use tiny_std::signal::{CatchSignal, SaSignalaction};
-use xcb_rust_protocol::connection::render::RenderConnection;
+use tiny_std::unix::fd::RawFd;
+use xcb_rust_protocol::con::XcbState;
+use xcb_rust_protocol::connection::render::query_pict_formats;
 use xcb_rust_protocol::proto::render::{PictTypeEnum, Pictformat, Pictforminfo};
 use xcb_rust_protocol::proto::xproto::{
     ButtonPressEvent, ButtonReleaseEvent, ClientMessageEvent, ConfigureNotifyEvent,
@@ -11,7 +14,7 @@ use xcb_rust_protocol::proto::xproto::{
     Visualid,
 };
 use xcb_rust_protocol::util::FixedLengthFromBytes;
-use xcb_rust_protocol::{XcbConnection, XcbEnv};
+use xcb_rust_protocol::XcbEnv;
 
 use pgwm_core::config::{BarCfg, Cfg, Options, Sizing};
 use pgwm_core::render::{RenderVisualInfo, VisualInfo};
@@ -23,10 +26,9 @@ use crate::manager::bar::BarManager;
 use crate::manager::draw::Drawer;
 use crate::manager::font::{load_alloc_fonts, FontDrawer, LoadedFonts};
 use crate::manager::Manager;
+use crate::uring::{UringReadEvent, UringWrapper};
 use crate::x11::call_wrapper::CallWrapper;
 use crate::x11::colors::alloc_colors;
-
-pub type XorgConnection = xcb_rust_connection::connection::SocketConnection;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
@@ -46,6 +48,7 @@ pub(crate) fn run_wm() -> Result<()> {
         tiny_std::env::var("XDG_CONFIG_HOME").ok(),
         tiny_std::env::var("HOME").ok(),
     )?;
+    crate::debug!("Loaded cfg");
     #[cfg(not(feature = "status-bar"))]
     let Cfg {
         sizing,
@@ -90,37 +93,57 @@ pub(crate) fn run_wm() -> Result<()> {
     unsafe {
         tiny_std::signal::add_signal_action(CatchSignal::SIGCHLD, SaSignalaction::Ign)?;
     }
+    crate::debug!("Set sigignore for children");
     let xcb_env = env_to_xcb_env();
-    let (mut connection, screen_num) = XorgConnection::connect(dpy, xcb_env)?;
-    let setup = connection.setup().clone();
-    connection.flush()?;
+    let xcb_socket_in_buffer = vec![0u8; 65536];
+    let xcb_socket_out_buffer = vec![0u8; 65536];
+    crate::debug!("Looking for socket path");
+    let (path, dpy_info) = xcb_rust_connection::connection::find_socket_path(dpy)?;
+    let socket_fd = rusl::network::socket(AddressFamily::AF_UNIX, SocketType::SOCK_STREAM, 0)?;
+
+    //let socket_fd = tiny_std::net::UnixStream::connect(path, true)?;
+    let addr = SocketAddress::try_from_unix(&path)?;
+    rusl::network::connect(socket_fd, &addr)?;
+
+    let mut uring_wrapper = instantiate_uring(
+        xcb_socket_in_buffer,
+        xcb_socket_out_buffer,
+        socket_fd,
+        #[cfg(feature = "status-bar")]
+        &status_checks,
+    )?;
+    let screen_num = dpy_info.screen;
+    let evt_state = xcb_rust_connection::connection::setup(&mut uring_wrapper, xcb_env, dpy_info)?;
+    let setup = evt_state.setup().clone();
     pgwm_utils::debug!("Connected");
-    let screen = &setup.roots[screen_num];
-    let mut call_wrapper = CallWrapper::new(connection)?;
+    let screen = &setup.roots[screen_num as usize];
+    let mut call_wrapper = CallWrapper::new(evt_state, uring_wrapper)?;
     pgwm_utils::debug!("Set up call wrapper");
-    call_wrapper.inner_mut().sync()?;
     call_wrapper.try_become_wm(screen)?;
     pgwm_utils::debug!("Became wm");
     pgwm_utils::debug!("Got resource database properties");
     let resource_db = xcb_rust_protocol::helpers::resource_manager::new_from_default(
-        call_wrapper.inner_mut(),
+        &mut call_wrapper.uring,
+        &mut call_wrapper.xcb_state,
         tiny_std::env::var("HOME").ok(),
         tiny_std::env::var("XENVIRONMENT").ok(),
     )?;
     let cursor_handle = xcb_rust_protocol::helpers::cursor::Handle::new(
-        call_wrapper.inner_mut(),
-        screen_num,
+        &mut call_wrapper.uring,
+        &mut call_wrapper.xcb_state,
+        screen_num as usize,
         &resource_db,
         xcb_env,
     )?;
-    let visual = find_render_visual_info(call_wrapper.inner_mut(), screen)?;
+    let visual = find_render_visual_info(&mut call_wrapper, screen)?;
     let loaded = load_alloc_fonts(&mut call_wrapper, &visual, &fonts, &char_remap)?;
+    call_wrapper.uring.await_write_completions()?;
+
     crate::debug!("Loaded {} fonts", loaded.len());
     let lf = LoadedFonts::new(loaded, &char_remap)?;
     let font_drawer = FontDrawer::new(&lf);
-    call_wrapper.inner_mut().flush()?;
     crate::debug!("Font drawer initialized");
-    let colors = alloc_colors(call_wrapper.inner_mut(), screen.default_colormap, colors)?;
+    let colors = alloc_colors(&mut call_wrapper, screen.default_colormap, colors)?;
     crate::debug!("Allocated colors");
 
     pgwm_utils::debug!("Creating state");
@@ -149,6 +172,7 @@ pub(crate) fn run_wm() -> Result<()> {
         #[cfg(feature = "status-bar")]
         &status_checks,
     )?;
+
     crate::debug!("Initialized mappings");
     let drawer = Drawer::new(&font_drawer, &fonts);
     crate::debug!("Initialized Drawer");
@@ -174,7 +198,7 @@ pub(crate) fn run_wm() -> Result<()> {
         let loop_result = if should_check {
             loop_with_status(&mut call_wrapper, &manager, &mut checker, &mut state)
         } else {
-            loop_without_status(&mut call_wrapper, &manager, &mut state)
+            loop_without_status(&mut call_wrapper, &mut checker, &manager, &mut state)
         };
         #[cfg(not(feature = "status-bar"))]
         let loop_result = loop_without_status(&mut call_wrapper, &manager, &mut state);
@@ -182,8 +206,9 @@ pub(crate) fn run_wm() -> Result<()> {
         if let Err(e) = loop_result {
             match e {
                 Error::StateInvalidated => {
+                    crate::debug!("Invalidated state, reloading");
                     crate::x11::state_lifecycle::teardown_dynamic_state(&mut call_wrapper, &state)?;
-                    call_wrapper.inner_mut().sync()?;
+                    call_wrapper.uring.await_write_completions()?;
                     state = crate::x11::state_lifecycle::reinit_state(
                         &mut call_wrapper,
                         &font_drawer,
@@ -206,18 +231,19 @@ pub(crate) fn run_wm() -> Result<()> {
                         &lf,
                     )?;
                     call_wrapper.reset_root_window(&state)?;
-                    call_wrapper.inner_mut().sync()?;
+                    // TODO: sync
                     drop(call_wrapper);
                     return Ok(());
                 }
                 Error::FullRestart => {
+                    crate::debug!("Got full restart");
                     crate::x11::state_lifecycle::teardown_full_state(
                         &mut call_wrapper,
                         &state,
                         &lf,
                     )?;
                     call_wrapper.reset_root_window(&state)?;
-                    call_wrapper.inner_mut().sync()?;
+                    // TODO: Sync
                     drop(call_wrapper);
                     return Err(Error::FullRestart);
                 }
@@ -239,6 +265,83 @@ fn env_to_xcb_env() -> XcbEnv<'static> {
     }
 }
 
+fn instantiate_uring(
+    xcb_socket_in_buffer: Vec<u8>,
+    xcb_socket_out_buffer: Vec<u8>,
+    socket_fd: RawFd,
+    #[cfg(feature = "status-bar")] checks: &[pgwm_core::status::checker::Check],
+) -> Result<UringWrapper> {
+    // We're doing the alloc here regardless of if the check is used for simplicity
+    #[cfg(feature = "status-bar")]
+    let bat_buf = vec![0u8; 64];
+    #[cfg(feature = "status-bar")]
+    let net_buf = vec![0u8; 4096];
+    #[cfg(feature = "status-bar")]
+    let mem_buf = vec![0u8; 4096];
+    #[cfg(feature = "status-bar")]
+    let cpu_buf = vec![0u8; 4096];
+    #[cfg(feature = "status-bar")]
+    let mut bat_fd = None;
+    #[cfg(feature = "status-bar")]
+    let mut net_fd = None;
+    #[cfg(feature = "status-bar")]
+    let mut mem_fd = None;
+    #[cfg(feature = "status-bar")]
+    let mut cpu_fd = None;
+    #[cfg(feature = "status-bar")]
+    for check in checks {
+        match check.check_type {
+            pgwm_core::status::checker::CheckType::Battery(_) => {
+                bat_fd = Some(try_open_fd(pgwm_core::status::sys::bat::BAT_FILE)?);
+            }
+            pgwm_core::status::checker::CheckType::Cpu(_) => {
+                cpu_fd = Some(try_open_fd(pgwm_core::status::sys::cpu::CPU_LOAD_FILE)?);
+            }
+            pgwm_core::status::checker::CheckType::Net(_) => {
+                net_fd = Some(try_open_fd(pgwm_core::status::sys::net::NET_STAT_FILE)?);
+            }
+            pgwm_core::status::checker::CheckType::Mem(_) => {
+                mem_fd = Some(try_open_fd(pgwm_core::status::sys::mem::MEM_LOAD_FILE)?);
+            }
+            pgwm_core::status::checker::CheckType::Date(_) => {}
+        }
+    }
+
+    let uring_wrapper = UringWrapper::new(
+        xcb_socket_in_buffer,
+        xcb_socket_out_buffer,
+        socket_fd,
+        #[cfg(feature = "status-bar")]
+        bat_buf,
+        #[cfg(feature = "status-bar")]
+        net_buf,
+        #[cfg(feature = "status-bar")]
+        mem_buf,
+        #[cfg(feature = "status-bar")]
+        cpu_buf,
+        #[cfg(feature = "status-bar")]
+        bat_fd.unwrap_or_default(),
+        #[cfg(feature = "status-bar")]
+        net_fd.unwrap_or_default(),
+        #[cfg(feature = "status-bar")]
+        mem_fd.unwrap_or_default(),
+        #[cfg(feature = "status-bar")]
+        cpu_fd.unwrap_or_default(),
+    )?;
+    Ok(uring_wrapper)
+}
+
+#[cfg(feature = "status-bar")]
+fn try_open_fd(file: &str) -> Result<RawFd> {
+    match rusl::unistd::open(file, rusl::platform::OpenFlags::O_RDONLY) {
+        Ok(f) => Ok(f),
+        Err(e) => {
+            unix_print::unix_eprintln!("Failed to open check file {file} {e}");
+            Err(e.into())
+        }
+    }
+}
+
 #[cfg(feature = "status-bar")]
 fn loop_with_status(
     call_wrapper: &mut CallWrapper,
@@ -246,50 +349,183 @@ fn loop_with_status(
     checker: &mut pgwm_core::status::checker::Checker,
     state: &mut State,
 ) -> Result<()> {
-    let mut next_check = tiny_std::time::Instant::now();
+    // Kick off with a read.
+    crate::debug!("Submitting initial read");
+    call_wrapper.uring.submit_sock_read()?;
+    crate::debug!(
+        "Counter after initial sock read submit {:?}",
+        call_wrapper.uring.counter
+    );
+    for (next, when) in checker.get_all_check_submits() {
+        match next {
+            pgwm_core::status::checker::NextCheck::BAT => {
+                call_wrapper.uring.submit_bat_read(&when)?;
+            }
+            pgwm_core::status::checker::NextCheck::CPU => {
+                call_wrapper.uring.submit_cpu_read(&when)?;
+            }
+            pgwm_core::status::checker::NextCheck::NET => {
+                call_wrapper.uring.submit_net_read(&when)?;
+            }
+            pgwm_core::status::checker::NextCheck::MEM => {
+                call_wrapper.uring.submit_mem_read(&when)?;
+            }
+            pgwm_core::status::checker::NextCheck::Date => {
+                call_wrapper.uring.submit_date_timeout(&when)?;
+            }
+        }
+    }
+    crate::debug!("Starting wm loop");
     // Extremely hot place in the code, should bench the checker
     loop {
-        // This looks dumb... Anyway, avoiding an unnecessary poll and going straight to status update
-        // if no new events or duration is now.
-        while let Some(event) = call_wrapper.inner_mut().read_next_event(
-            next_check
-                .duration_since(tiny_std::time::Instant::now())
-                .unwrap_or_default(),
-        )? {
-            handle_event(event, call_wrapper, manager, state)?;
-            call_wrapper.inner_mut().flush()?;
+        crate::debug!("Checking cached");
+        for evt in call_wrapper.uring.check_ready_cached() {
+            handle_read_event(evt, call_wrapper, checker, manager, state)?;
         }
-        // Status wants redraw and no new events.
-        let dry_run = !state.any_monitors_showing_status();
-        let next = checker.run_next(dry_run);
-        if let Some(content) = next.content {
-            manager.draw_status(call_wrapper, content, next.position, state)?;
-        }
-        next_check = next.next_check;
-        // Check destroyed, not that important so moved from event handling flow
+        crate::debug!("Checked cached, awaiting next completion");
+        let next = call_wrapper.uring.await_next_completion()?;
+        crate::debug!("Got next completion");
+        handle_read_event(next, call_wrapper, checker, manager, state)?;
+        crate::debug!("Handled next completion");
         Manager::destroy_marked(call_wrapper, state)?;
-        call_wrapper.inner_mut().flush()?;
         #[cfg(feature = "debug")]
-        call_wrapper.inner_mut().clear_cache()?;
+        call_wrapper
+            .xcb_state
+            .clear_cache(&mut call_wrapper.uring)?;
+
+        // Need to flush to prevent busting the out buffer
+        call_wrapper.uring.await_write_completions()?;
+        crate::debug!("Loop done {:?}", call_wrapper.uring.counter);
     }
+}
+
+#[inline]
+fn handle_read_event(
+    next: UringReadEvent,
+    call_wrapper: &mut CallWrapper,
+    #[cfg(feature = "status-bar")] checker: &mut pgwm_core::status::checker::Checker,
+    manager: &Manager,
+    state: &mut State,
+) -> Result<()> {
+    match next {
+        UringReadEvent::SockIn => {
+            crate::debug!("Got sock in");
+            for event in xcb_rust_connection::connection::try_drain(
+                &mut call_wrapper.uring,
+                &mut call_wrapper.xcb_state,
+            )? {
+                handle_event(event, call_wrapper, manager, state)?;
+            }
+            call_wrapper.uring.submit_sock_read()?;
+        }
+        #[cfg(feature = "status-bar")]
+        UringReadEvent::Bat => {
+            crate::debug!("Got bat event");
+            if let Some(next) = checker.handle_completed(
+                pgwm_core::status::checker::NextCheck::BAT,
+                call_wrapper.uring.read_bat().unwrap(),
+            ) {
+                if let Some(content) = next.content {
+                    manager.draw_status(call_wrapper, content, next.position, state)?;
+                }
+                call_wrapper.uring.submit_bat_read(&next.next_check)?;
+            }
+        }
+        #[cfg(feature = "status-bar")]
+        UringReadEvent::Net => {
+            crate::debug!("Got net event");
+            if let Some(next) = checker.handle_completed(
+                pgwm_core::status::checker::NextCheck::NET,
+                call_wrapper.uring.read_net().unwrap(),
+            ) {
+                if let Some(content) = next.content {
+                    manager.draw_status(call_wrapper, content, next.position, state)?;
+                }
+                call_wrapper.uring.submit_net_read(&next.next_check)?;
+            }
+        }
+        #[cfg(feature = "status-bar")]
+        UringReadEvent::Mem => {
+            crate::debug!("Got mem event");
+            if let Some(next) = checker.handle_completed(
+                pgwm_core::status::checker::NextCheck::MEM,
+                call_wrapper.uring.read_mem().unwrap(),
+            ) {
+                if let Some(content) = next.content {
+                    manager.draw_status(call_wrapper, content, next.position, state)?;
+                }
+                call_wrapper.uring.submit_mem_read(&next.next_check)?;
+            }
+        }
+        #[cfg(feature = "status-bar")]
+        UringReadEvent::Cpu => {
+            crate::debug!("Got cpu event");
+            if let Some(next) = checker.handle_completed(
+                pgwm_core::status::checker::NextCheck::CPU,
+                call_wrapper.uring.read_cpu().unwrap(),
+            ) {
+                if let Some(content) = next.content {
+                    manager.draw_status(call_wrapper, content, next.position, state)?;
+                }
+                call_wrapper.uring.submit_cpu_read(&next.next_check)?;
+            }
+        }
+        #[cfg(feature = "status-bar")]
+        UringReadEvent::DateTimeout => {
+            crate::debug!("Got date event");
+            if let Some(next) =
+                checker.handle_completed(pgwm_core::status::checker::NextCheck::Date, &[])
+            {
+                call_wrapper.uring.read_date();
+                if let Some(content) = next.content {
+                    manager.draw_status(call_wrapper, content, next.position, state)?;
+                }
+                call_wrapper.uring.submit_date_timeout(&next.next_check)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn loop_without_status<'a>(
     call_wrapper: &mut CallWrapper,
+    #[cfg(feature = "status-bar")] checker: &mut pgwm_core::status::checker::Checker,
     manager: &'a Manager<'a>,
     state: &mut State,
 ) -> Result<()> {
-    // Arbitrarily chosen
-    const DEADLINE: Duration = Duration::from_secs(10_000);
+    crate::debug!("Submitting initial read");
+    call_wrapper.uring.submit_sock_read()?;
+    crate::debug!(
+        "Counter after initial sock read submit {:?}",
+        call_wrapper.uring.counter
+    );
+    crate::debug!("Starting wm loop");
+    // Extremely hot place in the code, should bench the checker
     loop {
-        while let Some(event) = call_wrapper.inner_mut().read_next_event(DEADLINE)? {
-            handle_event(event, call_wrapper, manager, state)?;
-            call_wrapper.inner_mut().flush()?;
+        crate::debug!("Checking cached");
+        for evt in call_wrapper.uring.check_ready_cached() {
+            #[cfg(feature = "status-bar")]
+            handle_read_event(evt, call_wrapper, checker, manager, state)?;
+            #[cfg(not(feature = "status-bar"))]
+            handle_read_event(evt, call_wrapper, manager, state)?;
         }
+        crate::debug!("Checked cached, awaiting next completion");
+        let next = call_wrapper.uring.await_next_completion()?;
+        crate::debug!("Got next completion");
+        #[cfg(feature = "status-bar")]
+        handle_read_event(next, call_wrapper, checker, manager, state)?;
+        #[cfg(not(feature = "status-bar"))]
+        handle_read_event(next, call_wrapper, manager, state)?;
+        crate::debug!("Handled next completion");
         Manager::destroy_marked(call_wrapper, state)?;
-        call_wrapper.inner_mut().flush()?;
         #[cfg(feature = "debug")]
-        call_wrapper.inner_mut().clear_cache()?;
+        call_wrapper
+            .xcb_state
+            .clear_cache(&mut call_wrapper.uring)?;
+
+        // Need to flush to prevent busting the out buffer
+        call_wrapper.uring.await_write_completions()?;
+        crate::debug!("Loop done {:?}", call_wrapper.uring.counter);
     }
 }
 
@@ -308,7 +544,7 @@ fn handle_event<'a>(
         .ok_or(Error::X11EventParse)?;
 
     #[cfg(feature = "debug")]
-    dbg_event(&raw, &call_wrapper.inner_mut().extensions);
+    dbg_event(&raw, &call_wrapper.xcb_state.extensions);
     // Unmap and enter are caused by upstream actions, causing unwanted focusing behaviour etc.
     if state.should_ignore_sequence(seq)
         && (response_type == xcb_rust_protocol::proto::xproto::ENTER_NOTIFY_EVENT
@@ -425,21 +661,22 @@ fn dbg_event(
 }
 
 fn find_render_visual_info(
-    connection: &mut XorgConnection,
+    call_wrapper: &mut CallWrapper,
     screen: &Screen,
 ) -> Result<RenderVisualInfo> {
     Ok(RenderVisualInfo {
-        root: find_appropriate_visual(connection, screen.root_depth, Some(screen.root_visual))?,
-        render: find_appropriate_visual(connection, 32, None)?,
+        root: find_appropriate_visual(call_wrapper, screen.root_depth, Some(screen.root_visual))?,
+        render: find_appropriate_visual(call_wrapper, 32, None)?,
     })
 }
 
 fn find_appropriate_visual(
-    connection: &mut XorgConnection,
+    call_wrapper: &mut CallWrapper,
     depth: u8,
     match_visual_id: Option<Visualid>,
 ) -> Result<VisualInfo> {
-    let formats = connection.query_pict_formats(false)?.reply(connection)?;
+    let formats = query_pict_formats(&mut call_wrapper.uring, &mut call_wrapper.xcb_state, false)?
+        .reply(&mut call_wrapper.uring, &mut call_wrapper.xcb_state)?;
     let candidates = formats
         .formats
         .into_iter()

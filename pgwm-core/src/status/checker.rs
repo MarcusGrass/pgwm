@@ -3,8 +3,8 @@ use core::cmp::Ordering;
 use core::ops::Add;
 use core::time::Duration;
 
-use heapless::binary_heap::Min;
-use heapless::{BinaryHeap, String};
+use heapless::String;
+use smallmap::{Collapse, Map};
 use tiny_std::time::Instant;
 
 use crate::config::{
@@ -13,8 +13,8 @@ use crate::config::{
 use crate::format_heapless;
 use crate::status::cpu::LoadChecker;
 use crate::status::net::{ThroughputChecker, ThroughputPerSec};
-use crate::status::sys::bat::BatChecker;
-use crate::status::sys::mem::{Data, MemChecker};
+use crate::status::sys::bat::parse_battery_percentage;
+use crate::status::sys::mem::{parse_raw, Data};
 use crate::status::time::ClockFormatter;
 
 #[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
@@ -265,9 +265,7 @@ impl DateFormat {
 pub struct Checker<'a> {
     cpu_checker: LoadChecker,
     net_checker: ThroughputChecker,
-    mem_checker: MemChecker,
-    bat_checker: BatChecker,
-    check_heap: BinaryHeap<PackagedCheck<'a>, Min, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
+    checks_by_key: Map<NextCheck, PackagedCheck<'a>>,
 }
 
 #[derive(PartialEq, Eq)]
@@ -305,216 +303,145 @@ pub struct CheckResult {
     pub next_check: Instant,
 }
 
-impl<'a> Checker<'a> {
-    pub fn run_next(&mut self, dry: bool) -> CheckResult {
-        if let Some(next) = self.check_heap.peek() {
-            if next.next_time <= Instant::now() {
-                // Checked above for existence, and is single-threaded (could pop unchecked but the performance diff is marginal)
-                let position = next.position;
-                let mut next = self.check_heap.pop().unwrap();
-                let content = if dry {
-                    next.update_check_time();
-                    // Push back before next peek in the case of a single check
-                    let _ = self.check_heap.push(next);
-                    None
-                } else {
-                    // Put it back in with a new next check time
-                    let res = self.run_check(&mut next);
-                    next.update_check_time();
-                    let _ = self.check_heap.push(next);
-                    res
-                };
-                CheckResult {
-                    content,
-                    position,
-                    next_check: self.check_heap.peek().unwrap().next_time,
-                }
-            } else {
-                CheckResult {
-                    content: None,
-                    position: 0,
-                    next_check: self.check_heap.peek().unwrap().next_time,
-                }
-            }
-        } else {
-            panic!("Tried to run status checks without any status checks present.");
-        }
-    }
+pub struct CheckSubmitAdvice {
+    pub submit_indices: heapless::FnvIndexSet<NextCheck, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
+}
 
-    fn run_check(
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum NextCheck {
+    BAT = 0,
+    CPU = 1,
+    NET = 2,
+    MEM = 3,
+    Date = 4,
+}
+
+impl Collapse for NextCheck {
+    fn collapse(&self) -> u8 {
+        *self as u8
+    }
+}
+
+impl<'a> Checker<'a> {
+    pub fn get_all_check_submits(
         &mut self,
-        packaged: &mut PackagedCheck,
-    ) -> Option<String<STATUS_BAR_CHECK_CONTENT_LIMIT>> {
-        match &packaged.check.check_type {
-            CheckType::Battery(limits) => self
-                .bat_checker
-                .get_battery_percentage()
+    ) -> heapless::Vec<(NextCheck, Instant), STATUS_BAR_UNIQUE_CHECK_LIMIT> {
+        let mut all = heapless::Vec::new();
+        for (next, check) in self.checks_by_key.iter_mut() {
+            let _ = all.push((*next, check.next_time));
+        }
+        all
+    }
+    pub fn handle_completed(
+        &mut self,
+        completed: NextCheck,
+        content: &[u8],
+    ) -> Option<CheckResult> {
+        let packaged = self.checks_by_key.get_mut(&completed)?;
+        let content = match &packaged.check.check_type {
+            CheckType::Battery(limits) => parse_battery_percentage(content)
                 .ok()
                 .and_then(|bat| limits.iter().find_map(|limit| limit.format_bat(bat))),
             CheckType::Cpu(fmt) => self
                 .cpu_checker
-                .get_load()
+                .parse_load(content)
                 .ok()
                 .map(|cpu| fmt.format_cpu(cpu)),
             CheckType::Net(fmt) => self
                 .net_checker
-                .get_throughput()
+                .parse_throughput(content)
                 .ok()
                 .map(|tp| fmt.format_net(tp)),
-            CheckType::Mem(fmt) => self
-                .mem_checker
-                .read_mem_info()
-                .ok()
-                .map(|mem| fmt.format_mem(mem)),
+            CheckType::Mem(fmt) => parse_raw(content).ok().map(|mem| fmt.format_mem(mem)),
             CheckType::Date(fmt) => Some(fmt.format_date()),
-        }
+        };
+        packaged.update_check_time();
+        Some(CheckResult {
+            content,
+            position: packaged.position,
+            next_check: packaged.next_time,
+        })
     }
 
     pub fn new(checks: &'a mut heapless::Vec<Check, STATUS_BAR_UNIQUE_CHECK_LIMIT>) -> Self {
-        assert!(!checks.is_empty(), "No checks, still tried to init");
+        let mut checks_by_key = Map::new();
+        let sync_start_time = Instant::now();
         for check in checks.iter_mut() {
             if let CheckType::Battery(bf) = &mut check.check_type {
                 bf.sort_by(|a, b| a.above.cmp(&b.above));
             }
         }
-        let mut check_heap = BinaryHeap::new();
-        let sync_start_time = Instant::now();
-
         for (position, check) in checks.iter().enumerate() {
-            let _ = check_heap.push(PackagedCheck {
-                next_time: sync_start_time,
-                check,
-                position,
-            });
+            match check.check_type {
+                CheckType::Battery(_) => {
+                    checks_by_key.insert(
+                        NextCheck::BAT,
+                        PackagedCheck {
+                            next_time: sync_start_time,
+                            check,
+                            position,
+                        },
+                    );
+                }
+                CheckType::Cpu(_) => {
+                    checks_by_key.insert(
+                        NextCheck::CPU,
+                        PackagedCheck {
+                            next_time: sync_start_time,
+                            check,
+                            position,
+                        },
+                    );
+                }
+                CheckType::Net(_) => {
+                    checks_by_key.insert(
+                        NextCheck::NET,
+                        PackagedCheck {
+                            next_time: sync_start_time,
+                            check,
+                            position,
+                        },
+                    );
+                }
+                CheckType::Mem(_) => {
+                    checks_by_key.insert(
+                        NextCheck::MEM,
+                        PackagedCheck {
+                            next_time: sync_start_time,
+                            check,
+                            position,
+                        },
+                    );
+                }
+                CheckType::Date(_) => {
+                    checks_by_key.insert(
+                        NextCheck::Date,
+                        PackagedCheck {
+                            next_time: sync_start_time,
+                            check,
+                            position,
+                        },
+                    );
+                }
+            }
         }
+
         Checker {
             cpu_checker: LoadChecker::default(),
             net_checker: ThroughputChecker::default(),
-            mem_checker: MemChecker::default(),
-            bat_checker: BatChecker::default(),
-            check_heap,
+            checks_by_key,
         }
     }
 }
 
 #[cfg(test)]
 mod checker_tests {
-    use core::ops::{Add, Sub};
+    use core::ops::Add;
     use core::time::Duration;
-    use pgwm_utils::unix_eprintln;
-    use std::collections::HashSet;
+
     use tiny_std::time::Instant;
 
     use crate::status::checker::{Check, CheckType, Checker, CpuFormat};
-
-    #[test]
-    #[should_panic]
-    fn immediate_panic_on_no_checks() {
-        Checker::new(&mut heapless::Vec::new());
-    }
-
-    #[test]
-    fn can_dry_run_checks() {
-        let mut checks = heapless::Vec::new();
-
-        let interval = Duration::from_millis(10_000);
-        let _ = checks.push(Check {
-            interval: interval.as_millis() as u64,
-            check_type: CheckType::Cpu(CpuFormat {
-                icon: heapless::String::default(),
-                decimals: 2,
-            }),
-        });
-        let now = Instant::now();
-        let mut checker = Checker::new(&mut checks);
-        let result = checker.run_next(true);
-        assert!(result.content.is_none());
-        assert!(result.next_check >= now.add(interval).unwrap());
-        // If this test takes more than 10 seconds there are other issues
-        assert!(result.next_check < now.add(2 * interval).unwrap());
-    }
-
-    // Risk for flakiness
-    #[test]
-    fn can_dry_run_kept_in_sync() {
-        let mut checks = heapless::Vec::new();
-
-        // Need some primes with no overlap on doubling/tripling within a chosen low range
-        let three = Duration::from_millis(3);
-        let five = Duration::from_millis(5);
-        let seven = Duration::from_millis(7);
-        let _ = checks.push(Check {
-            interval: three.as_millis() as u64,
-            check_type: CheckType::Cpu(CpuFormat {
-                icon: heapless::String::default(),
-                decimals: 2,
-            }),
-        });
-        let _ = checks.push(Check {
-            interval: five.as_millis() as u64,
-            check_type: CheckType::Cpu(CpuFormat {
-                icon: heapless::String::default(),
-                decimals: 2,
-            }),
-        });
-        let _ = checks.push(Check {
-            interval: seven.as_millis() as u64,
-            check_type: CheckType::Cpu(CpuFormat {
-                icon: heapless::String::default(),
-                decimals: 2,
-            }),
-        });
-        let start = Instant::now();
-        // Need some end duration that's big enough to allow all checks at least one run but low enough
-        // to need cause multiplication overlap
-        let end = start.add(Duration::from_millis(13)).unwrap();
-        let mut acquired_check_times = HashSet::new();
-
-        let mut checker = Checker::new(&mut checks);
-        let mut first_check_time = None;
-        while end > Instant::now() {
-            let next = checker.run_next(true).next_check;
-            if first_check_time.is_none() {
-                first_check_time = Some(next);
-            }
-            acquired_check_times.insert(next);
-        }
-        assert!(first_check_time.is_some());
-        let long_ago = Instant::now().sub(Duration::from_secs(10)).unwrap();
-        let first_check = first_check_time
-            .unwrap()
-            .duration_since(long_ago)
-            .unwrap()
-            .as_nanos();
-        assert_eq!(9, acquired_check_times.len());
-
-        let mut div_by_three = 0;
-        let mut div_by_five = 0;
-        let mut div_by_seven = 0;
-        for time in acquired_check_times {
-            // Since next time should be a clean add in the checker we should be able to use nano-time without a problem
-            let nanos_of_check = time.duration_since(long_ago).unwrap().as_nanos();
-            unix_eprintln!("{nanos_of_check} - {first_check}");
-            let diff = nanos_of_check - first_check;
-            assert_eq!(0, diff % 1_000_000); // All should be millis expanded to nano time, no clock drift
-            let compacted = diff / 1_000_000;
-            println!("{diff} {compacted}");
-
-            if compacted % 3 == 0 {
-                div_by_three += 1;
-            } else if compacted % 5 == 0 {
-                div_by_five += 1;
-            } else if compacted % 7 == 0 {
-                div_by_seven += 1;
-            }
-        }
-        // At 0, 3, 6, 9, 12
-        assert_eq!(5, div_by_three);
-        // At 5, 10
-        assert_eq!(2, div_by_five);
-        // At 7, 14 (14 is the projected last 'next_check')
-        assert_eq!(2, div_by_seven);
-    }
 
     #[test]
     #[cfg(unix)]
@@ -531,10 +458,10 @@ mod checker_tests {
         });
         let now = Instant::now();
         let mut checker = Checker::new(&mut checks);
-        let result = checker.run_next(false);
-        assert!(result.content.is_some());
-        assert!(result.next_check >= now.add(interval).unwrap());
+        let mut run_checks = checker.get_all_check_submits();
+        assert_eq!(1, run_checks.len());
+        let (_next, when) = run_checks.pop().unwrap();
         // If this test takes more than 10 seconds there are other issues
-        assert!(result.next_check < now.add(2 * interval).unwrap());
+        assert!(when < now.add(2 * interval).unwrap());
     }
 }

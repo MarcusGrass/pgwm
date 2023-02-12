@@ -1,11 +1,11 @@
 use crate::error::Error;
 use crate::status::sys::{find_byte, find_in_haystack};
 
-const NET_STAT: &str = "/proc/net/netstat\0";
+pub const NET_STAT_FILE: &str = "/proc/net/netstat\0";
 
 #[allow(unsafe_code)]
 pub fn read_net_stats() -> Result<Data, Error> {
-    let buf = tiny_std::fs::read(NET_STAT)?;
+    let buf = tiny_std::fs::read(NET_STAT_FILE)?;
     parse_raw(&buf)
 }
 

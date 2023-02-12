@@ -2,8 +2,16 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use smallmap::Map;
-use xcb_rust_protocol::connection::render::RenderConnection;
-use xcb_rust_protocol::connection::xproto::XprotoConnection;
+use xcb_rust_connection::connection::{change_property32, change_property8, XcbEventState};
+use xcb_rust_protocol::con::XcbState;
+use xcb_rust_protocol::connection::render::{
+    add_glyphs, composite_glyphs16, create_glyph_set, create_picture, fill_rectangles,
+};
+use xcb_rust_protocol::connection::xproto::{
+    change_window_attributes, configure_window, delete_property, destroy_window, get_geometry,
+    get_property, get_window_attributes, grab_pointer, intern_atom, kill_client, map_window,
+    query_pointer, query_tree, send_event, set_input_focus, ungrab_pointer, unmap_window,
+};
 use xcb_rust_protocol::cookie::{Cookie, FixedCookie, VoidCookie};
 use xcb_rust_protocol::helpers::properties::{
     WmHints, WmHintsCookie, WmSizeHints, WmSizeHintsCookie,
@@ -20,7 +28,7 @@ use xcb_rust_protocol::proto::xproto::{
     PropModeEnum, QueryPointerReply, QueryTreeReply, Screen, StackModeEnum, Timestamp, Window,
     WindowEnum,
 };
-use xcb_rust_protocol::{XcbConnection, CURRENT_TIME, NONE};
+use xcb_rust_protocol::{CURRENT_TIME, NONE};
 
 use pgwm_core::config::{
     APPLICATION_WINDOW_LIMIT, WINDOW_MANAGER_NAME, WINDOW_MANAGER_NAME_BUF_SIZE,
@@ -37,7 +45,7 @@ use pgwm_core::state::State;
 
 use crate::error::Error::GlyphMismatch;
 use crate::error::{Error, Result};
-use crate::wm::XorgConnection;
+use crate::uring::UringWrapper;
 
 const MAX_STORED_ATOMS: usize = 64;
 
@@ -64,17 +72,17 @@ macro_rules! impl_atoms {
             $enum_name,
         )*
             }
-            fn init_maps(connection: &mut XorgConnection) -> Result<(Map<&'static [u8], ResolvedAtom>, Map<Atom, ResolvedAtom>)> {
+            fn init_maps(uring_wrapper: &mut UringWrapper, evt_state: &mut XcbEventState, ) -> Result<(Map<&'static [u8], ResolvedAtom>, Map<Atom, ResolvedAtom>)> {
                     let mut name_to_atom = Map::new();
                     let mut atom_to_resolved = Map::new();
                     let mut cookies = heapless::Deque::<FixedCookie<InternAtomReply, 12>, 64>::new();
         $(
-                    cookies.push_back(XprotoConnection::intern_atom(connection, 0, $const_name, false)?)
+                    cookies.push_back(intern_atom(uring_wrapper, evt_state, 0, $const_name, false)?)
                     .expect("Not enough space for intern atoms");
 
         )*
         $(
-                    let atom = cookies.pop_front().unwrap().reply(connection)?.atom.0;
+                    let atom = cookies.pop_front().unwrap().reply(uring_wrapper, evt_state)?.atom.0;
                     name_to_atom.insert(
                         $const_name,
                         ResolvedAtom {
@@ -292,7 +300,8 @@ pub(crate) struct ResolvedAtom {
 }
 
 pub(crate) struct CallWrapper {
-    connection: XorgConnection,
+    pub(crate) uring: UringWrapper,
+    pub(crate) xcb_state: XcbEventState,
     name_to_atom: Map<&'static [u8], ResolvedAtom>,
     atom_to_resolved: Map<Atom, ResolvedAtom>,
 }
@@ -302,13 +311,14 @@ impl CallWrapper {
         let change = ChangeWindowAttributesValueList::default()
             .event_mask(EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY);
         pgwm_utils::debug!("Changing props");
-        let res = XprotoConnection::change_window_attributes(
-            &mut self.connection,
+        let res = change_window_attributes(
+            &mut self.uring,
+            &mut self.xcb_state,
             screen.root,
             change,
             false,
         )?
-        .check(&mut self.connection);
+        .check(&mut self.uring, &mut self.xcb_state);
         #[cfg_attr(not(feature = "debug"), allow(unused))]
         if let Err(e) = res {
             pgwm_utils::debug!("Fatal error, Failed to start WM, is another WM running? {e}");
@@ -320,7 +330,9 @@ impl CallWrapper {
 
     #[allow(clippy::too_many_lines)]
     pub(crate) fn set_default_manager_props(&mut self, state: &State) -> Result<()> {
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_SUPPORTED).unwrap().value,
@@ -333,7 +345,9 @@ impl CallWrapper {
                 .as_slice(),
             true,
         )?;
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_CLIENT_LIST).unwrap().value,
@@ -341,7 +355,9 @@ impl CallWrapper {
             &[],
             true,
         )?;
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom
@@ -357,7 +373,9 @@ impl CallWrapper {
             .chain(core::iter::once('\u{0}'))
             .map(|ch| ch as u32)
             .collect::<heapless::Vec<u32, WINDOW_MANAGER_NAME_BUF_SIZE>>();
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_DESKTOP_NAMES).unwrap().value,
@@ -366,7 +384,9 @@ impl CallWrapper {
             true,
         )?;
 
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_CURRENT_DESKTOP).unwrap().value,
@@ -375,7 +395,9 @@ impl CallWrapper {
             true,
         )?;
 
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_DESKTOP_VIEWPORT).unwrap().value,
@@ -383,7 +405,9 @@ impl CallWrapper {
             &[0; 2],
             true,
         )?;
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_DESKTOP_GEOMETRY).unwrap().value,
@@ -394,7 +418,9 @@ impl CallWrapper {
             ],
             true,
         )?;
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_WORKAREA).unwrap().value,
@@ -407,7 +433,9 @@ impl CallWrapper {
             ],
             true,
         )?;
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_ACTIVE_WINDOW).unwrap().value,
@@ -415,7 +443,9 @@ impl CallWrapper {
             &[],
             true,
         )?;
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom
@@ -426,7 +456,9 @@ impl CallWrapper {
             &[state.wm_check_win],
             true,
         )?;
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.wm_check_win,
             self.name_to_atom
@@ -437,7 +469,9 @@ impl CallWrapper {
             &[state.wm_check_win],
             true,
         )?;
-        self.connection.change_property8(
+        change_property8(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.wm_check_win,
             self.name_to_atom.get(&_NET_WM_NAME).unwrap().value,
@@ -457,8 +491,9 @@ impl CallWrapper {
         let wm_class = self.get_class_names(window)?;
         let wm_state = self.get_wm_state(window)?;
         let net_wm_state = self.get_net_wm_state(window)?;
-        let hints = WmHints::get(&mut self.connection, window)?;
-        let size_hints = WmSizeHints::get_normal_hints(&mut self.connection, window)?;
+        let hints = WmHints::get(&mut self.uring, &mut self.xcb_state, window)?;
+        let size_hints =
+            WmSizeHints::get_normal_hints(&mut self.uring, &mut self.xcb_state, window)?;
         let window_types = self.get_window_types(window)?;
         let leader = self.get_leader(window)?;
         let pid = self.get_pid(window)?;
@@ -490,12 +525,14 @@ impl CallWrapper {
                 | EventMask::EXPOSURE
                 | EventMask::STRUCTURE_NOTIFY,
         );
-        XprotoConnection::change_window_attributes(&mut self.connection, window, cw, true)?;
+        change_window_attributes(&mut self.uring, &mut self.xcb_state, window, cw, true)?;
         Ok(())
     }
 
     pub(crate) fn set_base_client_properties(&mut self, window: Window) -> Result<()> {
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             window,
             self.name_to_atom
@@ -516,7 +553,9 @@ impl CallWrapper {
     }
 
     pub fn push_to_client_list(&mut self, root: Window, new_win: Window) -> Result<()> {
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::APPEND,
             root,
             self.name_to_atom.get(&_NET_CLIENT_LIST).unwrap().value,
@@ -528,7 +567,9 @@ impl CallWrapper {
     }
 
     pub fn update_client_list(&mut self, managed: &[Window], state: &State) -> Result<()> {
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             state.screen.root,
             self.name_to_atom.get(&_NET_CLIENT_LIST).unwrap().value,
@@ -539,18 +580,21 @@ impl CallWrapper {
         Ok(())
     }
 
+    #[inline]
     pub(crate) fn query_subwindows(&mut self, window: Window) -> Result<QueryTreeCookie> {
         Ok(QueryTreeCookie {
-            inner: XprotoConnection::query_tree(&mut self.connection, window, false)?,
+            inner: query_tree(&mut self.uring, &mut self.xcb_state, window, false)?,
         })
     }
 
+    #[inline]
     pub(crate) fn query_pointer(
         &mut self,
         state: &State,
     ) -> Result<FixedCookie<QueryPointerReply, 28>> {
-        Ok(XprotoConnection::query_pointer(
-            &mut self.connection,
+        Ok(query_pointer(
+            &mut self.uring,
+            &mut self.xcb_state,
             state.screen.root,
             false,
         )?)
@@ -558,7 +602,7 @@ impl CallWrapper {
 
     pub(crate) fn get_dimensions(&mut self, window: Window) -> Result<DimensionsCookie> {
         Ok(DimensionsCookie {
-            inner: XprotoConnection::get_geometry(&mut self.connection, window, false)?,
+            inner: get_geometry(&mut self.uring, &mut self.xcb_state, window, false)?,
         })
     }
 
@@ -566,16 +610,18 @@ impl CallWrapper {
         &mut self,
         window: Window,
     ) -> Result<FixedCookie<GetWindowAttributesReply, 44>> {
-        Ok(XprotoConnection::get_window_attributes(
-            &mut self.connection,
+        Ok(get_window_attributes(
+            &mut self.uring,
+            &mut self.xcb_state,
             window,
             false,
         )?)
     }
 
     pub(crate) fn get_class_names(&mut self, win: Window) -> Result<WmClassCookie> {
-        let inner = XprotoConnection::get_property(
-            &mut self.connection,
+        let inner = get_property(
+            &mut self.uring,
+            &mut self.xcb_state,
             0,
             win,
             AtomEnum::WM_CLASS.0,
@@ -589,8 +635,9 @@ impl CallWrapper {
 
     pub(crate) fn get_wm_name(&mut self, win: Window) -> Result<NameCookie> {
         Ok(NameCookie {
-            inner: XprotoConnection::get_property(
-                &mut self.connection,
+            inner: get_property(
+                &mut self.uring,
+                &mut self.xcb_state,
                 0,
                 win,
                 AtomEnum::WM_NAME.0,
@@ -604,8 +651,9 @@ impl CallWrapper {
 
     pub(crate) fn get_net_wm_name(&mut self, win: Window) -> Result<NameCookie> {
         Ok(NameCookie {
-            inner: XprotoConnection::get_property(
-                &mut self.connection,
+            inner: get_property(
+                &mut self.uring,
+                &mut self.xcb_state,
                 0,
                 win,
                 self.name_to_atom.get(&_NET_WM_NAME).unwrap().value,
@@ -618,8 +666,9 @@ impl CallWrapper {
     }
 
     pub(crate) fn get_is_transient_for(&mut self, win: Window) -> Result<SingleCardCookie> {
-        let inner = XprotoConnection::get_property(
-            &mut self.connection,
+        let inner = get_property(
+            &mut self.uring,
+            &mut self.xcb_state,
             0,
             win,
             AtomEnum::WM_TRANSIENT_FOR.0,
@@ -639,7 +688,9 @@ impl CallWrapper {
     }
 
     pub(crate) fn set_extents(&mut self, win: Window, border_width: u32) -> Result<()> {
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             win,
             self.name_to_atom.get(&_NET_FRAME_EXTENTS).unwrap().value,
@@ -651,7 +702,9 @@ impl CallWrapper {
     }
 
     pub(crate) fn set_state(&mut self, win: Window, state: WmState) -> Result<()> {
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             win,
             self.name_to_atom.get(&WM_STATE).unwrap().value,
@@ -680,13 +733,15 @@ impl CallWrapper {
                     | EventMask::KEY_PRESS,
             )
             .cursor(CursorEnum(cursor_handle.load_cursor(
-                &mut self.connection,
+                &mut self.uring,
+                &mut self.xcb_state,
                 state.cursor_name.as_str(),
                 XcbEnv::default(),
             )?));
 
-        Ok(XprotoConnection::change_window_attributes(
-            &mut self.connection,
+        Ok(change_window_attributes(
+            &mut self.uring,
+            &mut self.xcb_state,
             state.screen.root,
             change_attrs_aux,
             false,
@@ -694,8 +749,9 @@ impl CallWrapper {
     }
 
     pub(crate) fn grab_pointer(&mut self, state: &State) -> Result<()> {
-        XprotoConnection::grab_pointer(
-            &mut self.connection,
+        grab_pointer(
+            &mut self.uring,
+            &mut self.xcb_state,
             0,
             state.screen.root,
             EventMask::BUTTON_PRESS | EventMask::BUTTON_RELEASE | EventMask::POINTER_MOTION,
@@ -710,7 +766,12 @@ impl CallWrapper {
     }
 
     pub(crate) fn ungrab_pointer(&mut self) -> Result<()> {
-        XprotoConnection::ungrab_pointer(&mut self.connection, CURRENT_TIME.into(), true)?;
+        ungrab_pointer(
+            &mut self.uring,
+            &mut self.xcb_state,
+            CURRENT_TIME.into(),
+            true,
+        )?;
         Ok(())
     }
 
@@ -724,8 +785,9 @@ impl CallWrapper {
     ) -> Result<()> {
         let target = if target == root {
             // No active window if root gets focused
-            XprotoConnection::set_input_focus(
-                &mut self.connection,
+            set_input_focus(
+                &mut self.uring,
+                &mut self.xcb_state,
                 InputFocusEnum::PARENT,
                 target.into(),
                 CURRENT_TIME.into(),
@@ -740,8 +802,9 @@ impl CallWrapper {
                 }
                 FocusStyle::Passive => {
                     pgwm_utils::debug!("Passive win {target} take focus");
-                    XprotoConnection::set_input_focus(
-                        &mut self.connection,
+                    set_input_focus(
+                        &mut self.uring,
+                        &mut self.xcb_state,
                         InputFocusEnum::PARENT,
                         target.into(),
                         CURRENT_TIME.into(),
@@ -753,8 +816,9 @@ impl CallWrapper {
                     pgwm_utils::debug!("Locally active win {target} set input focus");
                     // Setting input focus should only be required if the client's top-level-window
                     // doesn't already have the focus, but whatever just always set it.
-                    XprotoConnection::set_input_focus(
-                        &mut self.connection,
+                    set_input_focus(
+                        &mut self.uring,
+                        &mut self.xcb_state,
                         InputFocusEnum::PARENT,
                         target.into(),
                         CURRENT_TIME.into(),
@@ -771,7 +835,9 @@ impl CallWrapper {
             }
         };
         let data = [target, CURRENT_TIME];
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             root,
             self.name_to_atom.get(&_NET_ACTIVE_WINDOW).unwrap().value,
@@ -783,21 +849,24 @@ impl CallWrapper {
     }
 
     pub(crate) fn reset_root_window(&mut self, state: &State) -> Result<()> {
-        XprotoConnection::delete_property(
-            &mut self.connection,
+        delete_property(
+            &mut self.uring,
+            &mut self.xcb_state,
             state.screen.root,
             self.name_to_atom.get(&_NET_ACTIVE_WINDOW).unwrap().value,
             true,
         )?;
-        XprotoConnection::set_input_focus(
-            &mut self.connection,
+        set_input_focus(
+            &mut self.uring,
+            &mut self.xcb_state,
             InputFocusEnum::POINTER_ROOT,
             InputFocusEnum::POINTER_ROOT,
             CURRENT_TIME.into(),
             true,
         )?;
-        XprotoConnection::change_window_attributes(
-            &mut self.connection,
+        change_window_attributes(
+            &mut self.uring,
+            &mut self.xcb_state,
             state.screen.root,
             ChangeWindowAttributesValueList::default().event_mask(EventMask::NO_EVENT),
             true,
@@ -818,8 +887,9 @@ impl CallWrapper {
             ],
         );
         pgwm_utils::debug!("Sending WM_TAKE_FOCUS focus for {}", win);
-        XprotoConnection::send_event(
-            &mut self.connection,
+        send_event(
+            &mut self.uring,
+            &mut self.xcb_state,
             0,
             win.into(),
             EventMask::NO_EVENT,
@@ -842,8 +912,9 @@ impl CallWrapper {
             ],
         );
         pgwm_utils::debug!("Sending delete for {}", win);
-        XprotoConnection::send_event(
-            &mut self.connection,
+        send_event(
+            &mut self.uring,
+            &mut self.xcb_state,
             0,
             win.into(),
             EventMask::NO_EVENT,
@@ -854,29 +925,32 @@ impl CallWrapper {
     }
 
     pub(crate) fn send_map(&mut self, window: Window, state: &mut State) -> Result<()> {
-        let cookie = XprotoConnection::map_window(&mut self.connection, window, true)?;
+        let cookie = map_window(&mut self.uring, &mut self.xcb_state, window, true)?;
         // Triggers an enter-notify that needs to be ignored
         state.push_sequence(cookie.seq);
         Ok(())
     }
 
     pub(crate) fn send_unmap(&mut self, window: Window, state: &mut State) -> Result<()> {
-        let cookie = XprotoConnection::unmap_window(&mut self.connection, window, true)?;
+        let cookie = unmap_window(&mut self.uring, &mut self.xcb_state, window, true)?;
         // Triggers an enter-notify that needs to be ignored, we also don't want to react to an UnmapNotify that we created
         state.push_sequence(cookie.seq);
         Ok(())
     }
 
+    #[inline]
     pub(crate) fn send_destroy(&mut self, window: Window) -> Result<()> {
-        XprotoConnection::destroy_window(&mut self.connection, window, true)?;
+        destroy_window(&mut self.uring, &mut self.xcb_state, window, true)?;
         Ok(())
     }
 
+    #[inline]
     pub(crate) fn send_kill(&mut self, window: Window) -> Result<()> {
-        XprotoConnection::kill_client(&mut self.connection, window.into(), true)?;
+        kill_client(&mut self.uring, &mut self.xcb_state, window.into(), true)?;
         Ok(())
     }
 
+    #[inline]
     pub(crate) fn push_window_to_top(&mut self, window: Window, state: &mut State) -> Result<()> {
         let cfg = ConfigureWindowValueList::default().stack_mode(StackModeEnum::ABOVE);
         self.do_configure(window, cfg, state)
@@ -929,8 +1003,13 @@ impl CallWrapper {
         if let Some(border_width) = cfg.border_width {
             self.set_extents(event.window, border_width)?;
         }
-        XprotoConnection::configure_window(&mut self.connection, event.window, cfg, true)?;
-        self.connection.flush()?;
+        configure_window(
+            &mut self.uring,
+            &mut self.xcb_state,
+            event.window,
+            cfg,
+            true,
+        )?;
         Ok(())
     }
 
@@ -968,16 +1047,15 @@ impl CallWrapper {
         cfg: ConfigureWindowValueList,
         state: &mut State,
     ) -> Result<()> {
-        let cookie = XprotoConnection::configure_window(&mut self.connection, window, cfg, true)?;
+        let cookie = configure_window(&mut self.uring, &mut self.xcb_state, window, cfg, true)?;
         // Triggers an enter-notify that needs to be ignored
         state.push_sequence(cookie.seq);
-        self.connection.flush()?;
         Ok(())
     }
 
     pub(crate) fn change_border_color(&mut self, window: Window, pixel: u32) -> Result<()> {
         let cw = ChangeWindowAttributesValueList::default().border_pixel(pixel);
-        XprotoConnection::change_window_attributes(&mut self.connection, window, cw, true)?;
+        change_window_attributes(&mut self.uring, &mut self.xcb_state, window, cw, true)?;
         Ok(())
     }
 
@@ -986,9 +1064,10 @@ impl CallWrapper {
         win: Window,
         vis_info: &RenderVisualInfo,
     ) -> Result<Picture> {
-        let picture = self.connection.generate_id()?;
-        RenderConnection::create_picture(
-            &mut self.connection,
+        let picture = self.xcb_state.generate_id(&mut self.uring)?;
+        create_picture(
+            &mut self.uring,
+            &mut self.xcb_state,
             picture,
             win,
             vis_info.root.pict_format,
@@ -1005,9 +1084,10 @@ impl CallWrapper {
         win: Window,
         vis_info: &RenderVisualInfo,
     ) -> Result<Picture> {
-        let picture = self.connection.generate_id()?;
-        RenderConnection::create_picture(
-            &mut self.connection,
+        let picture = self.xcb_state.generate_id(&mut self.uring)?;
+        create_picture(
+            &mut self.uring,
+            &mut self.xcb_state,
             picture,
             win,
             vis_info.render.pict_format,
@@ -1018,9 +1098,10 @@ impl CallWrapper {
     }
 
     pub(crate) fn create_glyphset(&mut self, vis_info: &RenderVisualInfo) -> Result<Glyphset> {
-        let id = self.connection.generate_id()?;
-        RenderConnection::create_glyph_set(
-            &mut self.connection,
+        let id = self.xcb_state.generate_id(&mut self.uring)?;
+        create_glyph_set(
+            &mut self.uring,
+            &mut self.xcb_state,
             id,
             vis_info.render.pict_format,
             true,
@@ -1038,8 +1119,9 @@ impl CallWrapper {
         if !glyph_ids.len() == glyph_info.len() {
             return Err(GlyphMismatch);
         }
-        RenderConnection::add_glyphs(
-            &mut self.connection,
+        add_glyphs(
+            &mut self.uring,
+            &mut self.xcb_state,
             glyph_set,
             glyph_ids.len() as u32,
             glyph_ids,
@@ -1057,8 +1139,9 @@ impl CallWrapper {
         dimensions: Dimensions,
     ) -> Result<()> {
         //let (red, green, blue, alpha) = color.to_rgba16();
-        RenderConnection::fill_rectangles(
-            &mut self.connection,
+        fill_rectangles(
+            &mut self.uring,
+            &mut self.xcb_state,
             PictOpEnum::SRC,
             picture,
             color,
@@ -1092,8 +1175,9 @@ impl CallWrapper {
         for glyph in render {
             buf.extend_from_slice(&glyph.to_ne_bytes()); // Dump to u8s
         }
-        RenderConnection::composite_glyphs16(
-            &mut self.connection,
+        composite_glyphs16(
+            &mut self.uring,
+            &mut self.xcb_state,
             PictOpEnum::OVER,
             dbw.pixmap.picture,
             dbw.window.picture,
@@ -1117,43 +1201,52 @@ impl CallWrapper {
         use alloc::format;
         use alloc::string::ToString;
         use core::fmt::Write;
-        let props = XprotoConnection::list_properties(&mut self.connection, win, false)?;
+        let props = xcb_rust_protocol::connection::xproto::list_properties(
+            &mut self.uring,
+            &mut self.xcb_state,
+            win,
+            false,
+        )?;
         let geom = self.get_dimensions(win)?;
         let attrs = self.get_window_attributes(win)?;
         let name = self.get_wm_name(win)?;
         let class = self.get_class_names(win)?;
-        let hints_cookie = WmHints::get(&mut self.connection, win)?;
+        let hints_cookie = WmHints::get(&mut self.uring, &mut self.xcb_state, win)?;
         let mut base = format!(
             "Debug Window {win}, name: {}, classes: {:?}\n",
-            name.await_name(&mut self.connection)
+            name.await_name(self)
                 .unwrap_or_default()
                 .unwrap_or_default(),
             class
-                .await_class_names(&mut self.connection)
+                .await_class_names(self)
                 .unwrap_or_default()
                 .unwrap_or_default()
         );
         base.push_str("\tHints: \n");
-        if let Ok(hints) = hints_cookie.reply(&mut self.connection) {
+        if let Ok(hints) = hints_cookie.reply(&mut self.uring, &mut self.xcb_state) {
             let _ = base.write_fmt(format_args!("\t\t{hints:?}"));
         }
         base.push('\n');
         base.push_str("\tAttributes: \n");
-        if let Ok(attributes) = attrs.reply(&mut self.connection) {
+        if let Ok(attributes) = attrs.reply(&mut self.uring, &mut self.xcb_state) {
             let _ = base.write_fmt(format_args!("\t\t{attributes:?}"));
         }
         base.push('\n');
         base.push_str("\tGeometry: \n");
-        if let Ok(dims) = geom.await_dimensions(&mut self.connection) {
+        if let Ok(dims) = geom.await_dimensions(self) {
             let _ = base.write_fmt(format_args!("\t\t{dims:?}"));
         }
         base.push('\n');
         base.push_str("\tProperties: ");
-        if let Ok(props) = props.reply(&mut self.connection) {
+        if let Ok(props) = props.reply(&mut self.uring, &mut self.xcb_state) {
             for prop in props.atoms {
-                if let Ok(name) =
-                    XprotoConnection::get_atom_name(&mut self.connection, prop, false)?
-                        .reply(&mut self.connection)
+                if let Ok(name) = xcb_rust_protocol::connection::xproto::get_atom_name(
+                    &mut self.uring,
+                    &mut self.xcb_state,
+                    prop,
+                    false,
+                )?
+                .reply(&mut self.uring, &mut self.xcb_state)
                 {
                     if let Ok(utf8) = String::from_utf8(name.name) {
                         let post = match utf8.as_str() {
@@ -1187,20 +1280,25 @@ impl CallWrapper {
     #[cfg(feature = "debug")]
     pub(crate) fn get_atom_name(&mut self, atom: Atom) -> Result<String> {
         Ok(String::from_utf8(
-            XprotoConnection::get_atom_name(&mut self.connection, atom, false)?
-                .reply(&mut self.connection)?
-                .name,
+            xcb_rust_protocol::connection::xproto::get_atom_name(
+                &mut self.uring,
+                &mut self.xcb_state,
+                atom,
+                false,
+            )?
+            .reply(&mut self.uring, &mut self.xcb_state)?
+            .name,
         )?)
     }
 
-    pub(crate) fn inner_mut(&mut self) -> &mut XorgConnection {
-        &mut self.connection
-    }
-
-    pub(crate) fn new(mut connection: XorgConnection) -> Result<Self> {
-        let (name_to_atom, atom_to_resolved) = init_maps(&mut connection)?;
+    pub(crate) fn new(
+        mut xcb_state: XcbEventState,
+        mut uring_wrapper: UringWrapper,
+    ) -> Result<Self> {
+        let (name_to_atom, atom_to_resolved) = init_maps(&mut uring_wrapper, &mut xcb_state)?;
         Ok(CallWrapper {
-            connection,
+            uring: uring_wrapper,
+            xcb_state,
             name_to_atom,
             atom_to_resolved,
         })
@@ -1208,8 +1306,9 @@ impl CallWrapper {
 
     pub(crate) fn get_wm_state(&mut self, window: Window) -> Result<WmStateCookie> {
         Ok(WmStateCookie {
-            inner: XprotoConnection::get_property(
-                &mut self.connection,
+            inner: get_property(
+                &mut self.uring,
+                &mut self.xcb_state,
                 0,
                 window,
                 self.name_to_atom.get(&WM_STATE).unwrap().value,
@@ -1223,8 +1322,9 @@ impl CallWrapper {
 
     pub(crate) fn get_net_wm_state(&mut self, window: Window) -> Result<NetWmStateCookie> {
         Ok(NetWmStateCookie {
-            inner: XprotoConnection::get_property(
-                &mut self.connection,
+            inner: get_property(
+                &mut self.uring,
+                &mut self.xcb_state,
                 0,
                 window,
                 self.name_to_atom.get(&_NET_WM_STATE).unwrap().value,
@@ -1328,7 +1428,9 @@ impl CallWrapper {
                     .value
             )?;
         }
-        self.connection.change_property32(
+        change_property32(
+            &mut self.uring,
+            &mut self.xcb_state,
             PropModeEnum::REPLACE,
             window,
             self.name_to_atom.get(&_NET_WM_STATE).unwrap().value,
@@ -1341,8 +1443,9 @@ impl CallWrapper {
 
     pub(crate) fn get_window_types(&mut self, window: Window) -> Result<WindowTypesCookie> {
         Ok(WindowTypesCookie {
-            inner: XprotoConnection::get_property(
-                &mut self.connection,
+            inner: get_property(
+                &mut self.uring,
+                &mut self.xcb_state,
                 0,
                 window,
                 self.name_to_atom.get(&_NET_WM_WINDOW_TYPE).unwrap().value,
@@ -1356,8 +1459,9 @@ impl CallWrapper {
 
     pub(crate) fn get_leader(&mut self, window: Window) -> Result<SingleCardCookie> {
         Ok(SingleCardCookie {
-            inner: XprotoConnection::get_property(
-                &mut self.connection,
+            inner: get_property(
+                &mut self.uring,
+                &mut self.xcb_state,
                 0,
                 window,
                 self.name_to_atom.get(&WM_CLIENT_LEADER).unwrap().value,
@@ -1371,8 +1475,9 @@ impl CallWrapper {
 
     pub(crate) fn get_pid(&mut self, window: Window) -> Result<SingleCardCookie> {
         Ok(SingleCardCookie {
-            inner: XprotoConnection::get_property(
-                &mut self.connection,
+            inner: get_property(
+                &mut self.uring,
+                &mut self.xcb_state,
                 0,
                 window,
                 self.name_to_atom.get(&_NET_WM_PID).unwrap().value,
@@ -1386,8 +1491,9 @@ impl CallWrapper {
 
     pub(crate) fn get_protocols(&mut self, window: Window) -> Result<ProtocolsCookie> {
         Ok(ProtocolsCookie {
-            inner: XprotoConnection::get_property(
-                &mut self.connection,
+            inner: get_property(
+                &mut self.uring,
+                &mut self.xcb_state,
                 0,
                 window,
                 self.name_to_atom.get(&WM_PROTOCOLS).unwrap().value,
@@ -1397,6 +1503,11 @@ impl CallWrapper {
                 false,
             )?,
         })
+    }
+
+    #[inline]
+    pub(crate) fn generate_id(&mut self) -> Result<u32> {
+        Ok(self.xcb_state.generate_id(&mut self.uring)?)
     }
 }
 
@@ -1420,25 +1531,30 @@ impl WindowPropertiesCookie {
         self,
         call_wrapper: &mut CallWrapper,
     ) -> Result<WindowProperties> {
-        let wm_state = self.wm_state.await_state(call_wrapper.inner_mut());
+        let wm_state = self.wm_state.await_state(call_wrapper);
         let net_wm_state = self.net_wm_state.await_net_wm_state(call_wrapper);
-        let hints = self.hints.reply(call_wrapper.inner_mut()).ok();
-        let size_hints = self.size_hints.reply(call_wrapper.inner_mut()).ok();
+        let hints = self
+            .hints
+            .reply(&mut call_wrapper.uring, &mut call_wrapper.xcb_state)
+            .ok();
+        let size_hints = self
+            .size_hints
+            .reply(&mut call_wrapper.uring, &mut call_wrapper.xcb_state)
+            .ok();
         let window_types = self.window_types.await_types(call_wrapper);
         let pid = self.pid.await_card(call_wrapper);
         let leader = self.leader.await_card(call_wrapper);
         let protocols = self.protocols.await_protocols(call_wrapper);
         let transient_for = self.transient_for.await_card(call_wrapper);
-        let class = self.wm_class.await_class_names(call_wrapper.inner_mut());
-        let name =
-            if let Ok(Some(net_wm_name)) = self.net_wm_name.await_name(call_wrapper.inner_mut()) {
-                self.wm_name.inner.forget(call_wrapper.inner_mut());
-                WmName::NetWmName(net_wm_name)
-            } else if let Ok(Some(wm_name)) = self.wm_name.await_name(call_wrapper.inner_mut()) {
-                WmName::WmName(wm_name)
-            } else {
-                WmName::WmName(heapless::String::default())
-            };
+        let class = self.wm_class.await_class_names(call_wrapper);
+        let name = if let Ok(Some(net_wm_name)) = self.net_wm_name.await_name(call_wrapper) {
+            self.wm_name.inner.forget(&mut call_wrapper.xcb_state);
+            WmName::NetWmName(net_wm_name)
+        } else if let Ok(Some(wm_name)) = self.wm_name.await_name(call_wrapper) {
+            WmName::WmName(wm_name)
+        } else {
+            WmName::WmName(heapless::String::default())
+        };
         Ok(WindowProperties {
             wm_state: wm_state?,
             net_wm_state: net_wm_state?.unwrap_or_default(),
@@ -1454,19 +1570,19 @@ impl WindowPropertiesCookie {
         })
     }
 
-    pub(crate) fn forget(self, callwrapper: &mut CallWrapper) {
-        self.wm_name.inner.forget(callwrapper.inner_mut());
-        self.net_wm_name.inner.forget(callwrapper.inner_mut());
-        self.wm_state.inner.forget(callwrapper.inner_mut());
-        self.net_wm_state.inner.forget(callwrapper.inner_mut());
-        self.wm_class.inner.forget(callwrapper.inner_mut());
-        self.pid.inner.forget(callwrapper.inner_mut());
-        self.leader.inner.forget(callwrapper.inner_mut());
-        self.hints.forget(callwrapper.inner_mut());
-        self.size_hints.forget(callwrapper.inner_mut());
-        self.protocols.inner.forget(callwrapper.inner_mut());
-        self.window_types.inner.forget(callwrapper.inner_mut());
-        self.transient_for.inner.forget(callwrapper.inner_mut());
+    pub(crate) fn forget(self, call_wrapper: &mut CallWrapper) {
+        self.wm_name.inner.forget(&mut call_wrapper.xcb_state);
+        self.net_wm_name.inner.forget(&mut call_wrapper.xcb_state);
+        self.wm_state.inner.forget(&mut call_wrapper.xcb_state);
+        self.net_wm_state.inner.forget(&mut call_wrapper.xcb_state);
+        self.wm_class.inner.forget(&mut call_wrapper.xcb_state);
+        self.pid.inner.forget(&mut call_wrapper.xcb_state);
+        self.leader.inner.forget(&mut call_wrapper.xcb_state);
+        self.hints.forget(&mut call_wrapper.xcb_state);
+        self.size_hints.forget(&mut call_wrapper.xcb_state);
+        self.protocols.inner.forget(&mut call_wrapper.xcb_state);
+        self.window_types.inner.forget(&mut call_wrapper.xcb_state);
+        self.transient_for.inner.forget(&mut call_wrapper.xcb_state);
     }
 }
 
@@ -1477,9 +1593,9 @@ pub(crate) struct NameCookie {
 impl NameCookie {
     pub(crate) fn await_name(
         self,
-        con: &mut XorgConnection,
+        con: &mut CallWrapper,
     ) -> Result<Option<heapless::String<WM_NAME_LIMIT>>> {
-        if let Ok(wm) = self.inner.reply(con) {
+        if let Ok(wm) = self.inner.reply(&mut con.uring, &mut con.xcb_state) {
             utf8_heapless(wm.value)
         } else {
             Ok(None)
@@ -1499,9 +1615,11 @@ pub(crate) struct WmClassCookie {
 impl WmClassCookie {
     pub(crate) fn await_class_names(
         self,
-        con: &mut XorgConnection,
+        con: &mut CallWrapper,
     ) -> Result<Option<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>> {
-        Ok(extract_wm_class(self.inner.reply(con)?))
+        Ok(extract_wm_class(
+            self.inner.reply(&mut con.uring, &mut con.xcb_state)?,
+        ))
     }
 }
 
@@ -1529,10 +1647,10 @@ pub(crate) struct WmStateCookie {
 }
 
 impl WmStateCookie {
-    pub(crate) fn await_state(self, con: &mut XorgConnection) -> Result<Option<WmState>> {
+    pub(crate) fn await_state(self, con: &mut CallWrapper) -> Result<Option<WmState>> {
         Ok(self
             .inner
-            .reply(con)?
+            .reply(&mut con.uring, &mut con.xcb_state)?
             .first_u32()
             .and_then(WmState::from_value))
     }
@@ -1549,7 +1667,7 @@ impl NetWmStateCookie {
     ) -> Result<Option<NetWmState>> {
         let state = self
             .inner
-            .reply(call_wrapper.inner_mut())?
+            .reply(&mut call_wrapper.uring, &mut call_wrapper.xcb_state)?
             .value32()
             .map(|it| {
                 let mut net_wm_state = NetWmState::default();
@@ -1669,7 +1787,7 @@ impl WindowTypesCookie {
     ) -> Result<heapless::Vec<WindowType, 12>> {
         let types = self
             .inner
-            .reply(call_wrapper.inner_mut())?
+            .reply(&mut call_wrapper.uring, &mut call_wrapper.xcb_state)?
             .value32()
             .map(|it| {
                 let mut window_types = heapless::Vec::new();
@@ -1758,7 +1876,7 @@ impl ProtocolsCookie {
     ) -> Result<heapless::Vec<Protocol, 4>> {
         let protocols = self
             .inner
-            .reply(&mut call_wrapper.connection)?
+            .reply(&mut call_wrapper.uring, &mut call_wrapper.xcb_state)?
             .value32()
             .map(|it| {
                 let mut protocols = heapless::Vec::new();
@@ -1798,7 +1916,10 @@ pub(crate) struct SingleCardCookie {
 
 impl SingleCardCookie {
     pub(crate) fn await_card(self, call_wrapper: &mut CallWrapper) -> Result<Option<u32>> {
-        Ok(self.inner.reply(call_wrapper.inner_mut())?.first_u32())
+        Ok(self
+            .inner
+            .reply(&mut call_wrapper.uring, &mut call_wrapper.xcb_state)?
+            .first_u32())
     }
 }
 
@@ -1809,9 +1930,9 @@ pub(crate) struct QueryTreeCookie {
 impl QueryTreeCookie {
     pub(crate) fn await_children(
         self,
-        con: &mut XorgConnection,
+        con: &mut CallWrapper,
     ) -> Result<heapless::Vec<Window, APPLICATION_WINDOW_LIMIT>> {
-        let tree_reply = self.inner.reply(con)?;
+        let tree_reply = self.inner.reply(&mut con.uring, &mut con.xcb_state)?;
         Ok(heapless::Vec::from_slice(tree_reply.children.as_slice())
             .map_err(|_| pgwm_core::error::Error::HeaplessInstantiate)?)
     }
@@ -1822,8 +1943,8 @@ pub(crate) struct DimensionsCookie {
 }
 
 impl DimensionsCookie {
-    pub(crate) fn await_dimensions(self, con: &mut XorgConnection) -> Result<Dimensions> {
-        let reply = self.inner.reply(con)?;
+    pub(crate) fn await_dimensions(self, con: &mut CallWrapper) -> Result<Dimensions> {
+        let reply = self.inner.reply(&mut con.uring, &mut con.xcb_state)?;
         Ok(Dimensions {
             height: reply.height as i16,
             width: reply.width as i16,

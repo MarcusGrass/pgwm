@@ -14,6 +14,15 @@ impl LoadChecker {
         self.prev_load = cur_ld;
         Ok(load_perc * 100f64)
     }
+
+    #[inline]
+    pub fn parse_load(&mut self, buf: &[u8]) -> Result<f64, Error> {
+        let cur_ld = crate::status::sys::cpu::parse_raw(buf)?;
+        let ld = &self.prev_load;
+        let load_perc = calculate_load(ld, &cur_ld);
+        self.prev_load = cur_ld;
+        Ok(load_perc * 100f64)
+    }
 }
 
 fn calculate_load(prev: &Load, cur: &Load) -> f64 {

@@ -2,10 +2,6 @@
 #![no_main]
 // Start function, looks promising for stabilization https://github.com/rust-lang/rust/pull/93587
 #![feature(naked_functions)]
-// Seemingly moving towards stability https://github.com/rust-lang/rust/pull/102318
-// Would be a lot nicer to just accept a symbol instead of forcing #[alloc_error_handler]
-// Could fork the compiler and remove this check https://github.com/rust-lang/rust/blob/56074b5231ceef266a1097ea355f62c951e1b468/compiler/rustc_metadata/src/creader.rs#L1063 but ugh
-#![feature(default_alloc_error_handler)]
 
 extern crate alloc;
 

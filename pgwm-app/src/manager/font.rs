@@ -88,7 +88,6 @@ pub(crate) fn load_alloc_fonts<'a>(
         .chain(fonts.shortcut_section.iter())
         .chain(fonts.tab_bar_section.iter())
         .chain(char_remap.values());
-    call_wrapper.inner_mut().flush()?;
     #[cfg(feature = "status-bar")]
     let it = it.chain(fonts.status_section.iter());
     // Reuse buffer
@@ -157,9 +156,11 @@ pub(crate) fn load_alloc_fonts<'a>(
                     },
                 );
                 let current_out_size = current_out_size(ids.len(), infos.len(), raw_data.len());
+
                 if current_out_size >= 32768 {
                     call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
-                    call_wrapper.inner_mut().flush()?;
+                    // Have to flush here or we'll blow out the buffer
+                    call_wrapper.uring.await_write_completions()?;
                     ids.clear();
                     infos.clear();
                     raw_data.clear();
@@ -167,7 +168,6 @@ pub(crate) fn load_alloc_fonts<'a>(
                 id += 1;
             }
             call_wrapper.add_glyphs(gs, &ids, &infos, &raw_data)?;
-            call_wrapper.inner_mut().flush()?;
             crate::debug!("Added {} glyphs", ids.len());
             crate::debug!(
                 "Storing loaded font with size > {} bytes",
