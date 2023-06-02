@@ -22,8 +22,8 @@ xcb-rust-connection = { workspace = true }
 xcb-rust-protocol = { workspace = true }
 tiny-std = { workspace = true , features = ["start", "alloc"] }
 
-time = { version = "0.3.17", optional = true, default-features = false }
-serde = { version = "1.0.147", default-features = false, features = ["derive"], optional = true }
+time = { version = "0.3.21", optional = true, default-features = false }
+serde = { version = "1.0.163", default-features = false, features = ["derive"], optional = true }
 smallmap = { workspace = true, default-features = false, features = ["serde"] }
 
 [dev-dependencies]

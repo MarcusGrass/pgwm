@@ -394,7 +394,7 @@ impl Workspaces {
     }
 
     pub fn update_focus_style(&mut self, focus_style: FocusStyle, win: Window) {
-        if let Some(mut mw) = self
+        if let Some(mw) = self
             .win_to_ws
             .get(&win)
             .and_then(|ind| self.spaces[*ind].find_managed_window_mut(win))

@@ -1611,7 +1611,7 @@ impl<'a> Manager<'a> {
                         event.window
                     );
                     let remap =
-                        if let Some(mut mw) = state.workspaces.get_managed_win_mut(event.window) {
+                        if let Some(mw) = state.workspaces.get_managed_win_mut(event.window) {
                             if mw.properties.class == class_names {
                                 false
                             } else {
@@ -1698,7 +1698,7 @@ impl<'a> Manager<'a> {
                         pgwm_utils::debug!("Got wm hint for urgency for window {}", event.window);
                         self.make_window_urgent(call_wrapper, event.window, state)?;
                     }
-                    if let Some(mut mw) = state.workspaces.get_managed_win_mut(event.window) {
+                    if let Some(mw) = state.workspaces.get_managed_win_mut(event.window) {
                         mw.properties.hints = Some(hints);
                         mw.focus_style = Self::deduce_focus_style(&mw.properties);
                     }
