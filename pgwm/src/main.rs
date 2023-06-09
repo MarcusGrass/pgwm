@@ -1,7 +1,5 @@
 #![no_std]
 #![no_main]
-// Start function, looks promising for stabilization https://github.com/rust-lang/rust/pull/93587
-#![feature(naked_functions)]
 
 extern crate alloc;
 

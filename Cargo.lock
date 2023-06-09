@@ -33,12 +33,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
-name = "compiler_builtins"
-version = "0.1.92"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64518f1ae689f74db058bbfb3238dfe6eb53f59f4ae712f1ff4348628522e190"
-
-[[package]]
 name = "critical-section"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -93,7 +87,7 @@ dependencies = [
 [[package]]
 name = "linux-rust-bindings"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/linux-rust-bindings?rev=890044c#890044ce1e40c35b0ad0a1e4be5bbbf8a8a597bd"
+source = "git+https://github.com/MarcusGrass/linux-rust-bindings?rev=d8c402a9b2a5ed3e33e85a21009e32a5b997ba60#d8c402a9b2a5ed3e33e85a21009e32a5b997ba60"
 
 [[package]]
 name = "lock_api"
@@ -118,7 +112,6 @@ dependencies = [
 name = "pgwm"
 version = "0.1.0"
 dependencies = [
- "compiler_builtins",
  "dlmalloc",
  "pgwm-app",
  "tiny-std",
@@ -189,7 +182,7 @@ dependencies = [
 [[package]]
 name = "rusl"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/tiny-std?rev=77252dde13357372d8220df3e237c94f76e99513#77252dde13357372d8220df3e237c94f76e99513"
+source = "git+https://github.com/MarcusGrass/tiny-std?rev=0d18ece52f3d0ef9c7aba877f9a910afda24dffc#0d18ece52f3d0ef9c7aba877f9a910afda24dffc"
 dependencies = [
  "linux-rust-bindings",
  "sc",
@@ -327,7 +320,7 @@ checksum = "0b5d366a619c58cc621169d481d049b286553c87ba10c17f1ceef2274f9b8ab7"
 [[package]]
 name = "tiny-std"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/tiny-std?rev=77252dde13357372d8220df3e237c94f76e99513#77252dde13357372d8220df3e237c94f76e99513"
+source = "git+https://github.com/MarcusGrass/tiny-std?rev=0d18ece52f3d0ef9c7aba877f9a910afda24dffc#0d18ece52f3d0ef9c7aba877f9a910afda24dffc"
 dependencies = [
  "rusl",
  "sc",
@@ -381,7 +374,7 @@ source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=da4634c071fdc547772
 [[package]]
 name = "xcb-rust-connection"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=e6713819e8ed50d79e69175ded3cfc9a82e4dfa2#e6713819e8ed50d79e69175ded3cfc9a82e4dfa2"
+source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=aad01aa66afc5e97e64b2e389ce7db63ee648c25#aad01aa66afc5e97e64b2e389ce7db63ee648c25"
 dependencies = [
  "rusl",
  "sc",
@@ -394,7 +387,7 @@ dependencies = [
 [[package]]
 name = "xcb-rust-protocol"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=e6713819e8ed50d79e69175ded3cfc9a82e4dfa2#e6713819e8ed50d79e69175ded3cfc9a82e4dfa2"
+source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=aad01aa66afc5e97e64b2e389ce7db63ee648c25#aad01aa66afc5e97e64b2e389ce7db63ee648c25"
 dependencies = [
  "tiny-std",
  "unix-print",

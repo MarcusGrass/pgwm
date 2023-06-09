@@ -1,4 +1,4 @@
 edition = "2021"
 [toolchain]
-channel = "nightly"
+channel = "stable"
 components = ["clippy"]
