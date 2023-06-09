@@ -97,7 +97,7 @@ git clone https://github.com/MarcusGrass/pgwm.git
 
 ## Build the project
 As of 0.3.0 the WM runs in pure Rust with no libc dependencies. In effect this means that the binary will always be 
-statically linked. It also sadly means that the nightly toolchain needs to compile it, and that some use of unsafety is needed.
+statically linked. It also sadly means that some use of unsafety is needed.
 Mostly this comes from direct syscalls, which will always be unsafe, as well as the WM entrypoint since we don't include start files.
 
 Another side effect of this is that a target needs to be specified for build-scripts in dependencies to run correctly 
