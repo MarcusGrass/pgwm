@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
+## [v0.4.0] - 2023-06-11
+### Fixed
+
+### Added
+
+### Changed
+- Run all io through io-uring
+- Get off of nightly through updating tiny-std to use global asm and 
+reimplementing a bunch of missing symbols
+
 ## [v0.3.0] - 2022-12-06
 ### Fixed
  - Fullscreening causing crashing in some cases, because the destroyed window was cached and then reused
