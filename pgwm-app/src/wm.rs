@@ -1,8 +1,8 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use rusl::platform::{AddressFamily, SocketAddress, SocketType};
+use rusl::process::{CatchSignal, SaSignalaction};
 use smallmap::Map;
-use tiny_std::signal::{CatchSignal, SaSignalaction};
 use tiny_std::unix::fd::RawFd;
 use xcb_rust_protocol::con::XcbState;
 use xcb_rust_protocol::connection::render::query_pict_formats;
@@ -91,7 +91,7 @@ pub(crate) fn run_wm() -> Result<()> {
     // We just spawn user stuff, we don't care when they terminate, could signalfd -> poll if we did
     // without the raw unsafety of setting up a signal handler
     unsafe {
-        tiny_std::signal::add_signal_action(CatchSignal::SIGCHLD, SaSignalaction::Ign)?;
+        rusl::process::add_signal_action(CatchSignal::Chld, SaSignalaction::Ign)?;
     }
     crate::debug!("Set sigignore for children");
     let xcb_env = env_to_xcb_env();

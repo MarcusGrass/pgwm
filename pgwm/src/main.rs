@@ -7,8 +7,6 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::cell::UnsafeCell;
 
 use dlmalloc::Dlmalloc;
-use tiny_std::process::exit;
-use unix_print::unix_eprintln;
 
 use pgwm_app::main_loop;
 
@@ -53,21 +51,6 @@ unsafe impl GlobalAlloc for SingleThreadedAlloc {
 unsafe impl Sync for SingleThreadedAlloc {}
 
 unsafe impl Send for SingleThreadedAlloc {}
-
-#[panic_handler]
-fn on_panic(info: &core::panic::PanicInfo) -> ! {
-    unix_eprintln!("{info}");
-    exit(1)
-}
-
-/// Compiler complains about this symbol being missing for some reason
-/// we don't unwind anyway so it shouldn't be needed.
-/// # Safety
-/// Just another necessary symbol
-#[no_mangle]
-pub unsafe extern "C" fn _Unwind_Resume() -> ! {
-    exit(2);
-}
 
 #[no_mangle]
 fn main() -> i32 {

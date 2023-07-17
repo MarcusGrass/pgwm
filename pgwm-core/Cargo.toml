@@ -20,7 +20,7 @@ x11-keysyms = { git = "https://github.com/MarcusGrass/x11-keysyms", rev = "da463
 
 xcb-rust-connection = { workspace = true }
 xcb-rust-protocol = { workspace = true }
-tiny-std = { workspace = true , features = ["start", "alloc"] }
+tiny-std = { workspace = true , features = ["start", "alloc"], default-features = false }
 
 time = { version = "0.3.21", optional = true, default-features = false }
 serde = { version = "1.0.163", default-features = false, features = ["derive"], optional = true }
@@ -28,7 +28,7 @@ smallmap = { workspace = true, default-features = false, features = ["serde"] }
 
 [dev-dependencies]
 tiny-bench = "0.2.0"
-tiny-std = { workspace = true, features = ["start", "alloc"] }
+tiny-std = { workspace = true, features = ["alloc"], default-features = false }
 
 [[bench]]
 name = "benchmark"

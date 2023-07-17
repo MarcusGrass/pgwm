@@ -6,10 +6,7 @@ use alloc::vec::Vec;
 use rusl::io_uring::{
     io_uring_enter, io_uring_register_buffers, io_uring_register_files, setup_io_uring,
 };
-use rusl::platform::{
-    Fd, IoSliceMut, IoUring, IoUringEnterFlags, IoUringParamFlags, IoUringSQEFlags,
-    IoUringSubmissionQueueEntry,
-};
+use rusl::platform::{Fd, IoSliceMut, IoUring, IoUringEnterFlags, IoUringParamFlags, IoUringSQEFlags, IoUringSubmissionQueueEntry, NonNegativeI32};
 #[cfg(feature = "status-bar")]
 use tiny_std::time::Instant;
 use tiny_std::unix::fd::RawFd;
@@ -17,15 +14,15 @@ use xcb_rust_protocol::con::SocketIo;
 
 use crate::error::{Error, Result};
 
-const SOCK_FD_INDEX: usize = 0;
+const SOCK_FD_INDEX: NonNegativeI32 = NonNegativeI32::comptime_checked_new(0);
 #[cfg(feature = "status-bar")]
-const BAT_FD_INDEX: usize = 1;
+const BAT_FD_INDEX: NonNegativeI32 = NonNegativeI32::comptime_checked_new(1);
 #[cfg(feature = "status-bar")]
-const NET_FD_INDEX: usize = 2;
+const NET_FD_INDEX: NonNegativeI32 = NonNegativeI32::comptime_checked_new(2);
 #[cfg(feature = "status-bar")]
-const MEM_FD_INDEX: usize = 3;
+const MEM_FD_INDEX: NonNegativeI32 = NonNegativeI32::comptime_checked_new(3);
 #[cfg(feature = "status-bar")]
-const CPU_FD_INDEX: usize = 4;
+const CPU_FD_INDEX: NonNegativeI32 = NonNegativeI32::comptime_checked_new(4);
 
 const SOCK_IN_BUF_INDEX: usize = 0;
 const SOCK_OUT_BUF_INDEX: usize = 1;
@@ -321,7 +318,7 @@ impl UringWrapper {
         let entry = unsafe {
             IoUringSubmissionQueueEntry::new_writev_fixed(
                 // Same file index for both sockets
-                SOCK_FD_INDEX as i32,
+                SOCK_FD_INDEX,
                 SOCK_OUT_BUF_INDEX as u16,
                 addr as u64,
                 to_write as u32,
@@ -433,7 +430,7 @@ impl UringWrapper {
     #[cfg(feature = "status-bar")]
     fn submit_indexed_read(
         &mut self,
-        fd_ind: usize,
+        fd_ind: NonNegativeI32,
         buf_ind: usize,
         user_data: u64,
         addr: u64,
@@ -442,7 +439,7 @@ impl UringWrapper {
         crate::debug!("Submitting indexed read for user_data {user_data}");
         unsafe {
             let entry = IoUringSubmissionQueueEntry::new_readv_fixed(
-                fd_ind as Fd,
+                fd_ind,
                 buf_ind as u16,
                 addr,
                 space as u32,
