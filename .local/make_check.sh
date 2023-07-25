@@ -25,17 +25,8 @@ check_install() {
   else
     DIR=$1/pgwm
   fi
-  if [ -z "$2" ]; then
-    CFG=$HOME/.config/pgwm/pgwm.toml
-  else
-    CFG=$2/pgwm.toml
-  fi
   if [ ! -f "$DIR" ]; then
     echo "Binary not placed in expected location $DIR"
-    exit 1
-  fi
-  if [ ! -f "$CFG" ]; then
-    echo "Configuration not placed in expected location $CFG"
     exit 1
   fi
 }
@@ -46,21 +37,9 @@ check_uninstall() {
   else
     DIR=$1/pgwm
   fi
-  if [ -z "$2" ]; then
-    CFG=$HOME/.config/pgwm/pgwm.toml
-  else
-    CFG=$2/pgwm.toml
-  fi
   if [ -f "$DIR" ]; then
     echo "Binary still present after uninstalling"
     exit 1
-  fi
-
-  if [ "$3" -eq 1 ]; then
-    if [ -f "$CFG" ]; then
-      echo "Configuration still present after uninstalling at $CFG"
-      exit 1
-    fi
   fi
 }
 
@@ -78,7 +57,7 @@ make uninstall CLEAN_CONFIG=1
 check_uninstall "$DEAD_VAR1" "$DEAD_VAR2" 1
 
 ensure_no_previous_make
-./configure --profile=release --bin-dir=docs --config-dir=docs
+./configure --profile=release --bin-dir=docs
 make clean
 check_clean
 make
