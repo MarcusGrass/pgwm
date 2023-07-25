@@ -1,22 +1,13 @@
-use alloc::borrow::ToOwned;
-use alloc::string::String;
-use alloc::vec;
-use alloc::vec::Vec;
-
-use smallmap::Map;
-use time::error::ComponentRange;
 use x11_keysyms::{
     XK_Print, XK_Return, XK_b, XK_c, XK_comma, XK_d, XK_f, XK_h, XK_j, XK_k, XK_l, XK_n, XK_period,
     XK_q, XK_r, XK_space, XK_t, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
 };
-use xcb_rust_protocol::proto::xproto::{ButtonIndexEnum, Keysym, ModMask};
+use xcb_rust_protocol::proto::xproto::{ButtonIndexEnum, ModMask};
 
-use crate::colors::ColorBuilder;
+
 use crate::config::key_map::KeyboardMapping;
 use crate::config::mouse_map::{MouseMapping, MouseTarget};
 use crate::config::workspaces::UserWorkspace;
-use crate::status::checker::Check;
-use crate::status::time::{FormatChunk, Token};
 
 pub mod key_map;
 pub mod mouse_map;
@@ -132,7 +123,7 @@ pub const KILL_AFTER: u64 = 5000;
 
 /// X11 cursor name, can be found online somewhere, currently unknown where.
 /// Millis before we kill the client
-pub const CURSOR_NAME: &'static str = "left_ptr";
+pub const CURSOR_NAME: &str = "left_ptr";
 
 /// Show bar on start
 pub const SHOW_BAR_INITIALLY: bool = true;
@@ -165,16 +156,16 @@ the previous render does not provide them. There can at most be `FALLBACK_FONTS_
 per target segment.
  **/
 
-pub const WORKSPACE_SECTION_FONTS: &'static [FontCfg<'static>] = &[DEFAULT_FONT];
+pub const WORKSPACE_SECTION_FONTS: &[FontCfg<'static>] = &[DEFAULT_FONT];
 
-pub const WINDOW_NAME_DISPLAY_SECTION: &'static [FontCfg<'static>] = &[DEFAULT_FONT];
+pub const WINDOW_NAME_DISPLAY_SECTION: &[FontCfg<'static>] = &[DEFAULT_FONT];
 
 #[cfg(feature = "status-bar")]
-pub const STATUS_SECTION: &'static [FontCfg<'static>] = &[DEFAULT_FONT];
+pub const STATUS_SECTION: &[FontCfg<'static>] = &[DEFAULT_FONT];
 
-pub const TAB_BAR_SECTION: &'static [FontCfg<'static>] = &[DEFAULT_FONT];
+pub const TAB_BAR_SECTION: &[FontCfg<'static>] = &[DEFAULT_FONT];
 
-pub const SHORTCUT_SECTION: &'static [FontCfg<'static>] = &[DEFAULT_FONT];
+pub const SHORTCUT_SECTION: &[FontCfg<'static>] = &[DEFAULT_FONT];
 
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -185,6 +176,7 @@ pub struct FontCfg<'a> {
 }
 
 impl<'a> FontCfg<'a> {
+    #[must_use]
     pub const fn new(path: &'a str, size: &'a str) -> Self {
         Self {
             path,
@@ -193,18 +185,19 @@ impl<'a> FontCfg<'a> {
     }
 }
 
-pub const BAR_SHORTCUTS: [&'static str; 2] = ["\u{f304}", "\u{f502}"];
+pub const BAR_SHORTCUTS: [&str; 2] = ["\u{f304}", "\u{f502}"];
 
-pub const STATUS_CHECKS: [Check; 4] = [
-    Check {
+#[cfg(feature = "status-bar")]
+pub const STATUS_CHECKS: [crate::status::checker::Check; 4] = [
+    crate::status::checker::Check {
         check_type: crate::status::checker::CheckType::Cpu(crate::status::checker::CpuFormat::new("\u{f2db}", 1)),
         interval: 1000
     },
-    Check {
+    crate::status::checker::Check {
         check_type: crate::status::checker::CheckType::Mem(crate::status::checker::MemFormat::new("\u{f538}", 1)),
         interval: 1000
     },
-    Check {
+    crate::status::checker::Check {
         check_type: crate::status::checker::CheckType::Net(crate::status::checker::NetFormat::new(
             "\u{f093}",
             "\u{f019}",
@@ -212,24 +205,24 @@ pub const STATUS_CHECKS: [Check; 4] = [
         )),
         interval: 1000
     },
-    Check {
+    crate::status::checker::Check {
         check_type: crate::status::checker::CheckType::Date(crate::status::checker::DateFormat::new(
             "\u{f073}",
             crate::status::time::ClockFormatter::new(
                 crate::status::time::Format::new(&[
-                    FormatChunk::Token(Token::Day),
-                    FormatChunk::Value(" "),
-                    FormatChunk::Token(Token::Month),
-                    FormatChunk::Value(" "),
-                    FormatChunk::Token(Token::Day),
-                    FormatChunk::Value(" "),
-                    FormatChunk::Token(Token::Week),
-                    FormatChunk::Value(" "),
-                    FormatChunk::Token(Token::Hour),
-                    FormatChunk::Value(":"),
-                    FormatChunk::Token(Token::Minute),
-                    FormatChunk::Value(":"),
-                    FormatChunk::Token(Token::Second),
+                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Year),
+                    crate::status::time::FormatChunk::Value(" "),
+                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Month),
+                    crate::status::time::FormatChunk::Value(" "),
+                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Day),
+                    crate::status::time::FormatChunk::Value(" "),
+                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Week),
+                    crate::status::time::FormatChunk::Value(" "),
+                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Hour),
+                    crate::status::time::FormatChunk::Value(":"),
+                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Minute),
+                    crate::status::time::FormatChunk::Value(":"),
+                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Second),
                 ]),
                 offset()
             ),
@@ -238,83 +231,16 @@ pub const STATUS_CHECKS: [Check; 4] = [
     },
 ];
 
+#[must_use]
+#[cfg(feature = "status-bar")]
+#[allow(clippy::match_wild_err_arm)]
 pub const fn offset() -> time::UtcOffset {
     let offset_res = time::UtcOffset::from_hms(2, 0, 0);
     match offset_res {
         Ok(offset) => offset,
-        Err(_) => {
+        Err(_err) => {
             panic!("Invalid utc offset provided!")
         }
-    }
-}
-
-#[derive(Clone, Debug)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct BarCfg {
-    pub shortcuts: Vec<Shortcut>,
-    #[cfg(feature = "status-bar")]
-    pub status_checks: heapless::Vec<crate::status::checker::Check, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
-}
-
-#[derive(Clone, Debug)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-pub struct Shortcut {
-    pub name: String,
-}
-
-impl Shortcut {
-    fn new(name: String) -> Self {
-        Self { name }
-    }
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct SimpleKeyMapping {
-    mods: ModMasks,
-    key: Keysym,
-    on_click: Action,
-}
-
-impl SimpleKeyMapping {
-    fn new(mod_mask: ModMask, keysym: Keysym, action: Action) -> Self {
-        Self {
-            mods: ModMasks::from(mod_mask),
-            key: keysym,
-            on_click: action,
-        }
-    }
-    #[must_use]
-    pub fn to_key_mapping(self) -> KeyboardMapping {
-        KeyboardMapping {
-            modmask: self.mods.inner,
-            keysym: self.key,
-            action: self.on_click,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct ModMasks {
-    pub inner: ModMask,
-}
-
-impl From<ModMask> for ModMasks {
-    fn from(inner: ModMask) -> Self {
-        ModMasks { inner }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-#[cfg_attr(test, derive(PartialEq))]
-pub struct Button {
-    pub inner: ButtonIndexEnum,
-}
-
-impl From<ButtonIndexEnum> for Button {
-    fn from(inner: ButtonIndexEnum) -> Self {
-        Button { inner }
     }
 }
 
@@ -604,21 +530,21 @@ pub const KEYBOARD_MAPPINGS: [KeyboardMapping; 41] = [
         ),
     ),
 ];
-const ICON_FONT: &'static FontCfg<'static> = &FontCfg::new(
+const ICON_FONT: &FontCfg<'static> = &FontCfg::new(
     "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf",
     "13.0",
 );
-const BRAND_FONT: &'static FontCfg<'static> = &FontCfg::new(
+const BRAND_FONT: &FontCfg<'static> = &FontCfg::new(
     "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf",
     "13.0",
 );
 
-pub const CHAR_REMAP_FONTS: [&'static FontCfg<'static>; 2] = [ICON_FONT, BRAND_FONT];
+pub const CHAR_REMAP_FONTS: [&FontCfg<'static>; 2] = [ICON_FONT, BRAND_FONT];
 /**
 Overrides specific character drawing.
 If some character needs icons from a certain render, they should be mapped below.
  **/
-pub const CHAR_REMAP: &'static [(char, &'static FontCfg<'static>)] = &[
+pub const CHAR_REMAP: &[(char, &FontCfg<'static>)] = &[
     ('\u{f121}', ICON_FONT),
     ('\u{f120}', ICON_FONT),
     ('\u{f086}', ICON_FONT),

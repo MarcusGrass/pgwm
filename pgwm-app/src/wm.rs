@@ -16,7 +16,6 @@ use xcb_rust_protocol::proto::xproto::{
 use xcb_rust_protocol::util::FixedLengthFromBytes;
 use xcb_rust_protocol::XcbEnv;
 
-use pgwm_core::config::{STATUS_CHECKS};
 use pgwm_core::render::{RenderVisualInfo, VisualInfo};
 use pgwm_core::state::State;
 
@@ -58,7 +57,7 @@ pub(crate) fn run_wm() -> Result<()> {
         xcb_socket_out_buffer,
         socket_fd,
         #[cfg(feature = "status-bar")]
-        &STATUS_CHECKS,
+        &pgwm_core::config::STATUS_CHECKS,
     )?;
     // On connect we'll start the listening loop
     uring_wrapper.submit_sock_read()?;
@@ -114,10 +113,10 @@ pub(crate) fn run_wm() -> Result<()> {
     crate::debug!("Initialized manager");
     // Extremely ugly control flow here
     #[cfg(feature = "status-bar")]
-    let should_check = !STATUS_CHECKS.is_empty();
+    let should_check = !pgwm_core::config::STATUS_CHECKS.is_empty();
 
     #[cfg(feature = "status-bar")]
-    let mut mut_checks = STATUS_CHECKS;
+    let mut mut_checks = pgwm_core::config::STATUS_CHECKS;
     #[cfg(feature = "status-bar")]
     let mut checker = pgwm_core::status::checker::Checker::new(&mut mut_checks);
     crate::debug!("Initialized Checker");

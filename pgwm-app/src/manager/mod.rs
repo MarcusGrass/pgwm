@@ -166,7 +166,7 @@ impl<'a> Manager<'a> {
                 call_wrapper,
                 event.event,
                 InputSource::Keyboard,
-                action.clone(),
+                *action,
                 state,
             )?;
         }
@@ -198,7 +198,7 @@ impl<'a> Manager<'a> {
                 #[cfg(not(feature = "perf-test"))]
                 {
                     tiny_std::process::Command::new(cmd)?
-                        .args(&args)?
+                        .args(args)?
                         .stdin(tiny_std::process::Stdio::Null)
                         .stdout(tiny_std::process::Stdio::Null)
                         .stderr(tiny_std::process::Stdio::Null)
@@ -897,7 +897,7 @@ impl<'a> Manager<'a> {
                 call_wrapper,
                 event.child.0,
                 InputSource::Mouse(event.event_x, event.event_y),
-                action.clone(),
+                *action,
                 state,
             )?;
         }

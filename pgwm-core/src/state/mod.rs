@@ -292,7 +292,6 @@ impl WinMarkedForDeath {
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::String;
     use alloc::vec;
 
     use smallmap::Map;
@@ -300,7 +299,7 @@ mod tests {
     use xcb_rust_protocol::CURRENT_TIME;
 
     use crate::colors::{Color, Colors};
-    use crate::config::{Cfg, USED_DIFFERENT_COLOR_SEGMENTS};
+    use crate::config::{USED_DIFFERENT_COLOR_SEGMENTS, USER_WORKSPACES};
     use crate::geometry::{Dimensions, Line};
     use crate::render::{DoubleBufferedRenderPicture, RenderPicture};
     use crate::state::bar_geometry::{
@@ -311,7 +310,6 @@ mod tests {
     use crate::state::{Monitor, State};
 
     fn create_base_state() -> State {
-        let cfg = Cfg::default();
         let monitor0 = Monitor {
             bar_win: DoubleBufferedRenderPicture {
                 window: RenderPicture {
@@ -418,13 +416,10 @@ mod tests {
             show_bar: false,
             window_title_display: heapless::String::default(),
         };
-        let pixels: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
-            std::iter::repeat_with(|| Color {
-                pixel: 0,
-                bgra8: [0, 0, 0, 0],
-            })
-            .take(USED_DIFFERENT_COLOR_SEGMENTS)
-            .collect();
+        let pixels: [Color; USED_DIFFERENT_COLOR_SEGMENTS] = [Color {
+            pixel: 0,
+            bgra8: [0, 0, 0, 0],
+        }; USED_DIFFERENT_COLOR_SEGMENTS];
         State {
             wm_check_win: 0,
             intern_created_windows: heapless::IndexSet::default(),
@@ -452,19 +447,13 @@ mod tests {
             },
             sequences_to_ignore: heapless::BinaryHeap::default(),
             monitors: vec![monitor0, monitor1],
-            workspaces: Workspaces::create_empty(&cfg.workspaces, cfg.tiling_modifiers).unwrap(),
-            colors: Colors::from_vec(pixels),
+            workspaces: Workspaces::create_empty(&USER_WORKSPACES).unwrap(),
+            colors: Colors {
+                inner: pixels,
+            },
             window_border_width: 0,
-            status_bar_height: 0,
-            tab_bar_height: 0,
             window_padding: 0,
-            pad_while_tabbed: false,
-            workspace_bar_window_name_padding: 0,
-            cursor_name: String::new(),
             pointer_grabbed: false,
-            destroy_after: 0,
-            kill_after: 0,
-            show_bar_initially: true,
             mouse_mapping: Map::default(),
             key_mapping: Map::default(),
             last_timestamp: CURRENT_TIME,

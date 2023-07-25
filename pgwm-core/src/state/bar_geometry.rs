@@ -1,4 +1,4 @@
-use alloc::string::String;
+
 use alloc::vec::Vec;
 
 use crate::config::mouse_map::MouseTarget;

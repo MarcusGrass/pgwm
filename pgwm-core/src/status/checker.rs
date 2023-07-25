@@ -7,8 +7,8 @@ use heapless::String;
 use smallmap::{Collapse, Map};
 use tiny_std::time::Instant;
 
-use crate::config::{
-    STATUS_BAR_BAT_SEGMENT_LIMIT, STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_UNIQUE_CHECK_LIMIT,
+use crate::config::{STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_UNIQUE_CHECK_LIMIT,
+STATUS_BAR_BAT_SEGMENT_LIMIT
 };
 use crate::format_heapless;
 use crate::status::cpu::LoadChecker;
@@ -24,6 +24,7 @@ pub struct Check {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum CheckType {
     Battery(heapless::Vec<BatFormat, STATUS_BAR_BAT_SEGMENT_LIMIT>),
     Cpu(CpuFormat),
@@ -438,13 +439,13 @@ mod checker_tests {
     #[test]
     #[cfg(unix)]
     fn can_real_run_checks() {
-        let mut checks = heapless::Vec::new();
+        let mut checks: heapless::Vec<Check, 1> = heapless::Vec::new();
 
         let interval = Duration::from_millis(10_000);
         let _ = checks.push(Check {
             interval: interval.as_millis() as u64,
             check_type: CheckType::Cpu(CpuFormat {
-                icon: heapless::String::default(),
+                icon: "hello",
                 decimals: 2,
             }),
         });

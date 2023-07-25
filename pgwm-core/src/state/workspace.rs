@@ -4,7 +4,7 @@ use smallmap::Map;
 use xcb_rust_protocol::proto::xproto::Window;
 
 use crate::config::workspaces::UserWorkspace;
-use crate::config::{DefaultDraw, APPLICATION_WINDOW_LIMIT, WS_WINDOW_LIMIT, TILING_MODIFIER_LEFT_LEADER, TILING_MODIFIER_VERTICALLY_TILED, TILING_MODIFIER_CENTER_LEADER, TilingModifiers, TILING_MODIFIERS};
+use crate::config::{DefaultDraw, APPLICATION_WINDOW_LIMIT, WS_WINDOW_LIMIT, TilingModifiers, TILING_MODIFIERS};
 use crate::error::Result;
 use crate::geometry::draw::{Mode, OldDrawMode};
 use crate::geometry::layout::Layout;
@@ -40,7 +40,7 @@ impl Workspaces {
                 tiling_modifiers: TILING_MODIFIERS,
             });
             for mapped in ws.mapped_class_names {
-                name_to_ws.insert(mapped.clone(), i);
+                name_to_ws.insert(*mapped, i);
             }
         }
         Ok(Workspaces {
@@ -765,7 +765,7 @@ mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use crate::config::Cfg;
+    use crate::config::{USER_WORKSPACES};
     use crate::geometry::draw::Mode;
     use crate::geometry::layout::Layout;
     use crate::state::properties::{WindowProperties, WmName};
@@ -788,8 +788,7 @@ mod tests {
     }
 
     fn empty_workspaces() -> Workspaces {
-        let cfg = Cfg::default();
-        Workspaces::create_empty(&cfg.workspaces, cfg.tiling_modifiers).unwrap()
+        Workspaces::create_empty(&USER_WORKSPACES).unwrap()
     }
 
     #[test]

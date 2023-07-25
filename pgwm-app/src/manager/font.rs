@@ -9,7 +9,7 @@ use tiny_std::io::Read;
 use xcb_rust_protocol::proto::render::{Glyphinfo, Glyphset};
 
 use pgwm_core::colors::Color;
-use pgwm_core::config::{CHAR_REMAP, CHAR_REMAP_FONTS, FontCfg, SHORTCUT_SECTION, STATUS_SECTION, TAB_BAR_SECTION, WINDOW_NAME_DISPLAY_SECTION, WORKSPACE_SECTION_FONTS};
+use pgwm_core::config::{CHAR_REMAP, CHAR_REMAP_FONTS, FontCfg, SHORTCUT_SECTION, TAB_BAR_SECTION, WINDOW_NAME_DISPLAY_SECTION, WORKSPACE_SECTION_FONTS};
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
 
@@ -86,7 +86,7 @@ pub(crate) fn load_alloc_fonts<'a>(
         .chain(TAB_BAR_SECTION.iter())
         .chain(CHAR_REMAP_FONTS.into_iter());
     #[cfg(feature = "status-bar")]
-    let it = it.chain(STATUS_SECTION.iter());
+    let it = it.chain(pgwm_core::config::STATUS_SECTION.iter());
     // Reuse buffer
     let mut data = Vec::with_capacity(65536);
     for f_cfg in it {
@@ -95,7 +95,7 @@ pub(crate) fn load_alloc_fonts<'a>(
         if let Entry::Vacant(v) = map.entry(f_cfg) {
             let mut file = tiny_std::fs::OpenOptions::new()
                 .read(true)
-                .open(&f_cfg.path)?;
+                .open(f_cfg.path)?;
             data.clear();
             let read_bytes = file.read_to_end(&mut data)?;
             crate::debug!("Read {} bytes of font {}", read_bytes, f_cfg.path);

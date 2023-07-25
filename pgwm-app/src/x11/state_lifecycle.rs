@@ -21,7 +21,7 @@ use pgwm_core::colors::Colors;
 use pgwm_core::config::key_map::{KeyBoardMappingKey, KeyboardMapping};
 use pgwm_core::config::mouse_map::MouseActionKey;
 use pgwm_core::config::workspaces::UserWorkspace;
-use pgwm_core::config::{Action, FontCfg, APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE, SHORTCUT_SECTION, BAR_SHORTCUTS, WORKSPACE_SECTION_FONTS, STATUS_SECTION, TAB_BAR_HEIGHT, WINDOW_BORDER_WIDTH, WORKSPACE_BAR_WINDOW_NAME_PADDING, WINDOW_PADDING, STATUS_BAR_HEIGHT, KEYBOARD_MAPPINGS, MOUSE_MAPPINGS, SHOW_BAR_INITIALLY, STATUS_CHECKS, USER_WORKSPACES};
+use pgwm_core::config::{Action, FontCfg, APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE, BAR_SHORTCUTS, WORKSPACE_SECTION_FONTS, TAB_BAR_HEIGHT, WINDOW_BORDER_WIDTH, WORKSPACE_BAR_WINDOW_NAME_PADDING, WINDOW_PADDING, STATUS_BAR_HEIGHT, KEYBOARD_MAPPINGS, MOUSE_MAPPINGS, SHOW_BAR_INITIALLY, USER_WORKSPACES};
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::{STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP};
 use pgwm_core::geometry::{Dimensions, Line};
@@ -43,7 +43,7 @@ use crate::x11::call_wrapper::CallWrapper;
 
 const COOKIE_CONTAINER_CAPACITY: usize = 64;
 
-pub(crate) fn create_state<'a, 'state>(
+pub(crate) fn create_state<'a>(
     call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
     visual: RenderVisualInfo,
@@ -75,7 +75,7 @@ pub(crate) fn create_state<'a, 'state>(
     )
 }
 
-pub(crate) fn reinit_state<'a, 'state>(
+pub(crate) fn reinit_state<'a>(
     call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
     visual: RenderVisualInfo,
@@ -153,7 +153,7 @@ pub(crate) fn teardown_full_state(
     clippy::fn_params_excessive_bools,
     clippy::inline_always
 )]
-fn do_create_state<'a, 'state>(
+fn do_create_state<'a>(
     call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
     vis_info: RenderVisualInfo,
@@ -239,7 +239,7 @@ fn do_create_state<'a, 'state>(
             WORKSPACE_BAR_WINDOW_NAME_PADDING,
             WORKSPACE_BAR_WINDOW_NAME_PADDING,
             #[cfg(feature = "status-bar")]
-            &STATUS_CHECKS,
+            &pgwm_core::config::STATUS_CHECKS,
         );
         let new_mon = Monitor {
             bar_geometry,
@@ -621,6 +621,7 @@ fn create_status_section_geometry<'a>(
     shortcut_width: i16,
     checks: &[Check],
 ) -> StatusSection {
+    use pgwm_core::config::STATUS_SECTION;
     let mut check_lengths: heapless::Vec<
         i16,
         { pgwm_core::config::STATUS_BAR_UNIQUE_CHECK_LIMIT },

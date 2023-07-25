@@ -1,5 +1,5 @@
 use pgwm_core::colors::Color;
-use pgwm_core::config::{SHORTCUT_SECTION, STATUS_BAR_HEIGHT, STATUS_SECTION, WORKSPACE_BAR_WINDOW_NAME_PADDING, WORKSPACE_SECTION_FONTS};
+use pgwm_core::config::{SHORTCUT_SECTION, STATUS_BAR_HEIGHT, WORKSPACE_BAR_WINDOW_NAME_PADDING, WORKSPACE_SECTION_FONTS};
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
 use pgwm_core::geometry::Dimensions;
@@ -241,7 +241,7 @@ impl<'a> BarManager<'a> {
                 call_wrapper,
                 &state.monitors[mon_ind].bar_win,
                 &content,
-                STATUS_SECTION,
+                pgwm_core::config::STATUS_SECTION,
                 Dimensions::new(pos.length, STATUS_BAR_HEIGHT, pos.start, src_y),
                 pos.length,
                 0,
@@ -270,7 +270,7 @@ impl<'a> BarManager<'a> {
                     call_wrapper,
                     &state.monitors[i].bar_win,
                     &section.display,
-                    STATUS_SECTION,
+                    pgwm_core::config::STATUS_SECTION,
                     Dimensions::new(
                         status_position.length,
                         STATUS_BAR_HEIGHT,
