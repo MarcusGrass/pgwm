@@ -46,7 +46,11 @@ pub(crate) fn run_wm() -> Result<()> {
     let xcb_socket_out_buffer = vec![0u8; 65536];
     crate::debug!("Looking for socket path");
     let (path, dpy_info) = xcb_rust_connection::connection::find_socket_path(dpy)?;
-    let socket_fd = rusl::network::socket(AddressFamily::AF_UNIX, SocketOptions::new(SocketType::SOCK_STREAM, SocketFlags::empty()), 0)?;
+    let socket_fd = rusl::network::socket(
+        AddressFamily::AF_UNIX,
+        SocketOptions::new(SocketType::SOCK_STREAM, SocketFlags::empty()),
+        0,
+    )?;
 
     //let socket_fd = tiny_std::net::UnixStream::connect(path, true)?;
     let addr = SocketAddress::try_from_unix(&path)?;

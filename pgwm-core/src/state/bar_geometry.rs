@@ -1,12 +1,11 @@
-
 use alloc::vec::Vec;
 
 use crate::config::mouse_map::MouseTarget;
-use crate::config::WM_NAME_LIMIT;
+use crate::config::_WM_NAME_LIMIT;
 #[cfg(feature = "status-bar")]
 use crate::config::{
-    STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP,
-    STATUS_BAR_TOTAL_LENGTH_LIMIT, STATUS_BAR_UNIQUE_CHECK_LIMIT,
+    STATUS_CHECKS, _STATUS_BAR_CHECK_CONTENT_LIMIT, _STATUS_BAR_CHECK_SEP, _STATUS_BAR_FIRST_SEP,
+    _STATUS_BAR_TOTAL_LENGTH_LIMIT,
 };
 use crate::geometry::Line;
 
@@ -80,7 +79,7 @@ impl BarGeometry {
 #[derive(Clone)]
 pub struct WindowTitleSection {
     pub position: Line,
-    pub display: heapless::String<WM_NAME_LIMIT>,
+    pub display: heapless::String<_WM_NAME_LIMIT>,
     pub last_draw_width: i16,
 }
 
@@ -118,7 +117,7 @@ pub struct StatusSection {
     pub position: Line,
     pub first_sep_len: i16,
     pub sep_len: i16,
-    pub components: heapless::Vec<StatusComponent, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
+    pub components: heapless::Vec<StatusComponent, { STATUS_CHECKS.len() }>,
 }
 
 #[cfg(feature = "status-bar")]
@@ -132,7 +131,7 @@ impl StatusSection {
         first_sep_len: i16,
     ) -> Self {
         let mut total_length = 0;
-        let mut corrected_lengths: heapless::Vec<i16, STATUS_BAR_UNIQUE_CHECK_LIMIT> =
+        let mut corrected_lengths: heapless::Vec<i16, { STATUS_CHECKS.len() }> =
             heapless::Vec::new();
         for (ind, check) in check_lengths.iter().enumerate() {
             let mut cur_length = 0;
@@ -173,15 +172,15 @@ impl StatusSection {
 
     pub fn update_and_get_section_line(
         &mut self,
-        new_content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+        new_content: heapless::String<_STATUS_BAR_CHECK_CONTENT_LIMIT>,
         new_component_ind: usize,
-    ) -> (heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>, Line) {
+    ) -> (heapless::String<_STATUS_BAR_CHECK_CONTENT_LIMIT>, Line) {
         let content = if new_component_ind == 0 {
-            crate::format_heapless!("{STATUS_BAR_FIRST_SEP}{new_content}")
+            crate::format_heapless!("{_STATUS_BAR_FIRST_SEP}{new_content}")
         } else if new_component_ind == self.components.len() - 1 {
-            crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}{STATUS_BAR_FIRST_SEP}  ")
+            crate::format_heapless!("{_STATUS_BAR_CHECK_SEP}{new_content}{_STATUS_BAR_FIRST_SEP}  ")
         } else {
-            crate::format_heapless!("{STATUS_BAR_CHECK_SEP}{new_content}")
+            crate::format_heapless!("{_STATUS_BAR_CHECK_SEP}{new_content}")
         };
         let component = &mut self.components[new_component_ind];
         component.display = content.clone();
@@ -189,7 +188,7 @@ impl StatusSection {
     }
 
     #[must_use]
-    pub fn get_full_content(&self) -> heapless::String<STATUS_BAR_TOTAL_LENGTH_LIMIT> {
+    pub fn get_full_content(&self) -> heapless::String<_STATUS_BAR_TOTAL_LENGTH_LIMIT> {
         let mut s = heapless::String::new();
         for component in &self.components {
             let _ = s.push_str(&component.display);
@@ -219,7 +218,7 @@ impl StatusSection {
 #[derive(Debug, Clone)]
 pub struct StatusComponent {
     pub position: Line,
-    pub display: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    pub display: heapless::String<_STATUS_BAR_CHECK_CONTENT_LIMIT>,
 }
 
 pub struct WorkspaceSection {

@@ -4,7 +4,7 @@ use smallmap::Map;
 use xcb_rust_protocol::proto::xproto::Window;
 
 use crate::config::workspaces::UserWorkspace;
-use crate::config::{DefaultDraw, APPLICATION_WINDOW_LIMIT, WS_WINDOW_LIMIT, TilingModifiers, TILING_MODIFIERS};
+use crate::config::{DefaultDraw, TilingModifiers, WM_TILING_MODIFIERS, WS_WINDOW_LIMIT};
 use crate::error::Result;
 use crate::geometry::draw::{Mode, OldDrawMode};
 use crate::geometry::layout::Layout;
@@ -23,9 +23,7 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn create_empty(
-        init_workspaces: &[UserWorkspace],
-    ) -> Result<Self> {
+    pub fn create_empty(init_workspaces: &[UserWorkspace]) -> Result<Self> {
         let mut v = Vec::<Workspace>::new();
         let mut name_to_ws = Map::new();
         for (i, ws) in init_workspaces.iter().enumerate() {
@@ -37,7 +35,7 @@ impl Workspaces {
                 },
                 name: ws.name,
                 children: heapless::Vec::new(), // Realloc is what's going to take time here
-                tiling_modifiers: TILING_MODIFIERS,
+                tiling_modifiers: WM_TILING_MODIFIERS,
             });
             for mapped in ws.mapped_class_names {
                 name_to_ws.insert(*mapped, i);
@@ -51,7 +49,7 @@ impl Workspaces {
     }
 
     #[must_use]
-    pub fn get_all_managed_windows(&self) -> heapless::Vec<Window, APPLICATION_WINDOW_LIMIT> {
+    pub fn get_all_managed_windows(&self) -> Vec<Window> {
         self.win_to_ws.keys().copied().collect()
     }
 
@@ -94,7 +92,7 @@ impl Workspaces {
     }
 
     pub fn clear_size_modifiers(&mut self, ws_ind: usize) {
-        self.spaces[ws_ind].tiling_modifiers = TILING_MODIFIERS;
+        self.spaces[ws_ind].tiling_modifiers = WM_TILING_MODIFIERS;
     }
 
     pub fn unset_fullscreened(&mut self, ws_ind: usize) -> Option<Window> {
@@ -765,7 +763,7 @@ mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use crate::config::{USER_WORKSPACES};
+    use crate::config::USER_WORKSPACES;
     use crate::geometry::draw::Mode;
     use crate::geometry::layout::Layout;
     use crate::state::properties::{WindowProperties, WmName};

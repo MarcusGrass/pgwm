@@ -6,7 +6,10 @@ use alloc::vec::Vec;
 use rusl::io_uring::{
     io_uring_enter, io_uring_register_buffers, io_uring_register_files, setup_io_uring,
 };
-use rusl::platform::{Fd, IoSliceMut, IoUring, IoUringEnterFlags, IoUringParamFlags, IoUringSQEFlags, IoUringSubmissionQueueEntry, NonNegativeI32};
+use rusl::platform::{
+    Fd, IoSliceMut, IoUring, IoUringEnterFlags, IoUringParamFlags, IoUringSQEFlags,
+    IoUringSubmissionQueueEntry, NonNegativeI32,
+};
 #[cfg(feature = "status-bar")]
 use tiny_std::time::Instant;
 use tiny_std::unix::fd::RawFd;

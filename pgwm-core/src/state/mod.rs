@@ -8,6 +8,7 @@ use tiny_std::time::Instant;
 use xcb_rust_protocol::proto::xproto::Timestamp;
 use xcb_rust_protocol::proto::xproto::{Screen, Window};
 
+use crate::colors::Colors;
 use crate::config::key_map::KeyBoardMappingKey;
 use crate::config::mouse_map::{MouseActionKey, MouseTarget};
 use crate::config::Action;
@@ -17,10 +18,9 @@ use crate::geometry::Dimensions;
 use crate::render::DoubleBufferedRenderPicture;
 use crate::state::bar_geometry::BarGeometry;
 use crate::{
-    config::{APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE},
+    config::{BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE},
     state::workspace::Workspaces,
 };
-use crate::colors::Colors;
 
 pub mod bar_geometry;
 pub mod properties;
@@ -29,7 +29,7 @@ pub mod workspace;
 #[allow(clippy::struct_excessive_bools)]
 pub struct State {
     pub wm_check_win: Window,
-    pub intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
+    pub intern_created_windows: Map<Window, ()>,
     pub dying_windows: heapless::Vec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
     pub drag_window: Option<(Window, DragPosition)>,
     pub focused_mon: usize,
@@ -299,7 +299,7 @@ mod tests {
     use xcb_rust_protocol::CURRENT_TIME;
 
     use crate::colors::{Color, Colors};
-    use crate::config::{USED_DIFFERENT_COLOR_SEGMENTS, USER_WORKSPACES};
+    use crate::config::{COLORS, USER_WORKSPACES};
     use crate::geometry::{Dimensions, Line};
     use crate::render::{DoubleBufferedRenderPicture, RenderPicture};
     use crate::state::bar_geometry::{
@@ -416,13 +416,13 @@ mod tests {
             show_bar: false,
             window_title_display: heapless::String::default(),
         };
-        let pixels: [Color; USED_DIFFERENT_COLOR_SEGMENTS] = [Color {
+        let pixels: [Color; COLORS.len()] = [Color {
             pixel: 0,
             bgra8: [0, 0, 0, 0],
-        }; USED_DIFFERENT_COLOR_SEGMENTS];
+        }; COLORS.len()];
         State {
             wm_check_win: 0,
-            intern_created_windows: heapless::IndexSet::default(),
+            intern_created_windows: Map::default(),
             dying_windows: heapless::Vec::default(),
             drag_window: None,
             focused_mon: 0,
@@ -448,9 +448,7 @@ mod tests {
             sequences_to_ignore: heapless::BinaryHeap::default(),
             monitors: vec![monitor0, monitor1],
             workspaces: Workspaces::create_empty(&USER_WORKSPACES).unwrap(),
-            colors: Colors {
-                inner: pixels,
-            },
+            colors: Colors { inner: pixels },
             window_border_width: 0,
             window_padding: 0,
             pointer_grabbed: false,

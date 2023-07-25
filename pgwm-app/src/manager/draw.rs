@@ -1,6 +1,9 @@
 use xcb_rust_protocol::proto::xproto::Window;
 
-use pgwm_core::config::{PAD_WHILE_TABBED, STATUS_BAR_HEIGHT, TAB_BAR_HEIGHT, TAB_BAR_SECTION, WM_NAME_LIMIT, WS_WINDOW_LIMIT};
+use pgwm_core::config::{
+    PAD_WHILE_TABBED, STATUS_BAR_HEIGHT, TAB_BAR_HEIGHT, TAB_BAR_SECTION, WS_WINDOW_LIMIT,
+    _WM_NAME_LIMIT,
+};
 use pgwm_core::geometry::draw::{Mode, OldDrawMode};
 use pgwm_core::geometry::{layout::Layout, Dimensions};
 use pgwm_core::push_heapless;
@@ -228,7 +231,7 @@ impl<'a> Drawer<'a> {
         let found_names = targets
             .into_iter()
             .map(|mw| mw.name)
-            .collect::<heapless::Vec<heapless::String<WM_NAME_LIMIT>, WS_WINDOW_LIMIT>>();
+            .collect::<heapless::Vec<heapless::String<_WM_NAME_LIMIT>, WS_WINDOW_LIMIT>>();
         self.draw_tab_bar(
             call_wrapper,
             mon_ind,
@@ -261,7 +264,7 @@ impl<'a> Drawer<'a> {
         &self,
         call_wrapper: &mut CallWrapper,
         mon_ind: usize,
-        ws_names: &[heapless::String<WM_NAME_LIMIT>],
+        ws_names: &[heapless::String<_WM_NAME_LIMIT>],
         selected: usize,
         padding: i16,
         state: &mut State,
@@ -296,9 +299,7 @@ impl<'a> Drawer<'a> {
             } else {
                 state.colors.tab_bar_unfocused_tab_background()
             };
-            let text_dimensions = self
-                .font_manager
-                .text_geometry(name, TAB_BAR_SECTION);
+            let text_dimensions = self.font_manager.text_geometry(name, TAB_BAR_SECTION);
             let text_width = text_dimensions.0;
             let draw_name = if split_width >= text_width { name } else { "" };
             let center_offset = (split_width - text_width) / 2;
@@ -320,9 +321,7 @@ impl<'a> Drawer<'a> {
     }
 
     pub const fn new(font_manager: &'a FontDrawer<'a>) -> Self {
-        Drawer {
-            font_manager,
-        }
+        Drawer { font_manager }
     }
 }
 
@@ -330,5 +329,5 @@ impl<'a> Drawer<'a> {
 struct Drawtarget {
     window: Window,
     map: bool,
-    name: heapless::String<WM_NAME_LIMIT>,
+    name: heapless::String<_WM_NAME_LIMIT>,
 }

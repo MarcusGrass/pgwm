@@ -1,5 +1,5 @@
+use crate::config::COLORS;
 use core::fmt::Debug;
-use crate::config::USED_DIFFERENT_COLOR_SEGMENTS;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Color {
@@ -75,36 +75,8 @@ pub struct ColorBuilder {
     pub shortcut_background: RGBA,
 }
 
-
-/**
-Just some default colors
- **/
-const fn default_white() -> RGBA {
-    (223, 223, 223, 0)
-}
-
-const fn default_dark_gray() -> RGBA {
-    (40, 44, 52, 1)
-}
-
-const fn default_light_gray() -> RGBA {
-    (56, 66, 82, 0)
-}
-
-const fn default_black() -> RGBA {
-    (28, 31, 36, 0)
-}
-
-const fn default_blue() -> RGBA {
-    (48, 53, 168, 0)
-}
-
-const fn default_orange() -> RGBA {
-    (224, 44, 16, 0)
-}
-
 pub struct Colors {
-    pub inner: [Color; USED_DIFFERENT_COLOR_SEGMENTS],
+    pub inner: [Color; COLORS.len()],
 }
 
 impl Colors {
@@ -194,45 +166,6 @@ impl Colors {
         self.inner[16]
     }
 }
-
-pub const COLORS: [RGBA; 17] = [
-    WINDOW_BORDER,
-    WINDOW_BORDER_HIGHLIGHTED,
-    WINDOW_BORDER_URGENT,
-    WORKSPACE_BAR_SELECTED_UNFOCUSED_WORKSPACE_BACKGROUND,
-    WORKSPACE_BAR_UNFOCUSED_WORKSPACE_BACKGROUND,
-    WORKSPACE_BAR_FOCUSED_WORKSPACE_BACKGROUND,
-    WORKSPACE_BAR_URGENT_WORKSPACE_BACKGROUND,
-    WORKSPACE_BAR_WORKSPACE_SECTION_TEXT,
-    WORKSPACE_BAR_CURRENT_WINDOW_TITLE_TEXT,
-    WORKSPACE_BAR_CURRENT_WINDOW_TITLE_BACKGROUND,
-    STATUS_BAR_TEXT,
-    STATUS_BAR_BACKGROUND,
-    TAB_BAR_TEXT,
-    TAB_BAR_FOCUSED_TAB_BACKGROUND,
-    TAB_BAR_UNFOCUSED_TAB_BACKGROUND,
-    SHORTCUT_TEXT,
-    SHORTCUT_BACKGROUND,
-];
-
-pub const WINDOW_BORDER: RGBA = default_black();
-pub const WINDOW_BORDER_HIGHLIGHTED: RGBA = default_white();
-pub const WINDOW_BORDER_URGENT: RGBA = default_orange();
-pub const WORKSPACE_BAR_SELECTED_UNFOCUSED_WORKSPACE_BACKGROUND: RGBA = default_light_gray();
-pub const WORKSPACE_BAR_UNFOCUSED_WORKSPACE_BACKGROUND: RGBA = default_black();
-pub const WORKSPACE_BAR_FOCUSED_WORKSPACE_BACKGROUND: RGBA = default_blue();
-pub const WORKSPACE_BAR_URGENT_WORKSPACE_BACKGROUND: RGBA = default_orange();
-pub const WORKSPACE_BAR_WORKSPACE_SECTION_TEXT: RGBA = default_white();
-pub const WORKSPACE_BAR_CURRENT_WINDOW_TITLE_TEXT: RGBA = default_white();
-pub const WORKSPACE_BAR_CURRENT_WINDOW_TITLE_BACKGROUND: RGBA = default_dark_gray();
-pub const STATUS_BAR_TEXT: RGBA = default_white();
-pub const STATUS_BAR_BACKGROUND: RGBA = default_light_gray();
-pub const TAB_BAR_TEXT: RGBA = default_white();
-pub const TAB_BAR_FOCUSED_TAB_BACKGROUND: RGBA = default_light_gray();
-pub const TAB_BAR_UNFOCUSED_TAB_BACKGROUND: RGBA = default_black();
-pub const SHORTCUT_TEXT: RGBA = default_white();
-pub const SHORTCUT_BACKGROUND: RGBA = default_black();
-
 
 const fn convert_up(v: u8) -> u16 {
     v as u16 * 256

@@ -1,7 +1,6 @@
 use alloc::vec::Vec;
 
 use heapless::binary_heap::Min;
-use heapless::FnvIndexSet;
 use smallmap::Map;
 use xcb_rust_protocol::con::XcbState;
 use xcb_rust_protocol::connection::render::{free_glyph_set, free_picture};
@@ -21,9 +20,14 @@ use pgwm_core::colors::Colors;
 use pgwm_core::config::key_map::{KeyBoardMappingKey, KeyboardMapping};
 use pgwm_core::config::mouse_map::MouseActionKey;
 use pgwm_core::config::workspaces::UserWorkspace;
-use pgwm_core::config::{Action, FontCfg, APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE, BAR_SHORTCUTS, WORKSPACE_SECTION_FONTS, TAB_BAR_HEIGHT, WINDOW_BORDER_WIDTH, WORKSPACE_BAR_WINDOW_NAME_PADDING, WINDOW_PADDING, STATUS_BAR_HEIGHT, KEYBOARD_MAPPINGS, MOUSE_MAPPINGS, SHOW_BAR_INITIALLY, USER_WORKSPACES};
+use pgwm_core::config::{
+    Action, FontCfg, BAR_SHORTCUTS, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE, KEYBOARD_MAPPINGS,
+    MOUSE_MAPPINGS, STATUS_BAR_HEIGHT, TAB_BAR_HEIGHT, USER_WORKSPACES, WINDOW_BORDER_WIDTH,
+    WINDOW_PADDING, WM_SHOW_BAR_INITIALLY, WORKSPACE_BAR_WINDOW_NAME_PADDING,
+    WORKSPACE_SECTION_FONTS,
+};
 #[cfg(feature = "status-bar")]
-use pgwm_core::config::{STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP};
+use pgwm_core::config::{_STATUS_BAR_CHECK_SEP, _STATUS_BAR_FIRST_SEP};
 use pgwm_core::geometry::{Dimensions, Line};
 use pgwm_core::push_heapless;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderPicture, RenderVisualInfo};
@@ -51,12 +55,7 @@ pub(crate) fn create_state<'a>(
     colors: Colors,
 ) -> Result<State> {
     let mut cookie_container = heapless::Vec::new();
-    let static_state = create_static_state(
-        call_wrapper,
-        screen,
-        &colors,
-        &mut cookie_container,
-    )?;
+    let static_state = create_static_state(call_wrapper, screen, &colors, &mut cookie_container)?;
     do_create_state(
         call_wrapper,
         font_manager,
@@ -158,7 +157,7 @@ fn do_create_state<'a>(
     font_manager: &'a FontDrawer<'a>,
     vis_info: RenderVisualInfo,
     screen: Screen,
-    mut intern_created_windows: FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
+    mut intern_created_windows: Map<Window, ()>,
     dying_windows: heapless::Vec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
     workspaces: Workspaces,
     colors: Colors,
@@ -170,6 +169,7 @@ fn do_create_state<'a>(
     mut cookie_container: heapless::Vec<VoidCookie, COOKIE_CONTAINER_CAPACITY>,
 ) -> Result<State> {
     let screen_dimensions = get_screen_dimensions(call_wrapper, &screen)?;
+
     let mut monitors = Vec::with_capacity(8);
     let mut max_bar_width = 0;
     for (i, dimensions) in screen_dimensions.into_iter().enumerate() {
@@ -186,7 +186,7 @@ fn do_create_state<'a>(
         }
 
         let tab_bar_win = call_wrapper.generate_id()?;
-        intern_created_windows.insert(tab_bar_win).unwrap();
+        intern_created_windows.insert(tab_bar_win, ()).unwrap();
         push_heapless!(
             cookie_container,
             create_tab_bar_win(
@@ -198,7 +198,7 @@ fn do_create_state<'a>(
             )?
         )?;
         let bar_win = call_wrapper.generate_id()?;
-        intern_created_windows.insert(bar_win).unwrap();
+        intern_created_windows.insert(bar_win, ()).unwrap();
         push_heapless!(
             cookie_container,
             create_workspace_bar_win(
@@ -220,7 +220,7 @@ fn do_create_state<'a>(
                 STATUS_BAR_HEIGHT as u16
             )?
         )?;
-        if SHOW_BAR_INITIALLY {
+        if WM_SHOW_BAR_INITIALLY {
             map_window(
                 &mut call_wrapper.uring,
                 &mut call_wrapper.xcb_state,
@@ -248,7 +248,7 @@ fn do_create_state<'a>(
             dimensions,
             hosted_workspace: i,
             last_focus: None,
-            show_bar: SHOW_BAR_INITIALLY,
+            show_bar: WM_SHOW_BAR_INITIALLY,
             window_title_display: heapless::String::from("pgwm"),
         };
         monitors.push(new_mon);
@@ -316,7 +316,7 @@ fn create_static_state<'a>(
     colors: &Colors,
     cookie_container: &mut heapless::Vec<VoidCookie, COOKIE_CONTAINER_CAPACITY>,
 ) -> Result<StaticState> {
-    let mut intern_created_windows = FnvIndexSet::new();
+    let mut intern_created_windows = Map::new();
     let gcs = create_gcs(call_wrapper, screen, colors)?;
     let tab_pixmap = call_wrapper.generate_id()?;
     push_heapless!(
@@ -326,7 +326,7 @@ fn create_static_state<'a>(
 
     let sequences_to_ignore = heapless::BinaryHeap::new();
     let check_win = call_wrapper.generate_id()?;
-    intern_created_windows.insert(check_win).unwrap();
+    intern_created_windows.insert(check_win, ()).unwrap();
     push_heapless!(
         cookie_container,
         create_wm_check_win(call_wrapper, screen, check_win)?
@@ -345,7 +345,7 @@ fn create_static_state<'a>(
 struct StaticState {
     wm_check_win: Window,
     sequences_to_ignore: heapless::BinaryHeap<u16, Min, BINARY_HEAP_LIMIT>,
-    intern_created_windows: FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
+    intern_created_windows: Map<Window, ()>,
 }
 
 fn create_tab_bar_win(
@@ -595,8 +595,7 @@ fn create_bar_geometry<'a>(
         workspaces,
         workspace_bar_window_name_padding,
     );
-    let shortcut_section =
-        create_shortcut_geometry(font_manager, mon_width, shortcut_padding);
+    let shortcut_section = create_shortcut_geometry(font_manager, mon_width, shortcut_padding);
     #[cfg(feature = "status-bar")]
     let status_section = create_status_section_geometry(
         font_manager,
@@ -622,13 +621,12 @@ fn create_status_section_geometry<'a>(
     checks: &[Check],
 ) -> StatusSection {
     use pgwm_core::config::STATUS_SECTION;
-    let mut check_lengths: heapless::Vec<
-        i16,
-        { pgwm_core::config::STATUS_BAR_UNIQUE_CHECK_LIMIT },
-    > = heapless::Vec::new();
+    let mut check_lengths: heapless::Vec<i16, { pgwm_core::config::STATUS_CHECKS.len() }> =
+        heapless::Vec::new();
     for check in checks {
         let length = match &check.check_type {
             CheckType::Battery(bc) => bc
+                .get_checks()
                 .iter()
                 .map(|bc| {
                     font_manager
@@ -661,10 +659,10 @@ fn create_status_section_geometry<'a>(
         let _ = check_lengths.push(length);
     }
     let sep_len = font_manager
-        .text_geometry(STATUS_BAR_CHECK_SEP, STATUS_SECTION)
+        .text_geometry(_STATUS_BAR_CHECK_SEP, STATUS_SECTION)
         .0;
     let first_sep = font_manager
-        .text_geometry(STATUS_BAR_FIRST_SEP, STATUS_SECTION)
+        .text_geometry(_STATUS_BAR_FIRST_SEP, STATUS_SECTION)
         .0;
     StatusSection::new(
         mon_width,
@@ -732,10 +730,7 @@ fn create_fixed_components<It: Iterator<Item = &'static str>>(
     // Equal spacing
     let mut max_width = 0;
     for (i, text) in it.enumerate() {
-        widths.push((
-            font_manager.text_geometry(text, fonts).0,
-            text,
-        ));
+        widths.push((font_manager.text_geometry(text, fonts).0, text));
         if widths[i].0 > max_width {
             max_width = widths[i].0;
         }
@@ -757,9 +752,7 @@ fn create_fixed_components<It: Iterator<Item = &'static str>>(
     (components, Line::new(x, total_width as i16))
 }
 
-fn init_keys(
-    call_wrapper: &mut CallWrapper,
-) -> Result<Map<KeyBoardMappingKey, Action>> {
+fn init_keys(call_wrapper: &mut CallWrapper) -> Result<Map<KeyBoardMappingKey, Action>> {
     let setup = call_wrapper.xcb_state.setup();
     let lo = setup.min_keycode;
     let hi = setup.max_keycode;
@@ -834,8 +827,7 @@ fn ungrab_keys(
 
 fn init_mouse() -> Map<MouseActionKey, Action> {
     let mut action_map = Map::new();
-    for mapping in MOUSE_MAPPINGS
-    {
+    for mapping in MOUSE_MAPPINGS {
         action_map.insert(
             MouseActionKey {
                 detail: mapping.button.0,

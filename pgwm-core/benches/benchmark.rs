@@ -1,9 +1,9 @@
 use tiny_bench::*;
 
-use pgwm_core::config::NUM_TILING_MODIFIERS;
+use pgwm_core::config::_NUM_TILING_MODIFIERS;
 use pgwm_core::geometry::layout::Layout;
 
-const VERTICAL_TILING_MODIFIERS: [f32; NUM_TILING_MODIFIERS] = [1.0; NUM_TILING_MODIFIERS];
+const VERTICAL_TILING_MODIFIERS: [f32; _NUM_TILING_MODIFIERS] = [1.0; _NUM_TILING_MODIFIERS];
 
 pub fn main() {
     let dims = VERTICAL_TILING_MODIFIERS;

@@ -1,7 +1,6 @@
 use alloc::format;
 use alloc::string::String;
 
-
 use time::{Month, OffsetDateTime, UtcOffset, Weekday};
 use tiny_std::time::SystemTime;
 
@@ -59,9 +58,7 @@ impl Format {
 
     #[must_use]
     pub const fn new(chunks: &'static [FormatChunk]) -> Self {
-        Self {
-            chunks
-        }
+        Self { chunks }
     }
 }
 
@@ -153,20 +150,20 @@ mod tests {
     #[test]
     fn formats_time() {
         let fmt = crate::status::time::Format::new(&[
-                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Year),
-                    crate::status::time::FormatChunk::Value(" "),
-                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Month),
-                    crate::status::time::FormatChunk::Value(" "),
-                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Day),
-                    crate::status::time::FormatChunk::Value(" w"),
-                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Week),
-                    crate::status::time::FormatChunk::Value(" "),
-                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Hour),
-                    crate::status::time::FormatChunk::Value(":"),
-                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Minute),
-                    crate::status::time::FormatChunk::Value(":"),
-                    crate::status::time::FormatChunk::Token(crate::status::time::Token::Second),
-                ]);
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Year),
+            crate::status::time::FormatChunk::Value(" "),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Month),
+            crate::status::time::FormatChunk::Value(" "),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Day),
+            crate::status::time::FormatChunk::Value(" w"),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Week),
+            crate::status::time::FormatChunk::Value(" "),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Hour),
+            crate::status::time::FormatChunk::Value(":"),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Minute),
+            crate::status::time::FormatChunk::Value(":"),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Second),
+        ]);
         let dt = OffsetDateTime::from_unix_timestamp_nanos(1_666_551_103_791_951_912i128).unwrap();
         let expect = "2022 Oct 23 w42 18:51:43";
         assert_eq!(expect, fmt.format(dt).unwrap());

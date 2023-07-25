@@ -1,7 +1,9 @@
 use pgwm_core::colors::Color;
-use pgwm_core::config::{SHORTCUT_SECTION, STATUS_BAR_HEIGHT, WORKSPACE_BAR_WINDOW_NAME_PADDING, WORKSPACE_SECTION_FONTS};
 #[cfg(feature = "status-bar")]
-use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
+use pgwm_core::config::_STATUS_BAR_CHECK_CONTENT_LIMIT;
+use pgwm_core::config::{
+    SHORTCUT_SECTION, STATUS_BAR_HEIGHT, WORKSPACE_BAR_WINDOW_NAME_PADDING, WORKSPACE_SECTION_FONTS,
+};
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::state::State;
 
@@ -177,12 +179,7 @@ impl<'a> BarManager<'a> {
                 &mon.bar_win,
                 name,
                 WORKSPACE_SECTION_FONTS,
-                Dimensions::new(
-                    ws.position.length,
-                    STATUS_BAR_HEIGHT,
-                    ws.position.start,
-                    0,
-                ),
+                Dimensions::new(ws.position.length, STATUS_BAR_HEIGHT, ws.position.start, 0),
                 ws.position.length,
                 ws.write_offset,
                 0,
@@ -214,7 +211,7 @@ impl<'a> BarManager<'a> {
     pub(crate) fn update_status(
         &self,
         call_wrapper: &mut CallWrapper,
-        content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+        content: heapless::String<_STATUS_BAR_CHECK_CONTENT_LIMIT>,
         content_ind: usize,
         state: &mut State,
     ) -> Result<()> {
@@ -225,7 +222,7 @@ impl<'a> BarManager<'a> {
     fn draw_status(
         &self,
         call_wrapper: &mut CallWrapper,
-        content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+        content: heapless::String<_STATUS_BAR_CHECK_CONTENT_LIMIT>,
         content_ind: usize,
         state: &mut State,
     ) -> Result<()> {

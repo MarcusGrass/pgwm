@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use unix_print::unix_eprintln;
 use xcb_rust_protocol::cookie::FixedCookie;
 use xcb_rust_protocol::helpers::properties::WmHints;
@@ -11,8 +12,11 @@ use xcb_rust_protocol::util::AsIter32;
 
 use pgwm_core::config::mouse_map::MouseTarget;
 #[cfg(feature = "status-bar")]
-use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
-use pgwm_core::config::{Action, APPLICATION_WINDOW_LIMIT, DESTROY_AFTER, KILL_AFTER, WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT, WS_WINDOW_LIMIT};
+use pgwm_core::config::_STATUS_BAR_CHECK_CONTENT_LIMIT;
+use pgwm_core::config::{
+    Action, CLIENT_WINDOW_DESTROY_AFTER, CLIENT_WINDOW_KILL_AFTER, WS_WINDOW_LIMIT,
+    _WM_CLASS_NAME_LIMIT, _WM_NAME_LIMIT,
+};
 use pgwm_core::geometry::draw::Mode;
 use pgwm_core::geometry::layout::Layout;
 use pgwm_core::geometry::Dimensions;
@@ -71,33 +75,23 @@ impl<'a> Manager<'a> {
         let subwindows = call_wrapper
             .query_subwindows(state.screen.root)?
             .await_children(call_wrapper)?;
-        let mut children_with_properties: heapless::Vec<ScanProperties, APPLICATION_WINDOW_LIMIT> =
-            heapless::Vec::new();
+        let mut children_with_properties: Vec<ScanProperties> = Vec::new();
         for win in subwindows {
             let attr_cookie = call_wrapper.get_window_attributes(win)?;
             let is_transient = call_wrapper.get_is_transient_for(win)?;
             let wm_state = call_wrapper.get_wm_state(win)?;
             let window_properties = call_wrapper.get_window_properties(win)?;
 
-            push_heapless!(
-                children_with_properties,
-                ScanProperties {
-                    window: win,
-                    attributes: attr_cookie,
-                    transient_cookie: is_transient,
-                    wm_state,
-                    prop_cookie: window_properties,
-                }
-            )?;
+            children_with_properties.push(ScanProperties {
+                window: win,
+                attributes: attr_cookie,
+                transient_cookie: is_transient,
+                wm_state,
+                prop_cookie: window_properties,
+            });
         }
-        let mut transients: heapless::Vec<
-            (Window, WindowPropertiesCookie),
-            APPLICATION_WINDOW_LIMIT,
-        > = heapless::Vec::new();
-        let mut non_transients: heapless::Vec<
-            (Window, WindowPropertiesCookie),
-            APPLICATION_WINDOW_LIMIT,
-        > = heapless::Vec::new();
+        let mut transients: Vec<(Window, WindowPropertiesCookie)> = Vec::new();
+        let mut non_transients: Vec<(Window, WindowPropertiesCookie)> = Vec::new();
         for ScanProperties {
             window,
             attributes,
@@ -114,12 +108,12 @@ impl<'a> Manager<'a> {
                     // Additionally, when the WM starts up, if a WM state is set that's a pretty good
                     // heuristic for whether or not to manage.
                     && (attr.map_state == MapStateEnum::VIEWABLE || wm_state.is_some())
-                    && !state.intern_created_windows.contains(&window)
+                    && !state.intern_created_windows.contains_key(&window)
                 {
                     if transient_cookie.await_card(call_wrapper)?.is_some() {
-                        push_heapless!(transients, (window, prop_cookie))?;
+                        transients.push((window, prop_cookie));
                     } else {
-                        push_heapless!(non_transients, (window, prop_cookie))?;
+                        non_transients.push((window, prop_cookie));
                     }
                 } else {
                     transient_cookie.inner.forget(&mut call_wrapper.xcb_state);
@@ -1608,17 +1602,17 @@ impl<'a> Manager<'a> {
                         "Got new class names {class_names:?} for win {}",
                         event.window
                     );
-                    let remap =
-                        if let Some(mw) = state.workspaces.get_managed_win_mut(event.window) {
-                            if mw.properties.class == class_names {
-                                false
-                            } else {
-                                mw.properties.class = class_names.clone();
-                                true
-                            }
-                        } else {
+                    let remap = if let Some(mw) = state.workspaces.get_managed_win_mut(event.window)
+                    {
+                        if mw.properties.class == class_names {
                             false
-                        };
+                        } else {
+                            mw.properties.class = class_names.clone();
+                            true
+                        }
+                    } else {
+                        false
+                    };
                     if remap {
                         self.manually_remap_win(call_wrapper, event.window, &class_names, state)?;
                     }
@@ -1798,7 +1792,7 @@ impl<'a> Manager<'a> {
         &self,
         call_wrapper: &mut CallWrapper,
         mon_ind: usize,
-        new_name: heapless::String<WM_NAME_LIMIT>,
+        new_name: heapless::String<_WM_NAME_LIMIT>,
         state: &mut State,
     ) -> Result<()> {
         state.monitors[mon_ind]
@@ -1813,7 +1807,7 @@ impl<'a> Manager<'a> {
         &self,
         call_wrapper: &mut CallWrapper,
         win: Window,
-        class_names: &heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>,
+        class_names: &heapless::Vec<heapless::String<_WM_CLASS_NAME_LIMIT>, 4>,
         state: &mut State,
     ) -> Result<()> {
         if let Some(mapped) = state.workspaces.find_ws_containing_window(win) {
@@ -1945,7 +1939,7 @@ impl<'a> Manager<'a> {
     pub(crate) fn draw_status(
         &self,
         call_wrapper: &mut CallWrapper,
-        content: heapless::String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+        content: heapless::String<_STATUS_BAR_CHECK_CONTENT_LIMIT>,
         content_ind: usize,
         state: &mut State,
     ) -> Result<()> {
@@ -2055,7 +2049,7 @@ impl<'a> Manager<'a> {
 
     pub(crate) fn destroy_marked(call_wrapper: &mut CallWrapper, state: &mut State) -> Result<()> {
         while let Some(candidate) = state.dying_windows.first().copied() {
-            if candidate.should_kill(KILL_AFTER) {
+            if candidate.should_kill(CLIENT_WINDOW_KILL_AFTER) {
                 call_wrapper.send_kill(candidate.win)?;
                 pgwm_core::util::vec_ops::remove(&mut state.dying_windows, 0);
                 pgwm_utils::debug!("Sent kill for marked window {candidate:?}");
@@ -2089,7 +2083,7 @@ impl<'a> Manager<'a> {
         call_wrapper.send_delete(win)?;
         push_heapless!(
             state.dying_windows,
-            WinMarkedForDeath::new(win, DESTROY_AFTER)
+            WinMarkedForDeath::new(win, CLIENT_WINDOW_DESTROY_AFTER)
         )?;
         pgwm_utils::debug!("Marked win {win} for death");
         Ok(())

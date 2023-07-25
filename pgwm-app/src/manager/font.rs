@@ -9,7 +9,10 @@ use tiny_std::io::Read;
 use xcb_rust_protocol::proto::render::{Glyphinfo, Glyphset};
 
 use pgwm_core::colors::Color;
-use pgwm_core::config::{CHAR_REMAP, CHAR_REMAP_FONTS, FontCfg, SHORTCUT_SECTION, TAB_BAR_SECTION, WINDOW_NAME_DISPLAY_SECTION, WORKSPACE_SECTION_FONTS};
+use pgwm_core::config::{
+    FontCfg, CHAR_REMAP, CHAR_REMAP_FONTS, SHORTCUT_SECTION, TAB_BAR_SECTION,
+    WINDOW_NAME_DISPLAY_SECTION, WORKSPACE_SECTION_FONTS,
+};
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
 

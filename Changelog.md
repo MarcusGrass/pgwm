@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
+## [v0.5.0]
+### Fixed
+
+### Added
+
+### Changed
+- Removed config file, running config-as-code instead, 
+reducing binary-size dramatically.  
+- Updated dependencies, and removed dependency on some 
+serialization libraries.  
+
 ## [v0.4.0] - 2023-06-11
 ### Fixed
 
