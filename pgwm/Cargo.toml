@@ -6,15 +6,13 @@ license = "GPL-3.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-config-file = ["pgwm-app/config-file"]
-default = ["xinerama", "status-bar", "config-file"]
+default = ["xinerama", "status-bar"]
 debug = ["pgwm-app/debug"]
 xinerama = ["pgwm-app/xinerama"]
 status-bar = ["pgwm-app/status-bar"]
 perf-test = ["pgwm-app/perf-test"]
 
 [dependencies]
-dlmalloc = { git = "https://github.com/MarcusGrass/dlmalloc-rs.git", rev = "a8e9fc0d2c03a06810530a48abd37fecc71e8109", default-features = false }
 pgwm-app = { path = "../pgwm-app", default-features = false }
-tiny-std = { workspace = true, features = ["start", "alloc", "symbols", "aux", "vdso"], default-features = false }
+tiny-std = { workspace = true, features = ["alloc", "executable", "global-allocator"], default-features = false }
 unix-print = { workspace = true }

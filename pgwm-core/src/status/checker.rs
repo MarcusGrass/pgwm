@@ -7,9 +7,7 @@ use heapless::String;
 use smallmap::{Collapse, Map};
 use tiny_std::time::Instant;
 
-use crate::config::{
-    STATUS_BAR_BAT_SEGMENT_LIMIT, STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_BAR_UNIQUE_CHECK_LIMIT,
-};
+use crate::config::{STATUS_CHECKS, _STATUS_BAR_CHECK_CONTENT_LIMIT};
 use crate::format_heapless;
 use crate::status::cpu::LoadChecker;
 use crate::status::net::{ThroughputChecker, ThroughputPerSec};
@@ -17,38 +15,65 @@ use crate::status::sys::bat::parse_battery_percentage;
 use crate::status::sys::mem::{parse_raw, Data};
 use crate::status::time::ClockFormatter;
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Check {
     pub interval: u64,
     pub check_type: CheckType,
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[cfg_attr(feature = "config-file", serde(tag = "kind", content = "args"))]
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum CheckType {
-    Battery(heapless::Vec<BatFormat, STATUS_BAR_BAT_SEGMENT_LIMIT>),
+    Battery(BatChecks),
     Cpu(CpuFormat),
     Net(NetFormat),
     Mem(MemFormat),
     Date(DateFormat),
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct BatChecks {
+    checks: &'static [BatFormat],
+}
+
+impl BatChecks {
+    #[must_use]
+    pub const fn new(checks: &'static [BatFormat]) -> Self {
+        let mut ind = 0;
+        let mut last = u8::MAX;
+        while ind < checks.len() {
+            if checks[ind].above > last {
+                panic!("Found a battery check in ascending order, descending order necessary");
+            } else if checks[ind].above == last {
+                panic!("Fonud two battery checks on the same threshold");
+            } else {
+                last = checks[ind].above;
+            }
+            ind += 1;
+        }
+        Self { checks }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn get_checks(&self) -> &'static [BatFormat] {
+        self.checks
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BatFormat {
     pub(crate) above: u8,
-    pub(crate) icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    pub(crate) icon: &'static str,
 }
 
 impl BatFormat {
     #[must_use]
-    pub fn new(above: u8, icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>) -> Self {
+    pub fn new(above: u8, icon: &'static str) -> Self {
         Self { above, icon }
     }
 
-    fn format_bat(&self, capacity: u8) -> Option<String<STATUS_BAR_CHECK_CONTENT_LIMIT>> {
+    fn format_bat(&self, capacity: u8) -> Option<String<_STATUS_BAR_CHECK_CONTENT_LIMIT>> {
         if self.above <= capacity {
             Some(format_heapless!("{} {}%", self.icon, capacity))
         } else {
@@ -57,25 +82,24 @@ impl BatFormat {
     }
 
     #[must_use]
-    pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+    pub fn max_length_content(&self) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
         format_heapless!("{} 100%", self.icon)
     }
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CpuFormat {
-    icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    icon: &'static str,
     decimals: usize,
 }
 
 impl CpuFormat {
     #[must_use]
-    pub fn new(icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>, decimals: usize) -> Self {
+    pub const fn new(icon: &'static str, decimals: usize) -> Self {
         Self { icon, decimals }
     }
 
-    fn format_cpu(&self, load_percentage: f64) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+    fn format_cpu(&self, load_percentage: f64) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             self.decimals + 4
         } else {
@@ -91,7 +115,7 @@ impl CpuFormat {
     }
 
     #[must_use]
-    pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+    pub fn max_length_content(&self) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             self.decimals + 4
         } else {
@@ -107,28 +131,23 @@ impl CpuFormat {
     }
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NetFormat {
-    icon_up: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-    icon_down: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    icon_up: &'static str,
+    icon_down: &'static str,
     decimals: usize,
 }
 
 impl NetFormat {
     #[must_use]
-    pub fn new(
-        icon_up: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-        icon_down: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-        decimals: usize,
-    ) -> Self {
+    pub const fn new(icon_up: &'static str, icon_down: &'static str, decimals: usize) -> Self {
         Self {
             icon_up,
             icon_down,
             decimals,
         }
     }
-    fn format_net(&self, net_stats: ThroughputPerSec) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+    fn format_net(&self, net_stats: ThroughputPerSec) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let (up_short, up_val) = compress_to_display(net_stats.up);
         let chars = if self.decimals > 0 {
             self.decimals + 4
@@ -150,7 +169,7 @@ impl NetFormat {
     }
 
     #[must_use]
-    pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+    pub fn max_length_content(&self) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             self.decimals + 4
         } else {
@@ -185,20 +204,19 @@ fn compress_to_display(val: f64) -> (&'static str, f64) {
     }
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MemFormat {
-    icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    icon: &'static str,
     decimals: usize,
 }
 
 impl MemFormat {
     #[must_use]
-    pub fn new(icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>, decimals: usize) -> Self {
+    pub const fn new(icon: &'static str, decimals: usize) -> Self {
         Self { icon, decimals }
     }
 
-    fn format_mem(&self, mem_info: Data) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+    fn format_mem(&self, mem_info: Data) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             4 + self.decimals
         } else {
@@ -216,7 +234,7 @@ impl MemFormat {
     }
 
     #[must_use]
-    pub fn max_length_content(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+    pub fn max_length_content(&self) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let chars = if self.decimals > 0 {
             self.decimals + 4
         } else {
@@ -233,19 +251,15 @@ impl MemFormat {
     }
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DateFormat {
-    icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    icon: &'static str,
     clock_formatter: ClockFormatter,
 }
 
 impl DateFormat {
     #[must_use]
-    pub fn new(
-        icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-        clock_formatter: ClockFormatter,
-    ) -> Self {
+    pub const fn new(icon: &'static str, clock_formatter: ClockFormatter) -> Self {
         Self {
             icon,
             clock_formatter,
@@ -253,7 +267,7 @@ impl DateFormat {
     }
 
     #[must_use]
-    pub fn format_date(&self) -> String<STATUS_BAR_CHECK_CONTENT_LIMIT> {
+    pub fn format_date(&self) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
         let output = self
             .clock_formatter
             .format_now()
@@ -298,13 +312,13 @@ impl<'a> Ord for PackagedCheck<'a> {
 }
 
 pub struct CheckResult {
-    pub content: Option<String<STATUS_BAR_CHECK_CONTENT_LIMIT>>,
+    pub content: Option<String<_STATUS_BAR_CHECK_CONTENT_LIMIT>>,
     pub position: usize,
     pub next_check: Instant,
 }
 
 pub struct CheckSubmitAdvice {
-    pub submit_indices: heapless::FnvIndexSet<NextCheck, STATUS_BAR_UNIQUE_CHECK_LIMIT>,
+    pub submit_indices: heapless::FnvIndexSet<NextCheck, { STATUS_CHECKS.len() }>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -325,7 +339,7 @@ impl Collapse for NextCheck {
 impl<'a> Checker<'a> {
     pub fn get_all_check_submits(
         &mut self,
-    ) -> heapless::Vec<(NextCheck, Instant), STATUS_BAR_UNIQUE_CHECK_LIMIT> {
+    ) -> heapless::Vec<(NextCheck, Instant), { STATUS_CHECKS.len() }> {
         let mut all = heapless::Vec::new();
         for (next, check) in self.checks_by_key.iter_mut() {
             let _ = all.push((*next, check.next_time));
@@ -339,9 +353,12 @@ impl<'a> Checker<'a> {
     ) -> Option<CheckResult> {
         let packaged = self.checks_by_key.get_mut(&completed)?;
         let content = match &packaged.check.check_type {
-            CheckType::Battery(limits) => parse_battery_percentage(content)
-                .ok()
-                .and_then(|bat| limits.iter().find_map(|limit| limit.format_bat(bat))),
+            CheckType::Battery(limits) => parse_battery_percentage(content).ok().and_then(|bat| {
+                limits
+                    .get_checks()
+                    .iter()
+                    .find_map(|limit| limit.format_bat(bat))
+            }),
             CheckType::Cpu(fmt) => self
                 .cpu_checker
                 .parse_load(content)
@@ -363,14 +380,9 @@ impl<'a> Checker<'a> {
         })
     }
 
-    pub fn new(checks: &'a mut heapless::Vec<Check, STATUS_BAR_UNIQUE_CHECK_LIMIT>) -> Self {
+    pub fn new(checks: &'a mut [Check]) -> Self {
         let mut checks_by_key = Map::new();
         let sync_start_time = Instant::now();
-        for check in checks.iter_mut() {
-            if let CheckType::Battery(bf) = &mut check.check_type {
-                bf.sort_by(|a, b| a.above.cmp(&b.above));
-            }
-        }
         for (position, check) in checks.iter().enumerate() {
             match check.check_type {
                 CheckType::Battery(_) => {
@@ -446,13 +458,13 @@ mod checker_tests {
     #[test]
     #[cfg(unix)]
     fn can_real_run_checks() {
-        let mut checks = heapless::Vec::new();
+        let mut checks: heapless::Vec<Check, 1> = heapless::Vec::new();
 
         let interval = Duration::from_millis(10_000);
         let _ = checks.push(Check {
             interval: interval.as_millis() as u64,
             check_type: CheckType::Cpu(CpuFormat {
-                icon: heapless::String::default(),
+                icon: "hello",
                 decimals: 2,
             }),
         });

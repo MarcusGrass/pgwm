@@ -3,9 +3,6 @@ set -e
 HELP_MSG="Usage:
     --bin-dir=<directory to install binary>
       No trailing slash. If not supplied it will try \$HOME/.local/bin, if \$HOME is unset it will fail.
-    --config-dir=<directory to install default configuration>
-      No trailing slash, If not supplied it will try \$XDG_CONFIG_HOME/pgwm,
-      if \$XDG_CONFIG_HOME is unset will try \$HOME/.config/pgwm, if \$HOME is unset it will fail.
     --profile=<release|lto>
       Defaults to 'lto'
     --help
@@ -18,8 +15,6 @@ do
   VALUE="$(echo "$ARG" | cut -d '=' -f2)"
   if [ "$KEY" = "--bin-dir" ]; then
     DESTDIR="$VALUE"
-  elif [ "$KEY" = "--config-dir" ]; then
-    CONFIG_DIR="$VALUE"
   elif [ "$KEY" = "--profile" ]; then
     PROFILE="$VALUE"
   elif [ "$KEY" = "--help" ]; then
@@ -38,16 +33,6 @@ if [ -z "$DESTDIR" ]; then
     exit 1
   fi
 fi
-if [ -z "$CONFIG_DIR" ]; then
-  if [ -n "$XDG_CONFIG_HOME" ]; then
-    CONFIG_DIR="$XDG_CONFIG_HOME/pgwm"
-  elif [ -n "$HOME" ]; then
-    CONFIG_DIR="$HOME/.config/pgwm"
-  else
-    echo "No CONFIG_DIR supplied and neither XDG_CONFIG_HOME nor HOME environment variable is not set for a fallback install directory"
-    exit 1
-  fi
-fi
 if [ -z "$PROFILE" ]; then
   PROFILE=lto
 fi
@@ -55,22 +40,13 @@ fi
 # This is kind of a traversty though
 printf "APP :=pgwm
 DESTDIR :=%s
-CONFIG_DIR :=%s
 PROFILE :=%s
 build:
 \t@./build_wm.sh --profile=\$(PROFILE)
 install:
 \t@test -d \$(DESTDIR) || echo \"Install directory \$(DESTDIR) not found, will try to create it\"; mkdir -p \$(DESTDIR)
 \t@install target/x86_64-unknown-linux-gnu/\$(PROFILE)/\$(APP) \$(DESTDIR)/\$(APP)
-\t@if [ -f \$(CONFIG_DIR)/pgwm.toml ]; then \
-\t\techo \"Configuration file exists, will not override with default\"; \
-\telif [ -d \$(CONFIG_DIR) ]; then \
-\t\tinstall pgwm.toml \$(CONFIG_DIR)/pgwm.toml; \
-\telse \
-\t\techo \"Configuration directory specified but does not exist, will try to create it\"; \
-\t\tmkdir -p \$(CONFIG_DIR) && echo \"Placing configuration at \$(CONFIG_DIR)/pgwm.toml\" && install pgwm.toml \$(CONFIG_DIR)/pgwm.toml; \
-\tfi
-\t@echo \"Installed binary at \$(DESTDIR)/\$(APP), configuration was installed at \$(CONFIG_DIR)/pgwm.toml (if not already present)\"
+\t@echo \"Installed binary at \$(DESTDIR)/\$(APP)\"
 CLEAN_CONFIG ?=
 ifndef CLEAN_CONFIG
 	CLEAN_CONFIG :=0
@@ -78,19 +54,12 @@ endif
 uninstall:
 	@if [ -f \$(DESTDIR)/pgwm ]; then \
   		rm \$(DESTDIR)/pgwm ;\
-  	fi; \
-  	if [ \$(CLEAN_CONFIG) -eq 1 ]; then \
-  		if [ -f \$(CONFIG_DIR)/pgwm.toml ]; then \
-  			rm \$(CONFIG_DIR)/pgwm.toml; \
-  		fi; \
-  	else \
-  		echo \"CLEAN_CONFIG = \$(CLEAN_CONFIG), not removing \$(CONFIG_DIR)/pgwm.toml\"; \
-  	fi; \
+  fi; \
 
 clean:
 \t@cargo clean
 help:
 \t@echo \"usage: make \"
 \t@echo \"       make install\"
-\t@echo \"       make uninstall [CLEAN_CONFIG=<0|1>]\"
-\t@echo \"       make clean\"" "$DESTDIR" "$CONFIG_DIR" "$PROFILE" > Makefile
+\t@echo \"       make uninstall\"
+\t@echo \"       make clean\"" "$DESTDIR" "$PROFILE" > Makefile

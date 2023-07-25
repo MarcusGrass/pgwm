@@ -1,4 +1,3 @@
-use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::{Add, Sub};
 use core::time::Duration;
@@ -9,6 +8,7 @@ use tiny_std::time::Instant;
 use xcb_rust_protocol::proto::xproto::Timestamp;
 use xcb_rust_protocol::proto::xproto::{Screen, Window};
 
+use crate::colors::Colors;
 use crate::config::key_map::KeyBoardMappingKey;
 use crate::config::mouse_map::{MouseActionKey, MouseTarget};
 use crate::config::Action;
@@ -18,8 +18,7 @@ use crate::geometry::Dimensions;
 use crate::render::DoubleBufferedRenderPicture;
 use crate::state::bar_geometry::BarGeometry;
 use crate::{
-    colors::Colors,
-    config::{APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE},
+    config::{BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE},
     state::workspace::Workspaces,
 };
 
@@ -30,7 +29,7 @@ pub mod workspace;
 #[allow(clippy::struct_excessive_bools)]
 pub struct State {
     pub wm_check_win: Window,
-    pub intern_created_windows: heapless::FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
+    pub intern_created_windows: Map<Window, ()>,
     pub dying_windows: heapless::Vec<WinMarkedForDeath, DYING_WINDOW_CACHE>,
     pub drag_window: Option<(Window, DragPosition)>,
     pub focused_mon: usize,
@@ -41,16 +40,8 @@ pub struct State {
     pub workspaces: Workspaces,
     pub colors: Colors,
     pub window_border_width: u32,
-    pub status_bar_height: i16,
-    pub tab_bar_height: i16,
     pub window_padding: i16,
-    pub pad_while_tabbed: bool,
-    pub workspace_bar_window_name_padding: u16,
-    pub cursor_name: String,
     pub pointer_grabbed: bool,
-    pub destroy_after: u64,
-    pub kill_after: u64,
-    pub show_bar_initially: bool,
     pub mouse_mapping: Map<MouseActionKey, Action>,
     pub key_mapping: Map<KeyBoardMappingKey, Action>,
     pub last_timestamp: Timestamp,
@@ -301,7 +292,6 @@ impl WinMarkedForDeath {
 
 #[cfg(test)]
 mod tests {
-    use alloc::string::String;
     use alloc::vec;
 
     use smallmap::Map;
@@ -309,7 +299,7 @@ mod tests {
     use xcb_rust_protocol::CURRENT_TIME;
 
     use crate::colors::{Color, Colors};
-    use crate::config::{Cfg, USED_DIFFERENT_COLOR_SEGMENTS};
+    use crate::config::{COLORS, USER_WORKSPACES};
     use crate::geometry::{Dimensions, Line};
     use crate::render::{DoubleBufferedRenderPicture, RenderPicture};
     use crate::state::bar_geometry::{
@@ -320,7 +310,6 @@ mod tests {
     use crate::state::{Monitor, State};
 
     fn create_base_state() -> State {
-        let cfg = Cfg::default();
         let monitor0 = Monitor {
             bar_win: DoubleBufferedRenderPicture {
                 window: RenderPicture {
@@ -427,16 +416,13 @@ mod tests {
             show_bar: false,
             window_title_display: heapless::String::default(),
         };
-        let pixels: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> =
-            std::iter::repeat_with(|| Color {
-                pixel: 0,
-                bgra8: [0, 0, 0, 0],
-            })
-            .take(USED_DIFFERENT_COLOR_SEGMENTS)
-            .collect();
+        let pixels: [Color; COLORS.len()] = [Color {
+            pixel: 0,
+            bgra8: [0, 0, 0, 0],
+        }; COLORS.len()];
         State {
             wm_check_win: 0,
-            intern_created_windows: heapless::IndexSet::default(),
+            intern_created_windows: Map::default(),
             dying_windows: heapless::Vec::default(),
             drag_window: None,
             focused_mon: 0,
@@ -461,19 +447,11 @@ mod tests {
             },
             sequences_to_ignore: heapless::BinaryHeap::default(),
             monitors: vec![monitor0, monitor1],
-            workspaces: Workspaces::create_empty(&cfg.workspaces, cfg.tiling_modifiers).unwrap(),
-            colors: Colors::from_vec(pixels),
+            workspaces: Workspaces::create_empty(&USER_WORKSPACES).unwrap(),
+            colors: Colors { inner: pixels },
             window_border_width: 0,
-            status_bar_height: 0,
-            tab_bar_height: 0,
             window_padding: 0,
-            pad_while_tabbed: false,
-            workspace_bar_window_name_padding: 0,
-            cursor_name: String::new(),
             pointer_grabbed: false,
-            destroy_after: 0,
-            kill_after: 0,
-            show_bar_initially: true,
             mouse_mapping: Map::default(),
             key_mapping: Map::default(),
             last_timestamp: CURRENT_TIME,

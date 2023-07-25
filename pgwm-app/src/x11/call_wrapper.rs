@@ -31,8 +31,8 @@ use xcb_rust_protocol::proto::xproto::{
 use xcb_rust_protocol::{CURRENT_TIME, NONE};
 
 use pgwm_core::config::{
-    APPLICATION_WINDOW_LIMIT, WINDOW_MANAGER_NAME, WINDOW_MANAGER_NAME_BUF_SIZE,
-    WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT,
+    STATUS_BAR_HEIGHT, WINDOW_MANAGER_NAME, X11_CURSOR_NAME, _WINDOW_MANAGER_NAME_BUF_SIZE,
+    _WM_CLASS_NAME_LIMIT, _WM_NAME_LIMIT,
 };
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::push_heapless;
@@ -372,7 +372,7 @@ impl CallWrapper {
             .chars()
             .chain(core::iter::once('\u{0}'))
             .map(|ch| ch as u32)
-            .collect::<heapless::Vec<u32, WINDOW_MANAGER_NAME_BUF_SIZE>>();
+            .collect::<heapless::Vec<u32, _WINDOW_MANAGER_NAME_BUF_SIZE>>();
         change_property32(
             &mut self.uring,
             &mut self.xcb_state,
@@ -427,9 +427,9 @@ impl CallWrapper {
             AtomEnum::CARDINAL.0,
             &[
                 0,
-                state.status_bar_height as u32,
+                STATUS_BAR_HEIGHT as u32,
                 state.screen.width_in_pixels as u32,
-                state.screen.height_in_pixels as u32 - state.status_bar_height as u32,
+                state.screen.height_in_pixels as u32 - STATUS_BAR_HEIGHT as u32,
             ],
             true,
         )?;
@@ -735,7 +735,7 @@ impl CallWrapper {
             .cursor(CursorEnum(cursor_handle.load_cursor(
                 &mut self.uring,
                 &mut self.xcb_state,
-                state.cursor_name.as_str(),
+                X11_CURSOR_NAME,
                 XcbEnv::default(),
             )?));
 
@@ -1594,7 +1594,7 @@ impl NameCookie {
     pub(crate) fn await_name(
         self,
         con: &mut CallWrapper,
-    ) -> Result<Option<heapless::String<WM_NAME_LIMIT>>> {
+    ) -> Result<Option<heapless::String<_WM_NAME_LIMIT>>> {
         if let Ok(wm) = self.inner.reply(&mut con.uring, &mut con.xcb_state) {
             utf8_heapless(wm.value)
         } else {
@@ -1616,7 +1616,7 @@ impl WmClassCookie {
     pub(crate) fn await_class_names(
         self,
         con: &mut CallWrapper,
-    ) -> Result<Option<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>> {
+    ) -> Result<Option<heapless::Vec<heapless::String<_WM_CLASS_NAME_LIMIT>, 4>>> {
         Ok(extract_wm_class(
             self.inner.reply(&mut con.uring, &mut con.xcb_state)?,
         ))
@@ -1625,7 +1625,7 @@ impl WmClassCookie {
 
 fn extract_wm_class(
     class_response: GetPropertyReply,
-) -> Option<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>> {
+) -> Option<heapless::Vec<heapless::String<_WM_CLASS_NAME_LIMIT>, 4>> {
     // Already allocated vec
     let raw_utf8 = String::from_utf8(class_response.value);
     if let Ok(raw_utf8) = &raw_utf8 {
@@ -1634,7 +1634,7 @@ fn extract_wm_class(
             .filter(|s| !s.is_empty())
             .map(heapless::String::from)
             // Avoiding another alloc here
-            .collect::<heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>>();
+            .collect::<heapless::Vec<heapless::String<_WM_CLASS_NAME_LIMIT>, 4>>();
         Some(complete_names)
     } else {
         pgwm_utils::debug!("Failed to parse class response value as utf-8");
@@ -1928,13 +1928,9 @@ pub(crate) struct QueryTreeCookie {
 }
 
 impl QueryTreeCookie {
-    pub(crate) fn await_children(
-        self,
-        con: &mut CallWrapper,
-    ) -> Result<heapless::Vec<Window, APPLICATION_WINDOW_LIMIT>> {
+    pub(crate) fn await_children(self, con: &mut CallWrapper) -> Result<Vec<Window>> {
         let tree_reply = self.inner.reply(&mut con.uring, &mut con.xcb_state)?;
-        Ok(heapless::Vec::from_slice(tree_reply.children.as_slice())
-            .map_err(|_| pgwm_core::error::Error::HeaplessInstantiate)?)
+        Ok(tree_reply.children)
     }
 }
 

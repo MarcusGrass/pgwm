@@ -15,16 +15,6 @@ pub enum Error {
     Syscall(StdError),
     #[cfg(feature = "status-bar")]
     Check,
-    #[cfg(feature = "config-file")]
-    ConfigDirFind,
-    #[cfg(feature = "config-file")]
-    ConfigFileFind,
-    #[cfg(feature = "config-file")]
-    ConfigParse(toml::de::Error),
-    #[cfg(feature = "config-file")]
-    ConfigLogic(&'static str),
-    #[cfg(feature = "config-file")]
-    ConfigP(alloc::string::String),
     #[cfg(feature = "status-bar")]
     ParseFloat(core::num::ParseFloatError),
     #[cfg(feature = "status-bar")]
@@ -45,8 +35,6 @@ pub enum Error {
     Time(alloc::string::String),
 }
 from_error!(StdError, Error, Syscall);
-#[cfg(feature = "config-file")]
-from_error!(toml::de::Error, Error, ConfigParse);
 #[cfg(feature = "status-bar")]
 from_error!(core::num::ParseFloatError, Error, ParseFloat);
 #[cfg(feature = "status-bar")]
@@ -63,16 +51,6 @@ impl core::fmt::Display for Error {
             Error::HeaplessInstantiate => f.write_str("Heapless instantiation impossible, too many items for heapless max_size"),
             #[cfg(feature = "status-bar")]
             Error::Check => f.write_str("Channel error an check"),
-            #[cfg(feature = "config-file")]
-            Error::ConfigDirFind => f.write_str("Failed to find appropriate user config directory after searching environment variables $XDG_CONFIG_HOME falling back to $HOME/.config"),
-            #[cfg(feature = "config-file")]
-            Error::ConfigFileFind => f.write_str("Managed to find user config directory but not a config file"),
-            #[cfg(feature = "config-file")]
-            Error::ConfigParse(e) => f.write_fmt(format_args!("Failed to parse config {e}")),
-            #[cfg(feature = "config-file")]
-            Error::ConfigLogic(e) => f.write_fmt(format_args!("Invalid configuration {e}")),
-            #[cfg(feature = "config-file")]
-            Error::ConfigP(e) => f.write_str(e),
             #[cfg(feature = "status-bar")]
             Error::ParseFloat(e) => core::fmt::Display::fmt(e, f),
             #[cfg(feature = "status-bar")]

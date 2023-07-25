@@ -1,7 +1,7 @@
 use xcb_rust_protocol::helpers::properties::{WmHints, WmSizeHints};
 use xcb_rust_protocol::proto::xproto::Window;
 
-use crate::config::{WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT};
+use crate::config::{_WM_CLASS_NAME_LIMIT, _WM_NAME_LIMIT};
 
 #[derive(Debug, Clone)]
 pub struct WindowProperties {
@@ -12,7 +12,7 @@ pub struct WindowProperties {
     pub window_types: heapless::Vec<WindowType, 12>,
     pub leader: Option<Window>,
     pub pid: Option<u32>,
-    pub class: heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>,
+    pub class: heapless::Vec<heapless::String<_WM_CLASS_NAME_LIMIT>, 4>,
     pub protocols: heapless::Vec<Protocol, 4>,
     pub name: WmName,
     pub transient_for: Option<Window>,
@@ -28,7 +28,7 @@ impl WindowProperties {
         window_types: heapless::Vec<WindowType, 12>,
         leader: Option<Window>,
         pid: Option<u32>,
-        class: heapless::Vec<heapless::String<WM_CLASS_NAME_LIMIT>, 4>,
+        class: heapless::Vec<heapless::String<_WM_CLASS_NAME_LIMIT>, 4>,
         protocols: heapless::Vec<Protocol, 4>,
         name: WmName,
         transient_for: Option<Window>,
@@ -137,13 +137,13 @@ pub enum Protocol {
 /// while `NetWmName` is also always set but the latter always is a subset of the former always.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum WmName {
-    WmName(heapless::String<WM_NAME_LIMIT>),
-    NetWmName(heapless::String<WM_NAME_LIMIT>),
+    WmName(heapless::String<_WM_NAME_LIMIT>),
+    NetWmName(heapless::String<_WM_NAME_LIMIT>),
 }
 
 impl WmName {
     #[must_use]
-    pub fn get_cloned(&self) -> heapless::String<WM_NAME_LIMIT> {
+    pub fn get_cloned(&self) -> heapless::String<_WM_NAME_LIMIT> {
         match self {
             WmName::NetWmName(n) | WmName::WmName(n) => n.clone(),
         }

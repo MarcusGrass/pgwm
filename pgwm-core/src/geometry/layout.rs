@@ -3,7 +3,6 @@ use crate::geometry::Dimensions;
 use crate::{error::Result, push_heapless};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 pub enum Layout {
     LeftLeader = 0,
     CenterLeader = 1,

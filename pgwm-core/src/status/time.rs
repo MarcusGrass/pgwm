@@ -1,20 +1,14 @@
 use alloc::format;
 use alloc::string::String;
-use alloc::vec::Vec;
 
-#[cfg(feature = "config-file")]
-use serde::de::Error as DeError;
 use time::{Month, OffsetDateTime, UtcOffset, Weekday};
 use tiny_std::time::SystemTime;
 
 use crate::error::Error;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 pub struct ClockFormatter {
-    #[cfg_attr(feature = "config-file", serde(deserialize_with = "from_pattern"))]
     format: Format,
-    #[cfg_attr(feature = "config-file", serde(deserialize_with = "from_hms_tuple"))]
     utc_offset: UtcOffset,
 }
 
@@ -30,8 +24,9 @@ impl ClockFormatter {
         .to_offset(self.utc_offset);
         self.format.format(dt)
     }
+
     #[must_use]
-    pub fn new(format: Format, offset: UtcOffset) -> Self {
+    pub const fn new(format: Format, offset: UtcOffset) -> Self {
         Self {
             format,
             utc_offset: offset,
@@ -41,31 +36,13 @@ impl ClockFormatter {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Format {
-    chunks: Vec<FormatChunk>,
-}
-
-#[cfg(feature = "config-file")]
-fn from_pattern<'de, D: serde::de::Deserializer<'de>>(
-    deserializer: D,
-) -> core::result::Result<Format, D::Error> {
-    let s: &'de str = serde::de::Deserialize::deserialize(deserializer)?;
-    Format::new(s)
-        .map_err(|e| D::Error::custom(format!("Failed to deserialize valid date pattern {e}")))
-}
-
-#[cfg(feature = "config-file")]
-fn from_hms_tuple<'de, D: serde::de::Deserializer<'de>>(
-    deserializer: D,
-) -> core::result::Result<UtcOffset, D::Error> {
-    let (h, m, s): (i8, i8, i8) = serde::de::Deserialize::deserialize(deserializer)?;
-    UtcOffset::from_hms(h, m, s)
-        .map_err(|d| serde::de::Error::custom(format!("Failed to parse utc-offset {d:?}")))
+    chunks: &'static [FormatChunk],
 }
 
 impl Format {
     pub fn format(&self, dt: OffsetDateTime) -> crate::error::Result<String> {
         let mut out = String::new();
-        for chunk in &self.chunks {
+        for chunk in self.chunks {
             match chunk {
                 FormatChunk::Value(v) => {
                     out.push_str(v);
@@ -79,70 +56,20 @@ impl Format {
         Ok(out)
     }
 
-    pub fn new(input: &str) -> crate::error::Result<Self> {
-        let mut chunks = Vec::new();
-        let mut cur_raw_chunk = String::new();
-        let mut state = State::Ready;
-        for ch in input.chars() {
-            match state {
-                State::Ready => {
-                    if ch == '{' {
-                        state = State::SeenStartBracket;
-                    } else {
-                        cur_raw_chunk.push(ch);
-                    }
-                }
-                State::SeenStartBracket => {
-                    if ch == '%' {
-                        state = State::SeenStartPerc;
-                    } else {
-                        state = State::Ready;
-                    }
-                }
-                State::SeenStartPerc => {
-                    let t = match ch {
-                        'Y' => Token::Year,
-                        'M' => Token::Month,
-                        'W' => Token::Week,
-                        'D' => Token::Day,
-                        'd' => Token::WeekDay,
-                        'h' => Token::Hour,
-                        'm' => Token::Minute,
-                        's' => Token::Second,
-                        _ => return Err(Error::Time(format!("Bad token {ch}"))),
-                    };
-                    if !cur_raw_chunk.is_empty() {
-                        chunks.push(FormatChunk::Value(core::mem::take(&mut cur_raw_chunk)));
-                    }
-                    chunks.push(FormatChunk::Token(t));
-                    state = State::SeenValue;
-                }
-                State::SeenValue => {
-                    if ch != '%' {
-                        return Err(Error::Time(format!("Expected end perc, got {ch}")));
-                    }
-                    state = State::SeenEndPerc;
-                }
-                State::SeenEndPerc => {
-                    if ch != '}' {
-                        return Err(Error::Time(format!("Expected end bracket, got {ch}")));
-                    }
-                    state = State::Ready;
-                }
-            }
-        }
-        Ok(Self { chunks })
+    #[must_use]
+    pub const fn new(chunks: &'static [FormatChunk]) -> Self {
+        Self { chunks }
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-enum FormatChunk {
-    Value(String),
+pub enum FormatChunk {
+    Value(&'static str),
     Token(Token),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum Token {
+pub enum Token {
     Year,
     Month,
     Week,
@@ -151,15 +78,6 @@ enum Token {
     Hour,
     Minute,
     Second,
-}
-
-#[derive(Copy, Clone)]
-enum State {
-    Ready,
-    SeenStartBracket,
-    SeenStartPerc,
-    SeenValue,
-    SeenEndPerc,
 }
 
 impl Token {
@@ -231,10 +149,23 @@ mod tests {
 
     #[test]
     fn formats_time() {
-        let in_str = "Year {%Y%}, Month {%M%}, Week {%W%}, Day {%D%}, hour {%h%}, minute {%m%}, second {%s%}";
-        let fmt = Format::new(in_str).unwrap();
+        let fmt = crate::status::time::Format::new(&[
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Year),
+            crate::status::time::FormatChunk::Value(" "),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Month),
+            crate::status::time::FormatChunk::Value(" "),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Day),
+            crate::status::time::FormatChunk::Value(" w"),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Week),
+            crate::status::time::FormatChunk::Value(" "),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Hour),
+            crate::status::time::FormatChunk::Value(":"),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Minute),
+            crate::status::time::FormatChunk::Value(":"),
+            crate::status::time::FormatChunk::Token(crate::status::time::Token::Second),
+        ]);
         let dt = OffsetDateTime::from_unix_timestamp_nanos(1_666_551_103_791_951_912i128).unwrap();
-        let expect = "Year 2022, Month Oct, Week 42, Day 23, hour 18, minute 51, second 43";
+        let expect = "2022 Oct 23 w42 18:51:43";
         assert_eq!(expect, fmt.format(dt).unwrap());
     }
 }

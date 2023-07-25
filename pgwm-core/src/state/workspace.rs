@@ -1,11 +1,10 @@
-use alloc::string::String;
 use alloc::vec::Vec;
 
 use smallmap::Map;
 use xcb_rust_protocol::proto::xproto::Window;
 
 use crate::config::workspaces::UserWorkspace;
-use crate::config::{DefaultDraw, TilingModifiers, APPLICATION_WINDOW_LIMIT, WS_WINDOW_LIMIT};
+use crate::config::{DefaultDraw, TilingModifiers, WM_TILING_MODIFIERS, WS_WINDOW_LIMIT};
 use crate::error::Result;
 use crate::geometry::draw::{Mode, OldDrawMode};
 use crate::geometry::layout::Layout;
@@ -20,15 +19,11 @@ pub struct Workspaces {
     // Hot on read/write
     win_to_ws: Map<Window, usize>,
     // Hot read
-    name_to_ws: Map<String, usize>,
-    base_tiling_modifiers: TilingModifiers,
+    name_to_ws: Map<&'static str, usize>,
 }
 
 impl Workspaces {
-    pub fn create_empty(
-        init_workspaces: &[UserWorkspace],
-        tiling_modifiers: TilingModifiers,
-    ) -> Result<Self> {
+    pub fn create_empty(init_workspaces: &[UserWorkspace]) -> Result<Self> {
         let mut v = Vec::<Workspace>::new();
         let mut name_to_ws = Map::new();
         for (i, ws) in init_workspaces.iter().enumerate() {
@@ -38,24 +33,23 @@ impl Workspaces {
                     DefaultDraw::CenterLeader => Mode::Tiled(Layout::CenterLeader),
                     DefaultDraw::Tabbed => Mode::Tabbed(0),
                 },
-                name: ws.name.clone(),
+                name: ws.name,
                 children: heapless::Vec::new(), // Realloc is what's going to take time here
-                tiling_modifiers: tiling_modifiers.clone(),
+                tiling_modifiers: WM_TILING_MODIFIERS,
             });
-            for mapped in &ws.mapped_class_names {
-                name_to_ws.insert(mapped.clone(), i);
+            for mapped in ws.mapped_class_names {
+                name_to_ws.insert(*mapped, i);
             }
         }
         Ok(Workspaces {
             spaces: v,
             win_to_ws: Map::new(),
             name_to_ws,
-            base_tiling_modifiers: tiling_modifiers,
         })
     }
 
     #[must_use]
-    pub fn get_all_managed_windows(&self) -> heapless::Vec<Window, APPLICATION_WINDOW_LIMIT> {
+    pub fn get_all_managed_windows(&self) -> Vec<Window> {
         self.win_to_ws.keys().copied().collect()
     }
 
@@ -98,7 +92,7 @@ impl Workspaces {
     }
 
     pub fn clear_size_modifiers(&mut self, ws_ind: usize) {
-        self.spaces[ws_ind].tiling_modifiers = self.base_tiling_modifiers.clone();
+        self.spaces[ws_ind].tiling_modifiers = WM_TILING_MODIFIERS;
     }
 
     pub fn unset_fullscreened(&mut self, ws_ind: usize) -> Option<Window> {
@@ -417,7 +411,7 @@ pub enum DeleteResult {
 #[cfg_attr(test, derive(PartialEq))]
 pub struct Workspace {
     pub draw_mode: Mode,
-    pub name: String,
+    pub name: &'static str,
     // Actually fine, searching small vectors is extremely efficient, as long as we don't need to
     // realloc
     pub children: heapless::Vec<Child, WS_WINDOW_LIMIT>,
@@ -769,7 +763,7 @@ mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use crate::config::Cfg;
+    use crate::config::USER_WORKSPACES;
     use crate::geometry::draw::Mode;
     use crate::geometry::layout::Layout;
     use crate::state::properties::{WindowProperties, WmName};
@@ -792,8 +786,7 @@ mod tests {
     }
 
     fn empty_workspaces() -> Workspaces {
-        let cfg = Cfg::default();
-        Workspaces::create_empty(&cfg.workspaces, cfg.tiling_modifiers).unwrap()
+        Workspaces::create_empty(&USER_WORKSPACES).unwrap()
     }
 
     #[test]

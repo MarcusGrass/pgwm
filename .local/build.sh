@@ -17,7 +17,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --perf)
       MODE="lto"
-      FEATURES="xinerama,config-file --no-default-features"
+      FEATURES="xinerama --no-default-features"
       shift # past argument
       ;;
     -p)

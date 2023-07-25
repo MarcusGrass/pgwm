@@ -29,7 +29,6 @@ pub(crate) enum Error {
     FullRestart,
     ParseFloat,
     FontLoad(&'static str),
-    BadCharFontMapping(&'static str),
     Uring(String),
     Syscall(StdError),
     Rusl(RuslError),
@@ -72,9 +71,6 @@ impl core::fmt::Display for Error {
             Error::FullRestart => f.write_str("Restart triggered"),
             Error::ParseFloat => f.write_str("Size not parseable as f32"),
             Error::FontLoad(s) => f.write_fmt(format_args!("Failed to load font {s}")),
-            Error::BadCharFontMapping(s) => {
-                f.write_fmt(format_args!("Invalid char to font mapping {s}"))
-            }
             Error::Syscall(e) => f.write_fmt(format_args!("Syscall error {e}")),
             Error::Rusl(e) => f.write_fmt(format_args!("Rusl error {e}")),
             Error::Uring(e) => f.write_fmt(format_args!("Uring error {e}")),

@@ -9,25 +9,22 @@ publish = false
 [features]
 status-bar = ["time"]
 debug = ["xcb-rust-connection/debug", "xcb-rust-protocol/debug", "pgwm-utils/debug"]
-config-file = ["serde", "heapless/serde", "toml"]
 
 [dependencies]
-atoi = { version = "2.0.0", default-features = false }
-heapless = { version = "0.7.16", default-features = false }
-pgwm-utils = { path = "../pgwm-utils" }
-toml = { workspace = true, default-features = false, optional = true }
-x11-keysyms = { git = "https://github.com/MarcusGrass/x11-keysyms", rev = "da4634c071fdc547772cd4dc7892d857b29dd6e5", features = ["miscellany", "latin1"] }
+atoi = { workspace = true, default-features = false }
+heapless = { workspace = true, default-features = false }
+pgwm-utils = { workspace = true }
+x11-keysyms = { workspace = true, features = ["miscellany", "latin1"] }
 
 xcb-rust-connection = { workspace = true }
 xcb-rust-protocol = { workspace = true }
 tiny-std = { workspace = true , features = ["start", "alloc"], default-features = false }
 
-time = { version = "0.3.21", optional = true, default-features = false }
-serde = { version = "1.0.163", default-features = false, features = ["derive"], optional = true }
+time = { workspace = true, optional = true, default-features = false }
 smallmap = { workspace = true, default-features = false, features = ["serde"] }
 
 [dev-dependencies]
-tiny-bench = "0.2.0"
+tiny-bench = "0.3.0"
 tiny-std = { workspace = true, features = ["alloc"], default-features = false }
 
 [[bench]]

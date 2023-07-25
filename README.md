@@ -105,7 +105,7 @@ since the binary will be statically linked anyway it just defaults to --target x
 
 `lld` is required, if you don't want to change [the small build script](build_wm.sh) and remove it as the default linker there.
 
-The project builds default with xinerama support, a status-bar, and support for a config-file. To compile without either,
+The project builds default with xinerama support, and a status-bar. To compile without either,
 disable default features.
 To build with max optimizations use --profile=lto.
 In [config.toml](.cargo/config.toml) --release is set to compile with debug assertions, usually when I'm developing 
@@ -124,11 +124,6 @@ If no binary directory is supplied, the script will try to install to `$HOME/.lo
 if the environment variable `$HOME` is not set and no binary directory is supplied the script will fail.  
 if your path variable doesn't include that directory you can export that for example in your `~/.bashrc` 
 with: `export PATH=$HOME/.local/bin:$PATH`, if you want the wm to be launchable by just `pgwm`.  
-
-If no configuration directory is supplied, the script will try to install configuration to `$XDG_CONFIG_HOME/pgwm`, 
-if the environment variable `$XDG_CONFIG_HOME` is not set, it will check if the environment variable `$HOME` is set and 
-try to install configuration in `$HOME/.config/pgwm`. If neither `$XDG_CONFIG_HOME` nor `$HOME` is set, and no 
-configuration directory was supplied, the script will fail.
 
   
 Build default:  
@@ -174,17 +169,7 @@ Replace the (probably) last line of .xinitrc with
 `exec $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary.     
 
 # Changing configuration
-## Config file
-The WM can be configured by either using a configuration file, a sample configuration exists [here in the repo](pgwm.toml) 
-the different properties are commented and hopefully makes sense. The file needs to be placed at `$XDG_CONFIG_HOME/pgwm/pgwm.toml`
-or if `$XDG_CONFIG_HOME` is not set, `$HOME/.config/pgwm/pgwm.toml`. If none of the environment variables `$HOME` or `$XDG_CONFIG_HOME` are set, 
-or if the file does not exist, the WM will use hard-coded configuration.  
-Constants that need to be known at compile time for stack-usage reasons are hard-coded and described further in the below section.
-If using a configuration file, the WM can reload it's config by restarting (default key-bind `mod + shift + r`), keeping 
-the xorg-server alive and the current applications remain open.
-
-## Hard coded configuration
-Hard coded configuration resides in [pgwm_core/src/config/mod.rs](pgwm-core/src/config/mod.rs) and consists of rust code.
+Configuration resides in [pgwm_core/src/config/mod.rs](pgwm-core/src/config/mod.rs) and consists of rust code.
 The configuration is mostly constants with some functions, some constants are limits, such as `WS_WINDOW_LIMIT`,
 the reason for it existing is that a lot of heapless datastructures are used.
 If you were to set the `WS_WINDOW_LIMIT` to 2, and try to spawn 3 windows on a workspace, the application would crash.
@@ -205,13 +190,8 @@ have the same fonts as I do the results will be weird. Update the default config
 Then most likely a hardcoded limit has been reached, either create an Issue to increase the limit, recompile it yourself with a higher limit, 
 or make a PR with the limit increased. Limits are found [with the hardcoded configuration](pgwm-core/src/config/mod.rs).
 - Fewer defined workspaces than amount of monitors will result in unused monitors
-- An invalid config will cause a crash at startup while a missing config won't.
-The reason for this is that you might want to use default configurations and skip
-having a config file even if compiled with the `config-file` feature. 
-On the other hand, if you make a configuration mistake then finding that out immediately 
-is in my opinion less confusing than suddenly getting the default configuration.
 - If running some applications built on java frameworks, such as Jetbrains IDE's, 
-putting the below lines in your ~/.xinitr may be required for them to work properly.
+putting the below lines in your `~/.xinitrc` may be required for them to work properly.
 ```Bash
 export _JAVA_AWT_WM_NONREPARENTING=1
 export AWT_TOOLKIT=MToolkit

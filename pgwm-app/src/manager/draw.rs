@@ -1,6 +1,9 @@
 use xcb_rust_protocol::proto::xproto::Window;
 
-use pgwm_core::config::{Fonts, WM_NAME_LIMIT, WS_WINDOW_LIMIT};
+use pgwm_core::config::{
+    PAD_WHILE_TABBED, STATUS_BAR_HEIGHT, TAB_BAR_HEIGHT, TAB_BAR_SECTION, WS_WINDOW_LIMIT,
+    _WM_NAME_LIMIT,
+};
 use pgwm_core::geometry::draw::{Mode, OldDrawMode};
 use pgwm_core::geometry::{layout::Layout, Dimensions};
 use pgwm_core::push_heapless;
@@ -13,7 +16,6 @@ use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) struct Drawer<'a> {
     font_manager: &'a FontDrawer<'a>,
-    fonts: &'a Fonts,
 }
 
 impl<'a> Drawer<'a> {
@@ -86,7 +88,7 @@ impl<'a> Drawer<'a> {
                 let dimensions = state.monitors[mon_ind].dimensions;
                 let x = (dimensions.x as f32 + dimensions.width as f32 * rel_x) as i32;
                 let y = (dimensions.y as f32
-                    + state.status_bar_height as f32
+                    + STATUS_BAR_HEIGHT as f32
                     + dimensions.height as f32 * rel_y) as i32;
                 Self::move_floating(call_wrapper, win, x, y, state)?;
             }
@@ -158,7 +160,7 @@ impl<'a> Drawer<'a> {
             state.window_padding,
             state.window_border_width,
             if state.monitors[mon_ind].show_bar {
-                state.status_bar_height
+                STATUS_BAR_HEIGHT
             } else {
                 0
             },
@@ -203,17 +205,17 @@ impl<'a> Drawer<'a> {
         let win = dt.window;
         let mon = &state.monitors[mon_ind];
 
-        let padding = if state.pad_while_tabbed {
+        let padding = if PAD_WHILE_TABBED {
             state.window_padding
         } else {
             0
         };
         let x = mon.dimensions.x + padding;
-        let y = mon.dimensions.y + state.status_bar_height + state.tab_bar_height + padding;
+        let y = mon.dimensions.y + STATUS_BAR_HEIGHT + TAB_BAR_HEIGHT + padding;
         let new_win_dims = Dimensions {
             height: mon.dimensions.height
-                - state.status_bar_height
-                - state.tab_bar_height
+                - STATUS_BAR_HEIGHT
+                - TAB_BAR_HEIGHT
                 - padding * 2
                 - state.window_border_width as i16 * 2,
             width: mon.dimensions.width - state.window_border_width as i16 * 2 - padding * 2,
@@ -229,7 +231,7 @@ impl<'a> Drawer<'a> {
         let found_names = targets
             .into_iter()
             .map(|mw| mw.name)
-            .collect::<heapless::Vec<heapless::String<WM_NAME_LIMIT>, WS_WINDOW_LIMIT>>();
+            .collect::<heapless::Vec<heapless::String<_WM_NAME_LIMIT>, WS_WINDOW_LIMIT>>();
         self.draw_tab_bar(
             call_wrapper,
             mon_ind,
@@ -262,7 +264,7 @@ impl<'a> Drawer<'a> {
         &self,
         call_wrapper: &mut CallWrapper,
         mon_ind: usize,
-        ws_names: &[heapless::String<WM_NAME_LIMIT>],
+        ws_names: &[heapless::String<_WM_NAME_LIMIT>],
         selected: usize,
         padding: i16,
         state: &mut State,
@@ -276,9 +278,9 @@ impl<'a> Drawer<'a> {
             win,
             Dimensions::new(
                 dimensions.width - 2 * padding,
-                state.tab_bar_height,
+                TAB_BAR_HEIGHT,
                 dimensions.x + padding,
-                state.status_bar_height + padding + dimensions.y,
+                STATUS_BAR_HEIGHT + padding + dimensions.y,
             ),
             0,
             state,
@@ -293,13 +295,11 @@ impl<'a> Drawer<'a> {
                 split as i16
             };
             let bg = if i == selected {
-                state.colors.tab_bar_focused_tab_background
+                state.colors.tab_bar_focused_tab_background()
             } else {
-                state.colors.tab_bar_unfocused_tab_background
+                state.colors.tab_bar_unfocused_tab_background()
             };
-            let text_dimensions = self
-                .font_manager
-                .text_geometry(name, &self.fonts.tab_bar_section);
+            let text_dimensions = self.font_manager.text_geometry(name, TAB_BAR_SECTION);
             let text_width = text_dimensions.0;
             let draw_name = if split_width >= text_width { name } else { "" };
             let center_offset = (split_width - text_width) / 2;
@@ -308,23 +308,20 @@ impl<'a> Drawer<'a> {
                 call_wrapper,
                 dbw,
                 draw_name,
-                &self.fonts.tab_bar_section,
-                Dimensions::new(split_width, state.tab_bar_height, split_width * i as i16, 0),
+                TAB_BAR_SECTION,
+                Dimensions::new(split_width, TAB_BAR_HEIGHT, split_width * i as i16, 0),
                 split_width,
                 center_offset,
                 0,
                 bg,
-                state.colors.tab_bar_text,
+                state.colors.tab_bar_text(),
             )?;
         }
         Ok(())
     }
 
-    pub fn new(font_manager: &'a FontDrawer<'a>, fonts: &'a Fonts) -> Self {
-        Drawer {
-            font_manager,
-            fonts,
-        }
+    pub const fn new(font_manager: &'a FontDrawer<'a>) -> Self {
+        Drawer { font_manager }
     }
 }
 
@@ -332,5 +329,5 @@ impl<'a> Drawer<'a> {
 struct Drawtarget {
     window: Window,
     map: bool,
-    name: heapless::String<WM_NAME_LIMIT>,
+    name: heapless::String<_WM_NAME_LIMIT>,
 }

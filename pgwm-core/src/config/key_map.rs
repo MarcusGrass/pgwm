@@ -2,7 +2,7 @@ use xcb_rust_protocol::proto::xproto::ModMask;
 
 use crate::config::Action;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct KeyboardMapping {
     pub modmask: ModMask,
     pub keysym: u32,
@@ -11,7 +11,7 @@ pub struct KeyboardMapping {
 
 impl KeyboardMapping {
     #[must_use]
-    pub fn new(modmask: ModMask, keysym: u32, action: Action) -> Self {
+    pub const fn new(modmask: ModMask, keysym: u32, action: Action) -> Self {
         KeyboardMapping {
             modmask,
             keysym,

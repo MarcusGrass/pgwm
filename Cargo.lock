@@ -39,17 +39,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6548a0ad5d2549e111e1f6a11a6c2e2d00ce6a3dafe22948d67c2b443f775e52"
 
 [[package]]
-name = "dlmalloc"
-version = "0.2.4"
-source = "git+https://github.com/MarcusGrass/dlmalloc-rs.git?rev=a8e9fc0d2c03a06810530a48abd37fecc71e8109#a8e9fc0d2c03a06810530a48abd37fecc71e8109"
-dependencies = [
- "sc",
-]
-
-[[package]]
 name = "fontdue"
-version = "0.7.2"
-source = "git+https://github.com/MarcusGrass/fontdue?rev=667b807a41be43213e55b5a8e4e1db0f80253c36#667b807a41be43213e55b5a8e4e1db0f80253c36"
+version = "0.7.3"
+source = "git+https://github.com/MarcusGrass/fontdue?rev=e32ae994890caccce9e4a7f7228a2f00f05e0238#e32ae994890caccce9e4a7f7228a2f00f05e0238"
 dependencies = [
  "hashbrown",
  "ttf-parser",
@@ -66,9 +58,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.13.2"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
+checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
 
 [[package]]
 name = "heapless"
@@ -79,15 +71,15 @@ dependencies = [
  "atomic-polyfill",
  "hash32",
  "rustc_version 0.4.0",
- "serde",
  "spin",
  "stable_deref_trait",
 ]
 
 [[package]]
 name = "linux-rust-bindings"
-version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/linux-rust-bindings?rev=3b64f3e389717632d9100a0300e9224e9a1d2fdc#3b64f3e389717632d9100a0300e9224e9a1d2fdc"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88eeeb1a5ef57ab0d40fb7a256e1b211496f97d6a8664ef52c0a665ce69a4e0f"
 
 [[package]]
 name = "lock_api"
@@ -112,7 +104,6 @@ dependencies = [
 name = "pgwm"
 version = "0.1.0"
 dependencies = [
- "dlmalloc",
  "pgwm-app",
  "tiny-std",
  "unix-print",
@@ -143,12 +134,10 @@ dependencies = [
  "atoi",
  "heapless",
  "pgwm-utils",
- "serde",
  "smallmap",
  "time",
  "tiny-bench",
  "tiny-std",
- "toml",
  "x11-keysyms",
  "xcb-rust-connection",
  "xcb-rust-protocol",
@@ -163,9 +152,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.59"
+version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6aeca18b86b413c660b781aa319e4e2648a3e6f9eadc9b47e9038e6fe9f3451b"
+checksum = "18fb31db3f9bddb2ea821cde30a9f70117e3f119938b5ee630b7403aa6e2ead9"
 dependencies = [
  "unicode-ident",
 ]
@@ -182,11 +171,11 @@ dependencies = [
 [[package]]
 name = "rusl"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/tiny-std?rev=71e91bbde834286a9dd3a565678975252d6ed80d#71e91bbde834286a9dd3a565678975252d6ed80d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1032884db15e48ffa3ebdc669457699fdfbf750aa90000b29e302e9f8d14a09"
 dependencies = [
  "linux-rust-bindings",
  "sc",
- "unix-print",
 ]
 
 [[package]]
@@ -242,18 +231,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.163"
+version = "1.0.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2113ab51b87a539ae008b5c6c02dc020ffa39afd2d83cffcb3f4eb2722cebec2"
+checksum = "5d25439cd7397d044e2748a6fe2432b5e85db703d6d097bd014b3c0ad1ebff0b"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.163"
+version = "1.0.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c805777e3930c8883389c602315a24224bcc738b63905ef87cd1420353ea93e"
+checksum = "b23f7ade6f110613c0d63858ddb8b94c1041f550eab58a16b371bdf2c9c80ab4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -287,9 +276,9 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "syn"
-version = "2.0.18"
+version = "2.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32d41677bcbe24c20c52e7c70b0d8db04134c5d1066bf98662e2871ad200ea3e"
+checksum = "b60f673f44a8255b9c8c657daf66a596d435f2da81a555b06dc644d080ba45e0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -298,9 +287,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.21"
+version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3403384eaacbca9923fa06940178ac13e4edb725486d70e8e15881d0c836cc"
+checksum = "59e399c068f43a5d116fedaf73b203fa4f9c519f17e2b34f63221d3792f81446"
 dependencies = [
  "time-core",
 ]
@@ -313,14 +302,15 @@ checksum = "7300fbefb4dadc1af235a9cef3737cea692a9d97e1b9cbcd4ebdae6f8868e6fb"
 
 [[package]]
 name = "tiny-bench"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b5d366a619c58cc621169d481d049b286553c87ba10c17f1ceef2274f9b8ab7"
+checksum = "cfda840d8557c12ecdde25485f7dc85152339a61b759f98d4f682e7cb5d75948"
 
 [[package]]
 name = "tiny-std"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/tiny-std?rev=71e91bbde834286a9dd3a565678975252d6ed80d#71e91bbde834286a9dd3a565678975252d6ed80d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fade72caa88ce1d32651ff6d92288672a329bf0614435b251f98fc4858476d2"
 dependencies = [
  "rusl",
  "sc",
@@ -328,28 +318,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.5.9"
-source = "git+https://github.com/MarcusGrass/toml?rev=aa8fae65d99dbc6bd808631800ac8e182300622c#aa8fae65d99dbc6bd808631800ac8e182300622c"
-dependencies = [
- "hashbrown",
- "serde",
- "toml_datetime",
-]
-
-[[package]]
-name = "toml_datetime"
-version = "0.5.0"
-source = "git+https://github.com/MarcusGrass/toml?rev=aa8fae65d99dbc6bd808631800ac8e182300622c#aa8fae65d99dbc6bd808631800ac8e182300622c"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "ttf-parser"
-version = "0.17.1"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "375812fa44dab6df41c195cd2f7fecb488f6c09fbaafb62807488cefab642bff"
+checksum = "a464a4b34948a5f67fddd2b823c62d9d92e44be75058b99939eae6c5b6960b33"
 
 [[package]]
 name = "unicode-ident"
@@ -369,12 +341,14 @@ dependencies = [
 [[package]]
 name = "x11-keysyms"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=da4634c071fdc547772cd4dc7892d857b29dd6e5#da4634c071fdc547772cd4dc7892d857b29dd6e5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6462285b997685c657ff2b26c9b444ba84dadf7d38c08bc49ebf80f8a6d3c40"
 
 [[package]]
 name = "xcb-rust-connection"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=0df48b0d4045144e8e9288b034a75f5983f5e2ab#0df48b0d4045144e8e9288b034a75f5983f5e2ab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40cdc2b5b2372b7ceed557051225a6eec282cf6f28f19b950803585be7fd69ed"
 dependencies = [
  "rusl",
  "sc",
@@ -387,7 +361,8 @@ dependencies = [
 [[package]]
 name = "xcb-rust-protocol"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/xcb-rust.git?rev=0df48b0d4045144e8e9288b034a75f5983f5e2ab#0df48b0d4045144e8e9288b034a75f5983f5e2ab"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c835c63e02989ec7ac21e5e9be506a7018a4c2aaf7d8d8bdc88302c008937fe7"
 dependencies = [
  "tiny-std",
  "unix-print",
