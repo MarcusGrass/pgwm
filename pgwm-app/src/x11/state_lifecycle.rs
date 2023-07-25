@@ -186,7 +186,7 @@ fn do_create_state<'a>(
         }
 
         let tab_bar_win = call_wrapper.generate_id()?;
-        intern_created_windows.insert(tab_bar_win, ()).unwrap();
+        intern_created_windows.insert(tab_bar_win, ());
         push_heapless!(
             cookie_container,
             create_tab_bar_win(
@@ -198,7 +198,7 @@ fn do_create_state<'a>(
             )?
         )?;
         let bar_win = call_wrapper.generate_id()?;
-        intern_created_windows.insert(bar_win, ()).unwrap();
+        intern_created_windows.insert(bar_win, ());
         push_heapless!(
             cookie_container,
             create_workspace_bar_win(
@@ -326,7 +326,7 @@ fn create_static_state<'a>(
 
     let sequences_to_ignore = heapless::BinaryHeap::new();
     let check_win = call_wrapper.generate_id()?;
-    intern_created_windows.insert(check_win, ()).unwrap();
+    intern_created_windows.insert(check_win, ());
     push_heapless!(
         cookie_container,
         create_wm_check_win(call_wrapper, screen, check_win)?

@@ -216,7 +216,7 @@ const fn default_orange() -> RGBA {
 }
 
 const DEFAULT_FONT: FontCfg<'static> = FontCfg::new(
-    "/usr/share/fonts/TTF/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
+    "/usr/share/fonts/jetbrains-mono/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
     "14.0",
 );
 /// This is a mapping of fonts to be drawn at different sections.
@@ -622,11 +622,11 @@ pub const KEYBOARD_MAPPINGS: [KeyboardMapping; 41] = [
     ),
 ];
 const ICON_FONT: &FontCfg<'static> = &FontCfg::new(
-    "/usr/share/fonts/OTF/Font Awesome 6 Free-Solid-900.otf",
+    "/usr/share/fonts/fontawesome/Font Awesome 6 Free-Solid-900.otf",
     "13.0",
 );
 const BRAND_FONT: &FontCfg<'static> = &FontCfg::new(
-    "/usr/share/fonts/OTF/Font Awesome 6 Brands-Regular-400.otf",
+    "/usr/share/fonts/fontawesome/Font Awesome 6 Brands-Regular-400.otf",
     "13.0",
 );
 
