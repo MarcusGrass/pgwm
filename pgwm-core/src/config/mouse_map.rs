@@ -21,8 +21,6 @@ impl MouseActionKey {
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[cfg_attr(feature = "config-file", serde(tag = "kind", content = "args"))]
 pub enum MouseTarget {
     ClientWindow,
     WorkspaceBarComponent(usize),

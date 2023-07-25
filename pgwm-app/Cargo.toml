@@ -8,8 +8,7 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-config-file = ["pgwm-core/config-file"]
-default = ["xinerama", "status-bar", "config-file"]
+default = ["xinerama", "status-bar"]
 debug = ["pgwm-core/debug", "xcb-rust-connection/debug", "xcb-rust-protocol/debug", "pgwm-utils/debug"]
 xinerama = ["xcb-rust-connection/xinerama", "xcb-rust-protocol/render"]
 status-bar = ["pgwm-core/status-bar", "time"]

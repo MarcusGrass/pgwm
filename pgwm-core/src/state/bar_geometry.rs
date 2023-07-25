@@ -93,7 +93,7 @@ pub struct ShortcutSection {
 pub struct ShortcutComponent {
     pub position: Line,
     pub write_offset: i16,
-    pub text: String,
+    pub text: &'static str,
 }
 
 impl ShortcutSection {
@@ -247,5 +247,5 @@ impl WorkspaceSection {
 pub struct FixedDisplayComponent {
     pub position: Line,
     pub write_offset: i16,
-    pub text: String,
+    pub text: &'static str,
 }

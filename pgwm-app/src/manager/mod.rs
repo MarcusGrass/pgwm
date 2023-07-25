@@ -12,9 +12,7 @@ use xcb_rust_protocol::util::AsIter32;
 use pgwm_core::config::mouse_map::MouseTarget;
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
-use pgwm_core::config::{
-    Action, APPLICATION_WINDOW_LIMIT, WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT, WS_WINDOW_LIMIT,
-};
+use pgwm_core::config::{Action, APPLICATION_WINDOW_LIMIT, DESTROY_AFTER, KILL_AFTER, WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT, WS_WINDOW_LIMIT};
 use pgwm_core::geometry::draw::Mode;
 use pgwm_core::geometry::layout::Layout;
 use pgwm_core::geometry::Dimensions;
@@ -2057,7 +2055,7 @@ impl<'a> Manager<'a> {
 
     pub(crate) fn destroy_marked(call_wrapper: &mut CallWrapper, state: &mut State) -> Result<()> {
         while let Some(candidate) = state.dying_windows.first().copied() {
-            if candidate.should_kill(state.kill_after) {
+            if candidate.should_kill(KILL_AFTER) {
                 call_wrapper.send_kill(candidate.win)?;
                 pgwm_core::util::vec_ops::remove(&mut state.dying_windows, 0);
                 pgwm_utils::debug!("Sent kill for marked window {candidate:?}");
@@ -2091,7 +2089,7 @@ impl<'a> Manager<'a> {
         call_wrapper.send_delete(win)?;
         push_heapless!(
             state.dying_windows,
-            WinMarkedForDeath::new(win, state.destroy_after)
+            WinMarkedForDeath::new(win, DESTROY_AFTER)
         )?;
         pgwm_utils::debug!("Marked win {win} for death");
         Ok(())

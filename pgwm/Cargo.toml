@@ -6,8 +6,7 @@ license = "GPL-3.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-config-file = ["pgwm-app/config-file"]
-default = ["xinerama", "status-bar", "config-file"]
+default = ["xinerama", "status-bar"]
 debug = ["pgwm-app/debug"]
 xinerama = ["pgwm-app/xinerama"]
 status-bar = ["pgwm-app/status-bar"]

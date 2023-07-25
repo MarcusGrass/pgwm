@@ -30,10 +30,7 @@ use xcb_rust_protocol::proto::xproto::{
 };
 use xcb_rust_protocol::{CURRENT_TIME, NONE};
 
-use pgwm_core::config::{
-    APPLICATION_WINDOW_LIMIT, WINDOW_MANAGER_NAME, WINDOW_MANAGER_NAME_BUF_SIZE,
-    WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT,
-};
+use pgwm_core::config::{APPLICATION_WINDOW_LIMIT, CURSOR_NAME, STATUS_BAR_HEIGHT, WINDOW_MANAGER_NAME, WINDOW_MANAGER_NAME_BUF_SIZE, WM_CLASS_NAME_LIMIT, WM_NAME_LIMIT};
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::push_heapless;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
@@ -427,9 +424,9 @@ impl CallWrapper {
             AtomEnum::CARDINAL.0,
             &[
                 0,
-                state.status_bar_height as u32,
+                STATUS_BAR_HEIGHT as u32,
                 state.screen.width_in_pixels as u32,
-                state.screen.height_in_pixels as u32 - state.status_bar_height as u32,
+                state.screen.height_in_pixels as u32 - STATUS_BAR_HEIGHT as u32,
             ],
             true,
         )?;
@@ -735,7 +732,7 @@ impl CallWrapper {
             .cursor(CursorEnum(cursor_handle.load_cursor(
                 &mut self.uring,
                 &mut self.xcb_state,
-                state.cursor_name.as_str(),
+                CURSOR_NAME,
                 XcbEnv::default(),
             )?));
 

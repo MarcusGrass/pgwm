@@ -40,8 +40,8 @@ checksum = "6548a0ad5d2549e111e1f6a11a6c2e2d00ce6a3dafe22948d67c2b443f775e52"
 
 [[package]]
 name = "fontdue"
-version = "0.7.2"
-source = "git+https://github.com/MarcusGrass/fontdue?rev=667b807a41be43213e55b5a8e4e1db0f80253c36#667b807a41be43213e55b5a8e4e1db0f80253c36"
+version = "0.7.3"
+source = "git+https://github.com/MarcusGrass/fontdue?rev=e32ae994890caccce9e4a7f7228a2f00f05e0238#e32ae994890caccce9e4a7f7228a2f00f05e0238"
 dependencies = [
  "hashbrown",
  "ttf-parser",
@@ -58,9 +58,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.13.2"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
+checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
 
 [[package]]
 name = "heapless"
@@ -71,7 +71,6 @@ dependencies = [
  "atomic-polyfill",
  "hash32",
  "rustc_version 0.4.0",
- "serde",
  "spin",
  "stable_deref_trait",
 ]
@@ -135,12 +134,10 @@ dependencies = [
  "atoi",
  "heapless",
  "pgwm-utils",
- "serde",
  "smallmap",
  "time",
  "tiny-bench",
  "tiny-std",
- "toml",
  "x11-keysyms",
  "xcb-rust-connection",
  "xcb-rust-protocol",
@@ -155,9 +152,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.59"
+version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6aeca18b86b413c660b781aa319e4e2648a3e6f9eadc9b47e9038e6fe9f3451b"
+checksum = "18fb31db3f9bddb2ea821cde30a9f70117e3f119938b5ee630b7403aa6e2ead9"
 dependencies = [
  "unicode-ident",
 ]
@@ -177,7 +174,6 @@ version = "0.1.0"
 dependencies = [
  "linux-rust-bindings",
  "sc",
- "unix-print",
 ]
 
 [[package]]
@@ -233,18 +229,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.163"
+version = "1.0.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2113ab51b87a539ae008b5c6c02dc020ffa39afd2d83cffcb3f4eb2722cebec2"
+checksum = "5d25439cd7397d044e2748a6fe2432b5e85db703d6d097bd014b3c0ad1ebff0b"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.163"
+version = "1.0.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c805777e3930c8883389c602315a24224bcc738b63905ef87cd1420353ea93e"
+checksum = "b23f7ade6f110613c0d63858ddb8b94c1041f550eab58a16b371bdf2c9c80ab4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -278,9 +274,9 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "syn"
-version = "2.0.18"
+version = "2.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32d41677bcbe24c20c52e7c70b0d8db04134c5d1066bf98662e2871ad200ea3e"
+checksum = "b60f673f44a8255b9c8c657daf66a596d435f2da81a555b06dc644d080ba45e0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -289,9 +285,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.21"
+version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3403384eaacbca9923fa06940178ac13e4edb725486d70e8e15881d0c836cc"
+checksum = "59e399c068f43a5d116fedaf73b203fa4f9c519f17e2b34f63221d3792f81446"
 dependencies = [
  "time-core",
 ]
@@ -318,28 +314,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.5.9"
-source = "git+https://github.com/MarcusGrass/toml?rev=aa8fae65d99dbc6bd808631800ac8e182300622c#aa8fae65d99dbc6bd808631800ac8e182300622c"
-dependencies = [
- "hashbrown",
- "serde",
- "toml_datetime",
-]
-
-[[package]]
-name = "toml_datetime"
-version = "0.5.0"
-source = "git+https://github.com/MarcusGrass/toml?rev=aa8fae65d99dbc6bd808631800ac8e182300622c#aa8fae65d99dbc6bd808631800ac8e182300622c"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "ttf-parser"
-version = "0.17.1"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "375812fa44dab6df41c195cd2f7fecb488f6c09fbaafb62807488cefab642bff"
+checksum = "a464a4b34948a5f67fddd2b823c62d9d92e44be75058b99939eae6c5b6960b33"
 
 [[package]]
 name = "unicode-ident"

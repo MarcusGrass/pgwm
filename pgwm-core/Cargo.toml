@@ -9,13 +9,11 @@ publish = false
 [features]
 status-bar = ["time"]
 debug = ["xcb-rust-connection/debug", "xcb-rust-protocol/debug", "pgwm-utils/debug"]
-config-file = ["serde", "heapless/serde", "toml"]
 
 [dependencies]
 atoi = { workspace = true, default-features = false }
 heapless = { workspace = true, default-features = false }
 pgwm-utils = { workspace = true }
-toml = { workspace = true, default-features = false, optional = true }
 x11-keysyms = { workspace = true, features = ["miscellany", "latin1"] }
 
 xcb-rust-connection = { workspace = true }
@@ -23,7 +21,6 @@ xcb-rust-protocol = { workspace = true }
 tiny-std = { workspace = true , features = ["start", "alloc"], default-features = false }
 
 time = { workspace = true, optional = true, default-features = false }
-serde = { workspace = true, default-features = false, features = ["derive"], optional = true }
 smallmap = { workspace = true, default-features = false, features = ["serde"] }
 
 [dev-dependencies]

@@ -9,7 +9,7 @@ use tiny_std::io::Read;
 use xcb_rust_protocol::proto::render::{Glyphinfo, Glyphset};
 
 use pgwm_core::colors::Color;
-use pgwm_core::config::{FontCfg, Fonts};
+use pgwm_core::config::{CHAR_REMAP, CHAR_REMAP_FONTS, FontCfg, SHORTCUT_SECTION, STATUS_SECTION, TAB_BAR_SECTION, WINDOW_NAME_DISPLAY_SECTION, WORKSPACE_SECTION_FONTS};
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
 
@@ -77,19 +77,16 @@ impl<'a> FontDrawer<'a> {
 pub(crate) fn load_alloc_fonts<'a>(
     call_wrapper: &mut CallWrapper,
     vis_info: &RenderVisualInfo,
-    fonts: &'a Fonts,
-    char_remap: &'a Map<heapless::String<4>, FontCfg>,
-) -> Result<HashMap<&'a FontCfg, LoadedFont, FontHasherBuilder>> {
+) -> Result<HashMap<&'a FontCfg<'a>, LoadedFont, FontHasherBuilder>> {
     let mut map = HashMap::with_hasher(FontHasherBuilder);
-    let it = fonts
-        .workspace_section
+    let it = WORKSPACE_SECTION_FONTS
         .iter()
-        .chain(fonts.window_name_display_section.iter())
-        .chain(fonts.shortcut_section.iter())
-        .chain(fonts.tab_bar_section.iter())
-        .chain(char_remap.values());
+        .chain(WINDOW_NAME_DISPLAY_SECTION.iter())
+        .chain(SHORTCUT_SECTION.iter())
+        .chain(TAB_BAR_SECTION.iter())
+        .chain(CHAR_REMAP_FONTS.into_iter());
     #[cfg(feature = "status-bar")]
-    let it = it.chain(fonts.status_section.iter());
+    let it = it.chain(STATUS_SECTION.iter());
     // Reuse buffer
     let mut data = Vec::with_capacity(65536);
     for f_cfg in it {
@@ -200,7 +197,7 @@ fn calculate_font_size(map_len: usize) -> usize {
 }
 
 pub struct LoadedFonts<'a> {
-    pub(crate) fonts: HashMap<&'a FontCfg, LoadedFont, FontHasherBuilder>,
+    pub(crate) fonts: HashMap<&'a FontCfg<'a>, LoadedFont, FontHasherBuilder>,
     // Simple key, use smallmap
     chars: Map<char, LoadedChar>,
 }
@@ -213,30 +210,26 @@ struct LoadedChar {
 
 impl<'a> LoadedFonts<'a> {
     pub(crate) fn new(
-        fonts: HashMap<&'a FontCfg, LoadedFont, FontHasherBuilder>,
-        char_mapping: &Map<heapless::String<4>, FontCfg>,
+        fonts: HashMap<&'a FontCfg<'a>, LoadedFont, FontHasherBuilder>,
     ) -> Result<Self> {
         let mut chars = Map::new();
-        for (char, font) in char_mapping.iter() {
-            let maybe_char = char.chars().next();
-            match maybe_char {
-                Some(char) => match fonts.get(font) {
-                    Some(loaded) => match loaded.char_map.get(&char) {
-                        Some(char_info) => {
-                            chars.insert(
-                                char,
-                                LoadedChar {
-                                    gsid: loaded.glyph_set,
-                                    char_info: *char_info,
-                                    font_height: loaded.font_height,
-                                },
-                            );
-                        }
-                        None => return Err(Error::FontLoad("Char not in specified font")),
-                    },
-                    None => return Err(Error::FontLoad("Font not loaded when expected")),
+        for (char, font) in CHAR_REMAP {
+            let char = *char;
+            match fonts.get(font) {
+                Some(loaded) => match loaded.char_map.get(&char) {
+                    Some(char_info) => {
+                        chars.insert(
+                            char,
+                            LoadedChar {
+                                gsid: loaded.glyph_set,
+                                char_info: *char_info,
+                                font_height: loaded.font_height,
+                            },
+                        );
+                    }
+                    None => return Err(Error::FontLoad("Char not in specified font")),
                 },
-                None => return Err(Error::BadCharFontMapping("No char supplied")),
+                None => return Err(Error::FontLoad("Font not loaded when expected")),
             }
         }
         Ok(Self { fonts, chars })

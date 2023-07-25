@@ -8,8 +8,7 @@ pgwm-core = { path = "pgwm-core", default-features = false }
 pgwm-utils = { path = "pgwm-utils", default-features = false }
 
 # Managed
-fontdue = { git = "https://github.com/MarcusGrass/fontdue", rev = "667b807a41be43213e55b5a8e4e1db0f80253c36", default-features = false }
-toml = { git = "https://github.com/MarcusGrass/toml", rev = "aa8fae65d99dbc6bd808631800ac8e182300622c", default-features = false }
+fontdue = { git = "https://github.com/MarcusGrass/fontdue", rev = "e32ae994890caccce9e4a7f7228a2f00f05e0238", default-features = false }
 
 # Owned
 # rusl = { git = "https://github.com/MarcusGrass/tiny-std", rev = "71e91bbde834286a9dd3a565678975252d6ed80d", default-features = false }
@@ -26,10 +25,9 @@ x11-keysyms = { git = "https://github.com/MarcusGrass/x11-keysyms", rev = "da463
 
 atoi = { version = "2.0.0", default-features = false }
 
-hashbrown = { version = "0.13.2", default-features = false }
+hashbrown = { version = "0.14.0", default-features = false }
 heapless = { version = "0.7.16", default-features = false }
 
-serde = { version = "1.0.163", default-features = false, features = ["derive"] }
 smallmap = { version = "1.4.1", default-features = false }
-time = { version = "0.3.21", default-features = false }
+time = { version = "0.3.23", default-features = false }
 unix-print = "0.1.0"

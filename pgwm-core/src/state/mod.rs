@@ -1,4 +1,3 @@
-use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::{Add, Sub};
 use core::time::Duration;
@@ -18,10 +17,10 @@ use crate::geometry::Dimensions;
 use crate::render::DoubleBufferedRenderPicture;
 use crate::state::bar_geometry::BarGeometry;
 use crate::{
-    colors::Colors,
     config::{APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE},
     state::workspace::Workspaces,
 };
+use crate::colors::Colors;
 
 pub mod bar_geometry;
 pub mod properties;
@@ -41,16 +40,8 @@ pub struct State {
     pub workspaces: Workspaces,
     pub colors: Colors,
     pub window_border_width: u32,
-    pub status_bar_height: i16,
-    pub tab_bar_height: i16,
     pub window_padding: i16,
-    pub pad_while_tabbed: bool,
-    pub workspace_bar_window_name_padding: u16,
-    pub cursor_name: String,
     pub pointer_grabbed: bool,
-    pub destroy_after: u64,
-    pub kill_after: u64,
-    pub show_bar_initially: bool,
     pub mouse_mapping: Map<MouseActionKey, Action>,
     pub key_mapping: Map<KeyBoardMappingKey, Action>,
     pub last_timestamp: Timestamp,

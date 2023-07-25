@@ -17,15 +17,12 @@ use crate::status::sys::bat::parse_battery_percentage;
 use crate::status::sys::mem::{parse_raw, Data};
 use crate::status::time::ClockFormatter;
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Check {
     pub interval: u64,
     pub check_type: CheckType,
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[cfg_attr(feature = "config-file", serde(tag = "kind", content = "args"))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum CheckType {
     Battery(heapless::Vec<BatFormat, STATUS_BAR_BAT_SEGMENT_LIMIT>),
@@ -35,7 +32,6 @@ pub enum CheckType {
     Date(DateFormat),
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BatFormat {
     pub(crate) above: u8,
@@ -62,16 +58,15 @@ impl BatFormat {
     }
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CpuFormat {
-    icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    icon: &'static str,
     decimals: usize,
 }
 
 impl CpuFormat {
     #[must_use]
-    pub fn new(icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>, decimals: usize) -> Self {
+    pub const fn new(icon: &'static str, decimals: usize) -> Self {
         Self { icon, decimals }
     }
 
@@ -107,19 +102,18 @@ impl CpuFormat {
     }
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NetFormat {
-    icon_up: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-    icon_down: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    icon_up: &'static str,
+    icon_down: &'static str,
     decimals: usize,
 }
 
 impl NetFormat {
     #[must_use]
-    pub fn new(
-        icon_up: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
-        icon_down: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    pub const fn new(
+        icon_up: &'static str,
+        icon_down: &'static str,
         decimals: usize,
     ) -> Self {
         Self {
@@ -185,16 +179,15 @@ fn compress_to_display(val: f64) -> (&'static str, f64) {
     }
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MemFormat {
-    icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    icon: &'static str,
     decimals: usize,
 }
 
 impl MemFormat {
     #[must_use]
-    pub fn new(icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>, decimals: usize) -> Self {
+    pub const fn new(icon: &'static str, decimals: usize) -> Self {
         Self { icon, decimals }
     }
 
@@ -233,17 +226,16 @@ impl MemFormat {
     }
 }
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DateFormat {
-    icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    icon: &'static str,
     clock_formatter: ClockFormatter,
 }
 
 impl DateFormat {
     #[must_use]
-    pub fn new(
-        icon: String<STATUS_BAR_CHECK_CONTENT_LIMIT>,
+    pub const fn new(
+        icon: &'static str,
         clock_formatter: ClockFormatter,
     ) -> Self {
         Self {
@@ -363,7 +355,7 @@ impl<'a> Checker<'a> {
         })
     }
 
-    pub fn new(checks: &'a mut heapless::Vec<Check, STATUS_BAR_UNIQUE_CHECK_LIMIT>) -> Self {
+    pub fn new(checks: &'a mut [Check]) -> Self {
         let mut checks_by_key = Map::new();
         let sync_start_time = Instant::now();
         for check in checks.iter_mut() {

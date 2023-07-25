@@ -5,8 +5,6 @@ use crate::error::Result;
 use crate::geometry::layout::Layout;
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
-#[cfg_attr(feature = "config-file", serde(tag = "mode", content = "args"))]
 pub enum Mode {
     Tiled(Layout),
     Tabbed(usize),
@@ -18,7 +16,6 @@ pub enum Mode {
 
 // Infinite cycles... this is fine...
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 pub enum OldDrawMode {
     Tiled(Layout),
     Tabbed(usize),

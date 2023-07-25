@@ -1,5 +1,5 @@
 use pgwm_core::colors::Color;
-use pgwm_core::config::Fonts;
+use pgwm_core::config::{SHORTCUT_SECTION, STATUS_BAR_HEIGHT, STATUS_SECTION, WORKSPACE_BAR_WINDOW_NAME_PADDING, WORKSPACE_SECTION_FONTS};
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::STATUS_BAR_CHECK_CONTENT_LIMIT;
 use pgwm_core::geometry::Dimensions;
@@ -11,7 +11,6 @@ use crate::x11::call_wrapper::CallWrapper;
 
 pub(crate) struct BarManager<'a> {
     font_drawer: &'a FontDrawer<'a>,
-    fonts: &'a Fonts,
 }
 
 impl<'a> BarManager<'a> {
@@ -29,23 +28,23 @@ impl<'a> BarManager<'a> {
             call_wrapper,
             &mon.bar_win,
             &section.display,
-            &self.fonts.workspace_section,
+            WORKSPACE_SECTION_FONTS,
             Dimensions::new(
                 section.last_draw_width,
-                state.status_bar_height,
+                STATUS_BAR_HEIGHT,
                 title_position.start,
                 0,
             ),
             title_position.length,
-            state.workspace_bar_window_name_padding as i16,
+            WORKSPACE_BAR_WINDOW_NAME_PADDING as i16,
             0,
-            state.colors.workspace_bar_current_window_title_background,
-            state.colors.workspace_bar_current_window_title_text,
+            state.colors.workspace_bar_current_window_title_background(),
+            state.colors.workspace_bar_current_window_title_text(),
         )?;
         state.monitors[mon_ind]
             .bar_geometry
             .window_title_section
-            .last_draw_width = draw_width + state.workspace_bar_window_name_padding as i16;
+            .last_draw_width = draw_width + WORKSPACE_BAR_WINDOW_NAME_PADDING as i16;
         Ok(())
     }
 
@@ -60,7 +59,7 @@ impl<'a> BarManager<'a> {
             call_wrapper,
             mon_ind,
             ws_ind,
-            state.colors.workspace_bar_focused_workspace_background,
+            state.colors.workspace_bar_focused_workspace_background(),
             state,
         )
     }
@@ -76,7 +75,7 @@ impl<'a> BarManager<'a> {
             call_wrapper,
             mon_ind,
             ws_ind,
-            state.colors.workspace_bar_unfocused_workspace_background,
+            state.colors.workspace_bar_unfocused_workspace_background(),
             state,
         )
     }
@@ -92,7 +91,7 @@ impl<'a> BarManager<'a> {
             call_wrapper,
             mon_ind,
             ws_ind,
-            state.colors.workspace_bar_urgent_workspace_background,
+            state.colors.workspace_bar_urgent_workspace_background(),
             state,
         )
     }
@@ -110,7 +109,7 @@ impl<'a> BarManager<'a> {
             ws_ind,
             state
                 .colors
-                .workspace_bar_selected_unfocused_workspace_background,
+                .workspace_bar_selected_unfocused_workspace_background(),
             state,
         )
     }
@@ -131,10 +130,10 @@ impl<'a> BarManager<'a> {
             call_wrapper,
             &mon.bar_win,
             name,
-            &self.fonts.workspace_section,
+            WORKSPACE_SECTION_FONTS,
             Dimensions::new(
                 component.position.length,
-                state.status_bar_height,
+                STATUS_BAR_HEIGHT,
                 component.position.start,
                 0,
             ),
@@ -142,7 +141,7 @@ impl<'a> BarManager<'a> {
             component.write_offset,
             0,
             bg_color,
-            state.colors.workspace_bar_workspace_section_text,
+            state.colors.workspace_bar_workspace_section_text(),
         )?;
         Ok(())
     }
@@ -160,27 +159,27 @@ impl<'a> BarManager<'a> {
         pgwm_utils::debug!("Running clean workspace redraw on mon {mon_ind}");
         for (ind, ws) in mon.bar_geometry.workspace.components.iter().enumerate() {
             let name = &ws.text;
-            let bg = if name.contains(state.workspaces.get_ws(ws_ind).name.as_str()) {
+            let bg = if name.contains(state.workspaces.get_ws(ws_ind).name) {
                 if is_mon_focus {
-                    state.colors.workspace_bar_focused_workspace_background
+                    state.colors.workspace_bar_focused_workspace_background()
                 } else {
                     state
                         .colors
-                        .workspace_bar_selected_unfocused_workspace_background
+                        .workspace_bar_selected_unfocused_workspace_background()
                 }
             } else if wants_focus[ind] {
-                state.colors.workspace_bar_urgent_workspace_background
+                state.colors.workspace_bar_urgent_workspace_background()
             } else {
-                state.colors.workspace_bar_unfocused_workspace_background
+                state.colors.workspace_bar_unfocused_workspace_background()
             };
             self.font_drawer.draw(
                 call_wrapper,
                 &mon.bar_win,
                 name,
-                &self.fonts.workspace_section,
+                WORKSPACE_SECTION_FONTS,
                 Dimensions::new(
                     ws.position.length,
-                    state.status_bar_height,
+                    STATUS_BAR_HEIGHT,
                     ws.position.start,
                     0,
                 ),
@@ -188,7 +187,7 @@ impl<'a> BarManager<'a> {
                 ws.write_offset,
                 0,
                 bg,
-                state.colors.workspace_bar_workspace_section_text,
+                state.colors.workspace_bar_workspace_section_text(),
             )?;
         }
         Ok(())
@@ -242,13 +241,13 @@ impl<'a> BarManager<'a> {
                 call_wrapper,
                 &state.monitors[mon_ind].bar_win,
                 &content,
-                &self.fonts.status_section,
-                Dimensions::new(pos.length, state.status_bar_height, pos.start, src_y),
+                STATUS_SECTION,
+                Dimensions::new(pos.length, STATUS_BAR_HEIGHT, pos.start, src_y),
                 pos.length,
                 0,
                 0,
-                *bg,
-                *text_col,
+                bg,
+                text_col,
             )?;
         }
         Ok(())
@@ -271,18 +270,18 @@ impl<'a> BarManager<'a> {
                     call_wrapper,
                     &state.monitors[i].bar_win,
                     &section.display,
-                    &self.fonts.status_section,
+                    STATUS_SECTION,
                     Dimensions::new(
                         status_position.length,
-                        state.status_bar_height,
+                        STATUS_BAR_HEIGHT,
                         status_position.start,
                         src_y,
                     ),
                     status_position.length,
                     0,
                     0,
-                    *bg,
-                    *text_col,
+                    bg,
+                    text_col,
                 )?;
             }
         }
@@ -307,13 +306,13 @@ impl<'a> BarManager<'a> {
                 call_wrapper,
                 &mon.bar_win,
                 name,
-                &self.fonts.shortcut_section,
-                Dimensions::new(shortcut.position.length, state.status_bar_height, offset, 0),
+                SHORTCUT_SECTION,
+                Dimensions::new(shortcut.position.length, STATUS_BAR_HEIGHT, offset, 0),
                 shortcut.position.length,
                 shortcut.write_offset,
                 0,
-                *bg,
-                *text,
+                bg,
+                text,
             )?;
             offset += shortcut.position.length;
         }
@@ -364,7 +363,7 @@ impl<'a> BarManager<'a> {
         }
     }
 
-    pub fn new(font_drawer: &'a FontDrawer<'a>, fonts: &'a Fonts) -> Self {
-        Self { font_drawer, fonts }
+    pub fn new(font_drawer: &'a FontDrawer<'a>) -> Self {
+        Self { font_drawer }
     }
 }

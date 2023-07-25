@@ -1,5 +1,4 @@
 use core::fmt::Debug;
-
 use crate::config::USED_DIFFERENT_COLOR_SEGMENTS;
 
 #[derive(Debug, Copy, Clone)]
@@ -55,68 +54,27 @@ Naming is hopefully fairly self-explanatory for what each color does.
 A constant can be declared as above for reuse.
  **/
 #[derive(Debug, Copy, Clone)]
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[cfg_attr(test, derive(PartialEq))]
 pub struct ColorBuilder {
-    #[cfg_attr(feature = "config-file", serde(default = "default_black"))]
     pub window_border: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
     pub window_border_highlighted: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_orange"))]
     pub window_border_urgent: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_light_gray"))]
     pub workspace_bar_selected_unfocused_workspace_background: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_black"))]
     pub workspace_bar_unfocused_workspace_background: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_blue"))]
     pub workspace_bar_focused_workspace_background: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_orange"))]
     pub workspace_bar_urgent_workspace_background: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
     pub workspace_bar_workspace_section_text: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
     pub workspace_bar_current_window_title_text: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_dark_gray"))]
     pub workspace_bar_current_window_title_background: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
     pub status_bar_text: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_light_gray"))]
     pub status_bar_background: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
     pub tab_bar_text: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_light_gray"))]
     pub tab_bar_focused_tab_background: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_black"))]
     pub tab_bar_unfocused_tab_background: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_white"))]
     pub shortcut_text: RGBA,
-    #[cfg_attr(feature = "config-file", serde(default = "default_black"))]
     pub shortcut_background: RGBA,
 }
 
-impl Default for ColorBuilder {
-    fn default() -> Self {
-        Self {
-            window_border: default_black(),
-            window_border_highlighted: default_white(),
-            window_border_urgent: default_orange(),
-            workspace_bar_selected_unfocused_workspace_background: default_light_gray(),
-            workspace_bar_unfocused_workspace_background: default_black(),
-            workspace_bar_focused_workspace_background: default_blue(),
-            workspace_bar_urgent_workspace_background: default_orange(),
-            workspace_bar_workspace_section_text: default_white(),
-            workspace_bar_current_window_title_text: default_white(),
-            workspace_bar_current_window_title_background: default_dark_gray(),
-            status_bar_text: default_white(),
-            status_bar_background: default_light_gray(),
-            tab_bar_text: default_white(),
-            tab_bar_focused_tab_background: default_light_gray(),
-            tab_bar_unfocused_tab_background: default_black(),
-            shortcut_text: default_white(),
-            shortcut_background: default_black(),
-        }
-    }
-}
 
 /**
 Just some default colors
@@ -145,104 +103,136 @@ const fn default_orange() -> RGBA {
     (224, 44, 16, 0)
 }
 
-macro_rules! impl_colors {
-    ( $( $color_name:ident, $index:literal ),* ) => {
-        impl ColorBuilder {
-            $(
-            #[must_use]
-            pub fn $color_name(mut self, value: (u8, u8, u8, u8)) -> Self {
-                self.$color_name = value;
-                self
-            }
-            )*
-            #[must_use]
-            pub fn by_index(&self, ind: usize) -> Option<&(u8, u8, u8, u8)> {
-                match ind {
-                    $(
-                    $index => Some(&self.$color_name),
-                    )*
-                    _ => None
-                }
-            }
-            #[must_use]
-            pub fn get_all(&self) -> heapless::Vec<&(u8, u8, u8, u8), USED_DIFFERENT_COLOR_SEGMENTS> {
-                let mut all = heapless::Vec::new();
-                $(
-                    let _ = all.push(&self.$color_name);
-                )*
-                all
-            }
-        }
-        #[derive(Copy, Clone, Debug)]
-        pub struct Colors {
-            $(
-                pub $color_name: Color,
-            )*
-        }
-        impl Colors {
-            #[must_use]
-            pub fn from_vec(source: heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS>) -> Self {
-                Self {
-                    $(
-                    $color_name: source[$index],
-                    )*
-                }
-            }
-            $(
-                #[must_use]
-                pub fn $color_name(&self) -> &Color {
-                    &self.$color_name
-                }
-            )*
-
-            #[must_use]
-            pub fn get_all(&self) -> heapless::Vec<Color, USED_DIFFERENT_COLOR_SEGMENTS> {
-                let mut all = heapless::Vec::new();
-                $(
-                    let _ = all.push(self.$color_name);
-                )*
-                all
-            }
-        }
-    };
+pub struct Colors {
+    pub inner: [Color; USED_DIFFERENT_COLOR_SEGMENTS],
 }
 
-impl_colors!(
-    window_border,
-    0,
-    window_border_highlighted,
-    1,
-    window_border_urgent,
-    2,
-    workspace_bar_selected_unfocused_workspace_background,
-    3,
-    workspace_bar_unfocused_workspace_background,
-    4,
-    workspace_bar_focused_workspace_background,
-    5,
-    workspace_bar_urgent_workspace_background,
-    6,
-    workspace_bar_workspace_section_text,
-    7,
-    workspace_bar_current_window_title_text,
-    8,
-    workspace_bar_current_window_title_background,
-    9,
-    status_bar_text,
-    10,
-    status_bar_background,
-    11,
-    tab_bar_focused_tab_background,
-    12,
-    tab_bar_unfocused_tab_background,
-    13,
-    tab_bar_text,
-    14,
-    shortcut_background,
-    15,
-    shortcut_text,
-    16
-);
+impl Colors {
+    #[inline]
+    #[must_use]
+    pub const fn window_border(&self) -> Color {
+        self.inner[0]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn window_border_highlighted(&self) -> Color {
+        self.inner[1]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn window_border_urgent(&self) -> Color {
+        self.inner[2]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn workspace_bar_selected_unfocused_workspace_background(&self) -> Color {
+        self.inner[3]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn workspace_bar_unfocused_workspace_background(&self) -> Color {
+        self.inner[4]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn workspace_bar_focused_workspace_background(&self) -> Color {
+        self.inner[5]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn workspace_bar_urgent_workspace_background(&self) -> Color {
+        self.inner[6]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn workspace_bar_workspace_section_text(&self) -> Color {
+        self.inner[7]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn workspace_bar_current_window_title_text(&self) -> Color {
+        self.inner[8]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn workspace_bar_current_window_title_background(&self) -> Color {
+        self.inner[9]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn status_bar_text(&self) -> Color {
+        self.inner[10]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn status_bar_background(&self) -> Color {
+        self.inner[11]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn tab_bar_text(&self) -> Color {
+        self.inner[12]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn tab_bar_focused_tab_background(&self) -> Color {
+        self.inner[13]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn tab_bar_unfocused_tab_background(&self) -> Color {
+        self.inner[14]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn shortcut_text(&self) -> Color {
+        self.inner[15]
+    }
+    #[inline]
+    #[must_use]
+    pub const fn shortcut_background(&self) -> Color {
+        self.inner[16]
+    }
+}
+
+pub const COLORS: [RGBA; 17] = [
+    WINDOW_BORDER,
+    WINDOW_BORDER_HIGHLIGHTED,
+    WINDOW_BORDER_URGENT,
+    WORKSPACE_BAR_SELECTED_UNFOCUSED_WORKSPACE_BACKGROUND,
+    WORKSPACE_BAR_UNFOCUSED_WORKSPACE_BACKGROUND,
+    WORKSPACE_BAR_FOCUSED_WORKSPACE_BACKGROUND,
+    WORKSPACE_BAR_URGENT_WORKSPACE_BACKGROUND,
+    WORKSPACE_BAR_WORKSPACE_SECTION_TEXT,
+    WORKSPACE_BAR_CURRENT_WINDOW_TITLE_TEXT,
+    WORKSPACE_BAR_CURRENT_WINDOW_TITLE_BACKGROUND,
+    STATUS_BAR_TEXT,
+    STATUS_BAR_BACKGROUND,
+    TAB_BAR_TEXT,
+    TAB_BAR_FOCUSED_TAB_BACKGROUND,
+    TAB_BAR_UNFOCUSED_TAB_BACKGROUND,
+    SHORTCUT_TEXT,
+    SHORTCUT_BACKGROUND,
+];
+
+pub const WINDOW_BORDER: RGBA = default_black();
+pub const WINDOW_BORDER_HIGHLIGHTED: RGBA = default_white();
+pub const WINDOW_BORDER_URGENT: RGBA = default_orange();
+pub const WORKSPACE_BAR_SELECTED_UNFOCUSED_WORKSPACE_BACKGROUND: RGBA = default_light_gray();
+pub const WORKSPACE_BAR_UNFOCUSED_WORKSPACE_BACKGROUND: RGBA = default_black();
+pub const WORKSPACE_BAR_FOCUSED_WORKSPACE_BACKGROUND: RGBA = default_blue();
+pub const WORKSPACE_BAR_URGENT_WORKSPACE_BACKGROUND: RGBA = default_orange();
+pub const WORKSPACE_BAR_WORKSPACE_SECTION_TEXT: RGBA = default_white();
+pub const WORKSPACE_BAR_CURRENT_WINDOW_TITLE_TEXT: RGBA = default_white();
+pub const WORKSPACE_BAR_CURRENT_WINDOW_TITLE_BACKGROUND: RGBA = default_dark_gray();
+pub const STATUS_BAR_TEXT: RGBA = default_white();
+pub const STATUS_BAR_BACKGROUND: RGBA = default_light_gray();
+pub const TAB_BAR_TEXT: RGBA = default_white();
+pub const TAB_BAR_FOCUSED_TAB_BACKGROUND: RGBA = default_light_gray();
+pub const TAB_BAR_UNFOCUSED_TAB_BACKGROUND: RGBA = default_black();
+pub const SHORTCUT_TEXT: RGBA = default_white();
+pub const SHORTCUT_BACKGROUND: RGBA = default_black();
+
 
 const fn convert_up(v: u8) -> u16 {
     v as u16 * 256

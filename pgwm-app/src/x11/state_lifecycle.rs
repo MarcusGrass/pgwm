@@ -1,4 +1,3 @@
-use alloc::string::String;
 use alloc::vec::Vec;
 
 use heapless::binary_heap::Min;
@@ -22,10 +21,7 @@ use pgwm_core::colors::Colors;
 use pgwm_core::config::key_map::{KeyBoardMappingKey, KeyboardMapping};
 use pgwm_core::config::mouse_map::MouseActionKey;
 use pgwm_core::config::workspaces::UserWorkspace;
-use pgwm_core::config::{
-    Action, FontCfg, Fonts, Shortcut, SimpleKeyMapping, SimpleMouseMapping, TilingModifiers,
-    APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE,
-};
+use pgwm_core::config::{Action, FontCfg, APPLICATION_WINDOW_LIMIT, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE, SHORTCUT_SECTION, BAR_SHORTCUTS, WORKSPACE_SECTION_FONTS, STATUS_SECTION, TAB_BAR_HEIGHT, WINDOW_BORDER_WIDTH, WORKSPACE_BAR_WINDOW_NAME_PADDING, WINDOW_PADDING, STATUS_BAR_HEIGHT, KEYBOARD_MAPPINGS, MOUSE_MAPPINGS, SHOW_BAR_INITIALLY, STATUS_CHECKS, USER_WORKSPACES};
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::{STATUS_BAR_CHECK_SEP, STATUS_BAR_FIRST_SEP};
 use pgwm_core::geometry::{Dimensions, Line};
@@ -47,88 +43,48 @@ use crate::x11::call_wrapper::CallWrapper;
 
 const COOKIE_CONTAINER_CAPACITY: usize = 64;
 
-pub(crate) fn create_state<'a>(
+pub(crate) fn create_state<'a, 'state>(
     call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
     visual: RenderVisualInfo,
-    fonts: &'a Fonts,
     screen: &'a Screen,
     colors: Colors,
-    cursor_name: String,
-    status_bar_height: i16,
-    tab_bar_height: i16,
-    window_padding: i16,
-    window_border_width: u32,
-    workspace_bar_window_name_padding: u16,
-    pad_while_tabbed: bool,
-    destroy_after: u64, // Millis before force-close
-    kill_after: u64,    // Millis before we kill the client
-    show_bar_initially: bool,
-    tiling_modifiers: TilingModifiers,
-    init_workspaces: &[UserWorkspace],
-    shortcuts: &[Shortcut],
-    key_mappings: &[SimpleKeyMapping],
-    mouse_mappings: &[SimpleMouseMapping],
-    #[cfg(feature = "status-bar")] checks: &[Check],
 ) -> Result<State> {
     let mut cookie_container = heapless::Vec::new();
     let static_state = create_static_state(
         call_wrapper,
         screen,
         &colors,
-        tab_bar_height as u16,
         &mut cookie_container,
     )?;
     do_create_state(
         call_wrapper,
         font_manager,
-        fonts,
         visual,
         screen.clone(),
         static_state.intern_created_windows,
         heapless::Vec::new(),
-        Workspaces::create_empty(init_workspaces, tiling_modifiers)?,
+        Workspaces::create_empty(&USER_WORKSPACES)?,
         colors,
         static_state.wm_check_win,
         static_state.sequences_to_ignore,
-        cursor_name,
         false,
-        status_bar_height,
-        shortcuts,
-        tab_bar_height,
-        window_padding,
-        window_border_width,
-        workspace_bar_window_name_padding,
-        pad_while_tabbed,
-        destroy_after, // Millis before force-close
-        kill_after,    // Millis before we kill the client
-        show_bar_initially,
-        init_workspaces,
-        key_mappings,
-        mouse_mappings,
-        #[cfg(feature = "status-bar")]
-        checks,
+        WINDOW_BORDER_WIDTH,
+        WINDOW_PADDING,
         cookie_container,
     )
 }
 
-pub(crate) fn reinit_state<'a>(
+pub(crate) fn reinit_state<'a, 'state>(
     call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
-    fonts: &'a Fonts,
     visual: RenderVisualInfo,
     state: State,
-    init_workspaces: &[UserWorkspace],
-    shortcuts: &[Shortcut],
-    key_mappings: &[SimpleKeyMapping],
-    mouse_mappings: &[SimpleMouseMapping],
-    #[cfg(feature = "status-bar")] checks: &[Check],
 ) -> Result<State> {
     let cookie_container = heapless::Vec::new();
     do_create_state(
         call_wrapper,
         font_manager,
-        fonts,
         visual,
         state.screen.clone(),
         state.intern_created_windows,
@@ -137,23 +93,9 @@ pub(crate) fn reinit_state<'a>(
         state.colors,
         state.wm_check_win,
         state.sequences_to_ignore,
-        state.cursor_name,
         state.pointer_grabbed,
-        state.status_bar_height,
-        shortcuts,
-        state.tab_bar_height,
-        state.window_padding,
         state.window_border_width,
-        state.workspace_bar_window_name_padding,
-        state.pad_while_tabbed,
-        state.destroy_after,
-        state.kill_after,
-        state.show_bar_initially,
-        init_workspaces,
-        key_mappings,
-        mouse_mappings,
-        #[cfg(feature = "status-bar")]
-        checks,
+        state.window_padding,
         cookie_container,
     )
 }
@@ -211,10 +153,9 @@ pub(crate) fn teardown_full_state(
     clippy::fn_params_excessive_bools,
     clippy::inline_always
 )]
-fn do_create_state<'a>(
+fn do_create_state<'a, 'state>(
     call_wrapper: &'a mut CallWrapper,
     font_manager: &'a FontDrawer<'a>,
-    fonts: &'a Fonts,
     vis_info: RenderVisualInfo,
     screen: Screen,
     mut intern_created_windows: FnvIndexSet<Window, APPLICATION_WINDOW_LIMIT>,
@@ -223,22 +164,9 @@ fn do_create_state<'a>(
     colors: Colors,
     wm_check_win: Window,
     sequences_to_ignore: heapless::BinaryHeap<u16, Min, BINARY_HEAP_LIMIT>,
-    cursor_name: String,
     pointer_grabbed: bool,
-    status_bar_height: i16,
-    shortcuts: &[Shortcut],
-    tab_bar_height: i16,
-    window_padding: i16,
     window_border_width: u32,
-    workspace_bar_window_name_padding: u16,
-    pad_while_tabbed: bool,
-    destroy_after: u64, // Millis before force-close
-    kill_after: u64,    // Millis before we kill the client
-    show_bar_initially: bool,
-    init_workspaces: &[UserWorkspace],
-    key_mappings: &[SimpleKeyMapping],
-    mouse_mappings: &[SimpleMouseMapping],
-    #[cfg(feature = "status-bar")] checks: &[Check],
+    window_padding: i16,
     mut cookie_container: heapless::Vec<VoidCookie, COOKIE_CONTAINER_CAPACITY>,
 ) -> Result<State> {
     let screen_dimensions = get_screen_dimensions(call_wrapper, &screen)?;
@@ -249,7 +177,7 @@ fn do_create_state<'a>(
             max_bar_width = dimensions.width;
         }
         pgwm_utils::debug!("Monitor {} size = {:?}", i, dimensions);
-        if i > init_workspaces.len() {
+        if i > USER_WORKSPACES.len() {
             pgwm_utils::debug!(
                 "More monitors than workspaces, not using more than {}",
                 i - 1
@@ -266,7 +194,7 @@ fn do_create_state<'a>(
                 &screen,
                 tab_bar_win,
                 dimensions,
-                tab_bar_height
+                TAB_BAR_HEIGHT,
             )?
         )?;
         let bar_win = call_wrapper.generate_id()?;
@@ -278,7 +206,7 @@ fn do_create_state<'a>(
                 &screen,
                 bar_win,
                 dimensions,
-                status_bar_height as u16
+                STATUS_BAR_HEIGHT as u16
             )?
         )?;
         let bar_pixmap = call_wrapper.generate_id()?;
@@ -289,10 +217,10 @@ fn do_create_state<'a>(
                 &screen,
                 bar_pixmap,
                 dimensions,
-                status_bar_height as u16
+                STATUS_BAR_HEIGHT as u16
             )?
         )?;
-        if show_bar_initially {
+        if SHOW_BAR_INITIALLY {
             map_window(
                 &mut call_wrapper.uring,
                 &mut call_wrapper.xcb_state,
@@ -306,14 +234,12 @@ fn do_create_state<'a>(
             init_xrender_double_buffered(call_wrapper, screen.root, tab_bar_win, &vis_info)?;
         let bar_geometry = create_bar_geometry(
             font_manager,
-            fonts,
             dimensions.width,
-            init_workspaces,
-            workspace_bar_window_name_padding,
-            shortcuts,
-            workspace_bar_window_name_padding,
+            &USER_WORKSPACES,
+            WORKSPACE_BAR_WINDOW_NAME_PADDING,
+            WORKSPACE_BAR_WINDOW_NAME_PADDING,
             #[cfg(feature = "status-bar")]
-            checks,
+            &STATUS_CHECKS,
         );
         let new_mon = Monitor {
             bar_geometry,
@@ -322,16 +248,16 @@ fn do_create_state<'a>(
             dimensions,
             hosted_workspace: i,
             last_focus: None,
-            show_bar: show_bar_initially,
+            show_bar: SHOW_BAR_INITIALLY,
             window_title_display: heapless::String::from("pgwm"),
         };
         monitors.push(new_mon);
     }
 
     pgwm_utils::debug!("Initializing mouse");
-    let mouse_mapping = init_mouse(mouse_mappings);
+    let mouse_mapping = init_mouse();
     pgwm_utils::debug!("Initializing keys");
-    let key_mapping = init_keys(call_wrapper, key_mappings)?;
+    let key_mapping = init_keys(call_wrapper)?;
     grab_keys(call_wrapper, &key_mapping, screen.root)?;
     for bar_win in monitors.iter().map(|mon| &mon.bar_win) {
         pgwm_utils::debug!("Grabbing mouse keys on bar_win");
@@ -355,7 +281,7 @@ fn do_create_state<'a>(
             &screen,
             status_pixmap,
             max_bar_width as u16,
-            status_bar_height as u16
+            STATUS_BAR_HEIGHT as u16
         )?
     )?;
 
@@ -374,18 +300,10 @@ fn do_create_state<'a>(
         sequences_to_ignore,
         monitors,
         workspaces,
-        window_border_width,
         colors,
-        pointer_grabbed,
-        status_bar_height,
-        tab_bar_height,
+        window_border_width,
         window_padding,
-        pad_while_tabbed,
-        workspace_bar_window_name_padding,
-        cursor_name,
-        destroy_after,
-        kill_after,
-        show_bar_initially,
+        pointer_grabbed,
         mouse_mapping,
         key_mapping,
         last_timestamp: CURRENT_TIME,
@@ -396,7 +314,6 @@ fn create_static_state<'a>(
     call_wrapper: &'a mut CallWrapper,
     screen: &'a Screen,
     colors: &Colors,
-    tab_bar_height: u16,
     cookie_container: &mut heapless::Vec<VoidCookie, COOKIE_CONTAINER_CAPACITY>,
 ) -> Result<StaticState> {
     let mut intern_created_windows = FnvIndexSet::new();
@@ -404,7 +321,7 @@ fn create_static_state<'a>(
     let tab_pixmap = call_wrapper.generate_id()?;
     push_heapless!(
         cookie_container,
-        create_tab_pixmap(call_wrapper, screen, tab_pixmap, tab_bar_height)?
+        create_tab_pixmap(call_wrapper, screen, tab_pixmap, TAB_BAR_HEIGHT as u16)?
     )?;
 
     let sequences_to_ignore = heapless::BinaryHeap::new();
@@ -667,26 +584,22 @@ fn create_status_bar_pixmap(
 
 fn create_bar_geometry<'a>(
     font_manager: &'a FontDrawer<'a>,
-    fonts: &'a Fonts,
     mon_width: i16,
     workspaces: &[UserWorkspace],
     workspace_bar_window_name_padding: u16,
-    shortcuts: &[Shortcut],
     shortcut_padding: u16,
     #[cfg(feature = "status-bar")] checks: &[Check],
 ) -> BarGeometry {
     let workspace_section = create_workspace_section_geometry(
         font_manager,
-        fonts,
         workspaces,
         workspace_bar_window_name_padding,
     );
     let shortcut_section =
-        create_shortcut_geometry(font_manager, fonts, mon_width, shortcuts, shortcut_padding);
+        create_shortcut_geometry(font_manager, mon_width, shortcut_padding);
     #[cfg(feature = "status-bar")]
     let status_section = create_status_section_geometry(
         font_manager,
-        fonts,
         mon_width,
         shortcut_section.position.length,
         checks,
@@ -704,7 +617,6 @@ fn create_bar_geometry<'a>(
 #[cfg(feature = "status-bar")]
 fn create_status_section_geometry<'a>(
     font_manager: &'a FontDrawer<'a>,
-    fonts: &'a Fonts,
     mon_width: i16,
     shortcut_width: i16,
     checks: &[Check],
@@ -719,39 +631,39 @@ fn create_status_section_geometry<'a>(
                 .iter()
                 .map(|bc| {
                     font_manager
-                        .text_geometry(&bc.max_length_content(), &fonts.status_section)
+                        .text_geometry(&bc.max_length_content(), STATUS_SECTION)
                         .0
                 })
                 .max()
                 .unwrap_or(0),
             CheckType::Cpu(fmt) => {
                 font_manager
-                    .text_geometry(&fmt.max_length_content(), &fonts.status_section)
+                    .text_geometry(&fmt.max_length_content(), STATUS_SECTION)
                     .0
             }
             CheckType::Net(fmt) => {
                 font_manager
-                    .text_geometry(&fmt.max_length_content(), &fonts.status_section)
+                    .text_geometry(&fmt.max_length_content(), STATUS_SECTION)
                     .0
             }
             CheckType::Mem(fmt) => {
                 font_manager
-                    .text_geometry(&fmt.max_length_content(), &fonts.status_section)
+                    .text_geometry(&fmt.max_length_content(), STATUS_SECTION)
                     .0
             }
             CheckType::Date(fmt) => {
                 font_manager
-                    .text_geometry(&fmt.format_date(), &fonts.status_section)
+                    .text_geometry(&fmt.format_date(), STATUS_SECTION)
                     .0
             }
         };
         let _ = check_lengths.push(length);
     }
     let sep_len = font_manager
-        .text_geometry(STATUS_BAR_CHECK_SEP, &fonts.status_section)
+        .text_geometry(STATUS_BAR_CHECK_SEP, STATUS_SECTION)
         .0;
     let first_sep = font_manager
-        .text_geometry(STATUS_BAR_FIRST_SEP, &fonts.status_section)
+        .text_geometry(STATUS_BAR_FIRST_SEP, STATUS_SECTION)
         .0;
     StatusSection::new(
         mon_width,
@@ -764,16 +676,15 @@ fn create_status_section_geometry<'a>(
 
 fn create_workspace_section_geometry<'a>(
     font_manager: &'a FontDrawer<'a>,
-    fonts: &'a Fonts,
     workspaces: &[UserWorkspace],
     workspace_bar_window_name_padding: u16,
 ) -> WorkspaceSection {
     let (components, position) = create_fixed_components(
-        workspaces.iter().map(|s| s.name.clone()),
+        workspaces.iter().map(|s| s.name),
         0,
         workspace_bar_window_name_padding,
         font_manager,
-        &fonts.workspace_section,
+        WORKSPACE_SECTION_FONTS,
     );
     WorkspaceSection {
         position,
@@ -783,17 +694,15 @@ fn create_workspace_section_geometry<'a>(
 
 fn create_shortcut_geometry<'a>(
     font_manager: &'a FontDrawer<'a>,
-    fonts: &'a Fonts,
     mon_width: i16,
-    shortcuts: &[Shortcut],
     shortcut_padding: u16,
 ) -> ShortcutSection {
     let (components, position) = create_fixed_components(
-        shortcuts.iter().map(|s| s.name.clone()),
+        BAR_SHORTCUTS.into_iter(),
         0,
         shortcut_padding,
         font_manager,
-        &fonts.workspace_section,
+        WORKSPACE_SECTION_FONTS,
     );
     let position = Line::new(mon_width - position.length, position.length);
     let mut shifted_components = Vec::new();
@@ -811,7 +720,7 @@ fn create_shortcut_geometry<'a>(
     }
 }
 
-fn create_fixed_components<It: Iterator<Item = String>>(
+fn create_fixed_components<It: Iterator<Item = &'static str>>(
     it: It,
     x: i16,
     padding: u16,
@@ -823,8 +732,8 @@ fn create_fixed_components<It: Iterator<Item = String>>(
     let mut max_width = 0;
     for (i, text) in it.enumerate() {
         widths.push((
-            font_manager.text_geometry(text.as_str(), fonts).0,
-            text.clone(),
+            font_manager.text_geometry(text, fonts).0,
+            text,
         ));
         if widths[i].0 > max_width {
             max_width = widths[i].0;
@@ -849,7 +758,6 @@ fn create_fixed_components<It: Iterator<Item = String>>(
 
 fn init_keys(
     call_wrapper: &mut CallWrapper,
-    simple_key_mappings: &[SimpleKeyMapping],
 ) -> Result<Map<KeyBoardMappingKey, Action>> {
     let setup = call_wrapper.xcb_state.setup();
     let lo = setup.min_keycode;
@@ -868,10 +776,7 @@ fn init_keys(
     let syms = mapping.keysyms;
     let mut map = Map::new();
 
-    let mut converted: Vec<KeyboardMapping> = Vec::new();
-    for simple_key_mapping in simple_key_mappings {
-        converted.push(simple_key_mapping.clone().to_key_mapping());
-    }
+    let mut converted: Vec<KeyboardMapping> = KEYBOARD_MAPPINGS.to_vec();
     for (keysym_ind, sym) in syms.iter().enumerate() {
         while let Some(keymap_ind) = converted.iter().position(|k| &k.keysym == sym) {
             let key_def = converted.swap_remove(keymap_ind);
@@ -926,11 +831,9 @@ fn ungrab_keys(
     Ok(())
 }
 
-fn init_mouse(simple_mouse_mappings: &[SimpleMouseMapping]) -> Map<MouseActionKey, Action> {
+fn init_mouse() -> Map<MouseActionKey, Action> {
     let mut action_map = Map::new();
-    for mapping in simple_mouse_mappings
-        .iter()
-        .map(|smm| smm.clone().to_mouse_mapping())
+    for mapping in MOUSE_MAPPINGS
     {
         action_map.insert(
             MouseActionKey {

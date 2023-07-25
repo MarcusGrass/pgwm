@@ -1,25 +1,19 @@
-use alloc::string::String;
-use alloc::vec::Vec;
-
 use crate::config::DefaultDraw;
 
-#[cfg_attr(feature = "config-file", derive(serde::Deserialize))]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 #[derive(Debug, Clone)]
 pub struct UserWorkspace {
-    pub name: String,
+    pub name: &'static str,
 
-    #[cfg_attr(feature = "config-file", serde(default))]
-    pub mapped_class_names: Vec<String>,
+    pub mapped_class_names: &'static [&'static str],
 
-    #[cfg_attr(feature = "config-file", serde(default))]
     pub default_draw: DefaultDraw,
 }
 
 impl UserWorkspace {
     pub(crate) const fn new(
-        name: String,
-        mapped_class_names: Vec<String>,
+        name: &'static str,
+        mapped_class_names: &'static [&'static str],
         default_draw: DefaultDraw,
     ) -> Self {
         Self {

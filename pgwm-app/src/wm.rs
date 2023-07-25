@@ -16,7 +16,7 @@ use xcb_rust_protocol::proto::xproto::{
 use xcb_rust_protocol::util::FixedLengthFromBytes;
 use xcb_rust_protocol::XcbEnv;
 
-use pgwm_core::config::{BarCfg, Cfg, Options, Sizing};
+use pgwm_core::config::{STATUS_CHECKS};
 use pgwm_core::render::{RenderVisualInfo, VisualInfo};
 use pgwm_core::state::State;
 
@@ -32,58 +32,6 @@ use crate::x11::colors::alloc_colors;
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
-    #[cfg(feature = "status-bar")]
-    let Cfg {
-        sizing,
-        options,
-        tiling_modifiers,
-        fonts,
-        colors,
-        char_remap,
-        workspaces,
-        mouse_mappings,
-        key_mappings,
-        bar,
-    } = Cfg::new(
-        tiny_std::env::var("XDG_CONFIG_HOME").ok(),
-        tiny_std::env::var("HOME").ok(),
-    )?;
-    crate::debug!("Loaded cfg");
-    #[cfg(not(feature = "status-bar"))]
-    let Cfg {
-        sizing,
-        options,
-        tiling_modifiers,
-        fonts,
-        colors,
-        char_remap,
-        workspaces,
-        mouse_mappings,
-        key_mappings,
-        bar,
-    } = Cfg::new(
-        tiny_std::env::var("XDG_CONFIG_HOME").ok(),
-        tiny_std::env::var("HOME").ok(),
-    )?;
-    let Sizing {
-        status_bar_height,
-        tab_bar_height,
-        window_padding,
-        window_border_width,
-        workspace_bar_window_name_padding,
-    } = sizing;
-    let Options {
-        pad_while_tabbed,
-        destroy_after,
-        kill_after,
-        cursor_name,
-        show_bar_initially,
-    } = options;
-    let BarCfg {
-        shortcuts,
-        #[cfg(feature = "status-bar")]
-        status_checks,
-    } = bar;
     #[cfg(feature = "perf-test")]
     let dpy = Some(":4");
     #[cfg(not(feature = "perf-test"))]
@@ -110,7 +58,7 @@ pub(crate) fn run_wm() -> Result<()> {
         xcb_socket_out_buffer,
         socket_fd,
         #[cfg(feature = "status-bar")]
-        &status_checks,
+        &STATUS_CHECKS,
     )?;
     // On connect we'll start the listening loop
     uring_wrapper.submit_sock_read()?;
@@ -138,14 +86,14 @@ pub(crate) fn run_wm() -> Result<()> {
         xcb_env,
     )?;
     let visual = find_render_visual_info(&mut call_wrapper, screen)?;
-    let loaded = load_alloc_fonts(&mut call_wrapper, &visual, &fonts, &char_remap)?;
+    let loaded = load_alloc_fonts(&mut call_wrapper, &visual)?;
     call_wrapper.uring.await_write_completions()?;
 
     crate::debug!("Loaded {} fonts", loaded.len());
-    let lf = LoadedFonts::new(loaded, &char_remap)?;
+    let lf = LoadedFonts::new(loaded)?;
     let font_drawer = FontDrawer::new(&lf);
     crate::debug!("Font drawer initialized");
-    let colors = alloc_colors(&mut call_wrapper, screen.default_colormap, colors)?;
+    let colors = alloc_colors(&mut call_wrapper, screen.default_colormap)?;
     crate::debug!("Allocated colors");
 
     pgwm_utils::debug!("Creating state");
@@ -153,41 +101,23 @@ pub(crate) fn run_wm() -> Result<()> {
         &mut call_wrapper,
         &font_drawer,
         visual,
-        &fonts,
         screen,
         colors,
-        cursor_name,
-        status_bar_height,
-        tab_bar_height,
-        window_padding,
-        window_border_width,
-        workspace_bar_window_name_padding,
-        pad_while_tabbed,
-        destroy_after,
-        kill_after,
-        show_bar_initially,
-        tiling_modifiers,
-        &workspaces,
-        &shortcuts,
-        &key_mappings,
-        &mouse_mappings,
-        #[cfg(feature = "status-bar")]
-        &status_checks,
     )?;
 
     crate::debug!("Initialized mappings");
-    let drawer = Drawer::new(&font_drawer, &fonts);
+    let drawer = Drawer::new(&font_drawer);
     crate::debug!("Initialized Drawer");
-    let bar_manager = BarManager::new(&font_drawer, &fonts);
+    let bar_manager = BarManager::new(&font_drawer);
     crate::debug!("Initialized bar sections");
     let manager = manager::Manager::new(drawer, bar_manager, cursor_handle);
     crate::debug!("Initialized manager");
     // Extremely ugly control flow here
     #[cfg(feature = "status-bar")]
-    let should_check = !status_checks.is_empty();
+    let should_check = !STATUS_CHECKS.is_empty();
 
     #[cfg(feature = "status-bar")]
-    let mut mut_checks = status_checks.clone();
+    let mut mut_checks = STATUS_CHECKS;
     #[cfg(feature = "status-bar")]
     let mut checker = pgwm_core::status::checker::Checker::new(&mut mut_checks);
     crate::debug!("Initialized Checker");
@@ -214,15 +144,8 @@ pub(crate) fn run_wm() -> Result<()> {
                     state = crate::x11::state_lifecycle::reinit_state(
                         &mut call_wrapper,
                         &font_drawer,
-                        &fonts,
                         visual,
                         state,
-                        &workspaces,
-                        &shortcuts,
-                        &key_mappings,
-                        &mouse_mappings,
-                        #[cfg(feature = "status-bar")]
-                        &status_checks,
                     )?;
                     manager.pick_up_state(&mut call_wrapper, &mut state)?;
                 }
