@@ -25,13 +25,7 @@ skip = [
 
 [sources]
 allow-git = [
-    "https://github.com/MarcusGrass/dlmalloc-rs",
     "https://github.com/MarcusGrass/fontdue",
-    "https://github.com/MarcusGrass/linux-rust-bindings",
-    "https://github.com/MarcusGrass/tiny-std",
-    "https://github.com/MarcusGrass/toml",
-    "https://github.com/MarcusGrass/xcb-rust",
-    "https://github.com/MarcusGrass/x11-keysyms",
 ]
 
 [licenses]

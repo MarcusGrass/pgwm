@@ -171,6 +171,8 @@ dependencies = [
 [[package]]
 name = "rusl"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1032884db15e48ffa3ebdc669457699fdfbf750aa90000b29e302e9f8d14a09"
 dependencies = [
  "linux-rust-bindings",
  "sc",
@@ -307,6 +309,8 @@ checksum = "cfda840d8557c12ecdde25485f7dc85152339a61b759f98d4f682e7cb5d75948"
 [[package]]
 name = "tiny-std"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fade72caa88ce1d32651ff6d92288672a329bf0614435b251f98fc4858476d2"
 dependencies = [
  "rusl",
  "sc",
@@ -337,11 +341,14 @@ dependencies = [
 [[package]]
 name = "x11-keysyms"
 version = "0.1.0"
-source = "git+https://github.com/MarcusGrass/x11-keysyms?rev=da4634c071fdc547772cd4dc7892d857b29dd6e5#da4634c071fdc547772cd4dc7892d857b29dd6e5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6462285b997685c657ff2b26c9b444ba84dadf7d38c08bc49ebf80f8a6d3c40"
 
 [[package]]
 name = "xcb-rust-connection"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40cdc2b5b2372b7ceed557051225a6eec282cf6f28f19b950803585be7fd69ed"
 dependencies = [
  "rusl",
  "sc",
@@ -354,6 +361,8 @@ dependencies = [
 [[package]]
 name = "xcb-rust-protocol"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c835c63e02989ec7ac21e5e9be506a7018a4c2aaf7d8d8bdc88302c008937fe7"
 dependencies = [
  "tiny-std",
  "unix-print",
