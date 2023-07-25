@@ -16,14 +16,14 @@ status-bar = ["pgwm-core/status-bar", "time"]
 perf-test = []
 
 [dependencies]
-hashbrown = { version = "0.13.2", default-features = false }
-heapless = { version = "0.7.16", default-features = false }
+hashbrown = { workspace = true, default-features = false }
+heapless = { workspace = true, default-features = false }
 fontdue = { workspace = true, default-features = false, features = ["simd"] }
-pgwm-core = { path = "../pgwm-core", default-features = false }
-pgwm-utils = { path = "../pgwm-utils", default-features = false }
+pgwm-core = { workspace = true, default-features = false }
+pgwm-utils = { workspace = true, default-features = false }
 smallmap = { workspace = true, default-features = false }
-time = { version = "0.3.21", optional = true, default-features = false }
-unix-print = "0.1.0"
+time = { workspace = true, optional = true, default-features = false }
+unix-print = { workspace = true }
 tiny-std = { workspace = true, features = ["alloc"], default-features = false }
 rusl = { workspace = true, default-features = false }
 
