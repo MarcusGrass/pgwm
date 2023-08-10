@@ -335,11 +335,11 @@ pub enum DefaultDraw {
 pub const USER_WORKSPACES: [UserWorkspace; 9] = [
     UserWorkspace::new(
         "\u{f121}",
-        &["jetbrains-clion", "jetbrains-idea"],
+        &["jetbrains-clion", "jetbrains-idea", "lapce"],
         DefaultDraw::LeftLeader,
     ),
     UserWorkspace::new("\u{f120}", &[], DefaultDraw::LeftLeader),
-    UserWorkspace::new("\u{e007}", &["firefox"], DefaultDraw::LeftLeader),
+    UserWorkspace::new("\u{e007}", &["Navigator"], DefaultDraw::LeftLeader),
     UserWorkspace::new("\u{f086}", &["Slack", "discord"], DefaultDraw::LeftLeader),
     UserWorkspace::new("\u{f1bc}", &["spotify"], DefaultDraw::LeftLeader),
     UserWorkspace::new("\u{f11b}", &[], DefaultDraw::LeftLeader),
