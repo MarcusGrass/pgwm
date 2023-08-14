@@ -289,7 +289,7 @@ pub const STATUS_CHECKS: [crate::status::checker::Check; 4] = [
                         crate::status::time::FormatChunk::Token(crate::status::time::Token::Month),
                         crate::status::time::FormatChunk::Value(" "),
                         crate::status::time::FormatChunk::Token(crate::status::time::Token::Day),
-                        crate::status::time::FormatChunk::Value(" "),
+                        crate::status::time::FormatChunk::Value(" v"),
                         crate::status::time::FormatChunk::Token(crate::status::time::Token::Week),
                         crate::status::time::FormatChunk::Value(" "),
                         crate::status::time::FormatChunk::Token(crate::status::time::Token::Hour),
@@ -612,7 +612,7 @@ pub const KEYBOARD_MAPPINGS: [KeyboardMapping; 41] = [
         ModMask(0u16),
         XK_Print,
         Action::Spawn(
-            "/usr/bin/bash",
+            "/bin/bash",
             &[
                 "-c",
                 // Piping through string pipes ('|') is not valid Rust, just send it to shell instead

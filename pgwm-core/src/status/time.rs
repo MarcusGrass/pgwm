@@ -97,7 +97,7 @@ impl Token {
                 Month::May => sink.write_fmt(format_args!("May"))?,
                 Month::June => sink.write_fmt(format_args!("Jun"))?,
                 Month::July => sink.write_fmt(format_args!("Jul"))?,
-                Month::August => sink.write_fmt(format_args!("Aul"))?,
+                Month::August => sink.write_fmt(format_args!("Aug"))?,
                 Month::September => sink.write_fmt(format_args!("Sep"))?,
                 Month::October => sink.write_fmt(format_args!("Oct"))?,
                 Month::November => sink.write_fmt(format_args!("Nov"))?,
