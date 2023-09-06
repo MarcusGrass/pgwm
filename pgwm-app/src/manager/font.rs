@@ -87,7 +87,7 @@ pub(crate) fn load_alloc_fonts<'a>(
         .chain(WINDOW_NAME_DISPLAY_SECTION.iter())
         .chain(SHORTCUT_SECTION.iter())
         .chain(TAB_BAR_SECTION.iter())
-        .chain(CHAR_REMAP_FONTS.into_iter());
+        .chain(CHAR_REMAP_FONTS);
     #[cfg(feature = "status-bar")]
     let it = it.chain(pgwm_core::config::STATUS_SECTION.iter());
     // Reuse buffer

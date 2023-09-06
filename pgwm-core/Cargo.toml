@@ -21,7 +21,7 @@ xcb-rust-protocol = { workspace = true }
 tiny-std = { workspace = true , features = ["start", "alloc"], default-features = false }
 
 time = { workspace = true, optional = true, default-features = false }
-smallmap = { workspace = true, default-features = false, features = ["serde"] }
+smallmap = { workspace = true, default-features = false }
 
 [dev-dependencies]
 tiny-bench = "0.3.0"

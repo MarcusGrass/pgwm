@@ -222,7 +222,7 @@ impl<'a> Drawer<'a> {
             x,
             y,
         };
-        for dt in targets.iter() {
+        for dt in &targets {
             if dt.map {
                 call_wrapper.send_map(dt.window, state)?;
             }

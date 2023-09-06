@@ -16,6 +16,17 @@ ignore = []
 [bans]
 multiple-versions = "deny"
 deny = [
+    # Malware begone
+    { name = "quote"},
+    { name = "proc-macro"},
+    { name = "proc-macro2"},
+    { name = "serde"},
+    { name = "serde_derive"},
+    { name = "syn"},
+    { name = "thiserror"},
+    { name = "unicode-ident"},
+    # Libc begone
+    { name = "libc" },
 ]
 skip = [
     # Clash in build deps between heapless and smallmap
@@ -37,7 +48,6 @@ copyleft = "deny"
 allow = [
     "Apache-2.0",
     "MIT",
-    "Unicode-DFS-2016",
 ]
 exceptions = [
     { name = "linux-rust-bindings", allow = ["MPL-2.0"] },
@@ -46,6 +56,7 @@ exceptions = [
     { name = "pgwm-core", allow = ["GPL-3.0"] },
     { name = "pgwm-utils", allow = ["GPL-3.0"] },
     { name = "rusl", allow = ["MPL-2.0"] },
+    { name = "tiny-start", allow = ["MPL-2.0"] },
     { name = "tiny-std", allow = ["MPL-2.0"] },
     { name = "xcb-rust-connection", allow = ["MPL-2.0"] },
     { name = "xcb-rust-protocol", allow = ["MPL-2.0"] },
