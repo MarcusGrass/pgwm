@@ -1,7 +1,8 @@
 use crate::error::Error;
 use crate::status::sys::find_byte;
+use tiny_std::UnixStr;
 
-pub const CPU_LOAD_FILE: &str = "/proc/stat\0";
+pub const CPU_LOAD_FILE: &UnixStr = UnixStr::from_str_checked("/proc/stat\0");
 
 #[derive(Debug, Default)]
 pub struct Load {

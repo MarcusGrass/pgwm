@@ -1,4 +1,5 @@
 use crate::colors::RGBA;
+use tiny_std::UnixStr;
 use x11_keysyms::{
     XK_Print, XK_Return, XK_b, XK_c, XK_comma, XK_d, XK_f, XK_h, XK_j, XK_k, XK_l, XK_n, XK_period,
     XK_q, XK_r, XK_space, XK_t, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
@@ -216,7 +217,9 @@ const fn default_orange() -> RGBA {
 }
 
 const DEFAULT_FONT: FontCfg<'static> = FontCfg::new(
-    "/usr/share/fonts/jetbrains-mono/JetBrains Mono Regular Nerd Font Complete Mono.ttf",
+    UnixStr::from_str_checked(
+        "/usr/share/fonts/jetbrains-mono/JetBrains Mono Regular Nerd Font Complete Mono.ttf\0",
+    ),
     "14.0",
 );
 /// This is a mapping of fonts to be drawn at different sections.
@@ -242,14 +245,14 @@ pub const SHORTCUT_SECTION: &[FontCfg<'static>] = &[DEFAULT_FONT];
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct FontCfg<'a> {
-    pub path: &'a str,
+    pub path: &'a UnixStr,
     // Can't have an f32 as a map key.. sigh
     pub size: &'a str,
 }
 
 impl<'a> FontCfg<'a> {
     #[must_use]
-    pub const fn new(path: &'a str, size: &'a str) -> Self {
+    pub const fn new(path: &'a UnixStr, size: &'a str) -> Self {
         Self { path, size }
     }
 }
@@ -436,15 +439,24 @@ pub const MOUSE_MAPPINGS: [MouseMapping; 16] = [
         target: MouseTarget::StatusComponent(0),
         mods: ModMask(0u16),
         button: ButtonIndexEnum::ONE,
-        action: Action::Spawn("/usr/bin/xterm", &["-e", "htop"]),
+        action: Action::Spawn(
+            UnixStr::from_str_checked("/usr/bin/xterm\0"),
+            &[
+                UnixStr::from_str_checked("-e\0"),
+                UnixStr::from_str_checked("htop\0"),
+            ],
+        ),
     },
     MouseMapping {
         target: MouseTarget::StatusComponent(3),
         mods: ModMask(0u16),
         button: ButtonIndexEnum::ONE,
         action: Action::Spawn(
-            "/usr/bin/firefox",
-            &["-new-tab", "https://calendar.google.com"],
+            UnixStr::from_str_checked("/usr/bin/firefox\0"),
+            &[
+                UnixStr::from_str_checked("-new-tab\0"),
+                UnixStr::from_str_checked("https://calendar.google.com\0"),
+            ],
         ),
     },
     MouseMapping {
@@ -452,14 +464,14 @@ pub const MOUSE_MAPPINGS: [MouseMapping; 16] = [
         mods: ModMask(0u16),
         button: ButtonIndexEnum::ONE,
         action: Action::Spawn(
-            "/usr/bin/xterm",
+            UnixStr::from_str_checked("/usr/bin/xterm\0"),
             &[
-                "-e",
+                UnixStr::from_str_checked("-e\0"),
                 // Using bash to access '~' as home
-                "/bin/bash",
-                "-c",
+                UnixStr::from_str_checked("/bin/bash\0"),
+                UnixStr::from_str_checked("-c\0"),
                 // Pop some configuration files in a new terminal
-                "nvim ~/.bashrc ~/.xinitrc ~/.config/pgwm/pgwm.toml",
+                UnixStr::from_str_checked("nvim ~/.bashrc ~/.xinitrc ~/.config/pgwm/pgwm.toml\0"),
             ],
         ),
     },
@@ -467,7 +479,10 @@ pub const MOUSE_MAPPINGS: [MouseMapping; 16] = [
         target: MouseTarget::ShortcutComponent(1),
         mods: ModMask(0u16),
         button: ButtonIndexEnum::ONE,
-        action: Action::Spawn("/usr/bin/xscreensaver-command", &["-lock"]),
+        action: Action::Spawn(
+            UnixStr::from_str_checked("/usr/bin/xscreensaver-command\0"),
+            &[UnixStr::from_str_checked("-lock\0")],
+        ),
     },
 ];
 
@@ -601,32 +616,43 @@ pub const KEYBOARD_MAPPINGS: [KeyboardMapping; 41] = [
     KeyboardMapping::new(
         ModMask(MOD_KEY.0 | ModMask::SHIFT.0),
         XK_Return,
-        Action::Spawn("/usr/bin/xterm", &[]),
+        Action::Spawn(UnixStr::from_str_checked("/usr/bin/xterm\0"), &[]),
     ),
     KeyboardMapping::new(
         MOD_KEY,
         XK_d,
-        Action::Spawn("/usr/bin/dmenu_run", &["-i", "-p", "Run: "]),
+        Action::Spawn(
+            UnixStr::from_str_checked("/usr/bin/dmenu_run\0"),
+            &[
+                UnixStr::from_str_checked("-i\0"),
+                UnixStr::from_str_checked("-p\0"),
+                UnixStr::from_str_checked("Run: \0"),
+            ],
+        ),
     ),
     KeyboardMapping::new(
         ModMask(0u16),
         XK_Print,
         Action::Spawn(
-            "/bin/bash",
+            UnixStr::from_str_checked("/bin/bash\0"),
             &[
-                "-c",
+                UnixStr::from_str_checked("-c\0"),
                 // Piping through string pipes ('|') is not valid Rust, just send it to shell instead
-                "/usr/bin/maim -s -u | xclip -selection clipboard -t image/png -i",
+                UnixStr::from_str_checked(
+                    "/usr/bin/maim -s -u | xclip -selection clipboard -t image/png -i\0",
+                ),
             ],
         ),
     ),
 ];
 const ICON_FONT: &FontCfg<'static> = &FontCfg::new(
-    "/usr/share/fonts/fontawesome/Font Awesome 6 Free-Solid-900.otf",
+    UnixStr::from_str_checked("/usr/share/fonts/fontawesome/Font Awesome 6 Free-Solid-900.otf\0"),
     "13.0",
 );
 const BRAND_FONT: &FontCfg<'static> = &FontCfg::new(
-    "/usr/share/fonts/fontawesome/Font Awesome 6 Brands-Regular-400.otf",
+    UnixStr::from_str_checked(
+        "/usr/share/fonts/fontawesome/Font Awesome 6 Brands-Regular-400.otf\0",
+    ),
     "13.0",
 );
 
@@ -659,7 +685,7 @@ pub const CHAR_REMAP: &[(char, &FontCfg<'static>)] = &[
 pub enum Action {
     Quit,
     Restart,
-    Spawn(&'static str, &'static [&'static str]),
+    Spawn(&'static UnixStr, &'static [&'static UnixStr]),
     Close,
     ToggleWorkspace(usize),
     SendToWorkspace(usize),

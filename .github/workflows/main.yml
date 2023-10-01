@@ -30,10 +30,3 @@ jobs:
         run: cargo hack test -p pgwm-core --feature-powerset
       - name: Run tests on project with default features
         run: cargo test --all-features -p pgwm-core
-  makefile:
-    runs-on: ubuntu-latest
-    container: marcusgrass/pgwm-check:latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run makefile tests
-        run: ./.local/make_check.sh

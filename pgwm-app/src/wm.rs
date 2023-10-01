@@ -2,6 +2,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use rusl::platform::{AddressFamily, SocketAddress, SocketFlags, SocketOptions, SocketType};
 use rusl::process::{CatchSignal, SaSignalaction};
+use rusl::string::unix_str::UnixStr;
 use smallmap::Map;
 use tiny_std::unix::fd::RawFd;
 use xcb_rust_protocol::con::XcbState;
@@ -28,6 +29,12 @@ use crate::manager::Manager;
 use crate::uring::{UringReadEvent, UringWrapper};
 use crate::x11::call_wrapper::CallWrapper;
 use crate::x11::colors::alloc_colors;
+
+const HOME: &UnixStr = UnixStr::from_str_checked("HOME\0");
+const XENVIRONMENT: &UnixStr = UnixStr::from_str_checked("XENVIRONMENT\0");
+const XAUTHORITY: &UnixStr = UnixStr::from_str_checked("XAUTHORITY\0");
+const DISPLAY: &UnixStr = UnixStr::from_str_checked("DISPLAY\0");
+const XCURSOR_SIZE: &UnixStr = UnixStr::from_str_checked("XCURSOR_SIZE\0");
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
@@ -78,8 +85,8 @@ pub(crate) fn run_wm() -> Result<()> {
     let resource_db = xcb_rust_protocol::helpers::resource_manager::new_from_default(
         &mut call_wrapper.uring,
         &mut call_wrapper.xcb_state,
-        tiny_std::env::var("HOME").ok(),
-        tiny_std::env::var("XENVIRONMENT").ok(),
+        tiny_std::env::var_unix(HOME).ok(),
+        tiny_std::env::var_unix(XENVIRONMENT).ok(),
     )?;
     let cursor_handle = xcb_rust_protocol::helpers::cursor::Handle::new(
         &mut call_wrapper.uring,
@@ -185,11 +192,11 @@ pub(crate) fn run_wm() -> Result<()> {
 
 fn env_to_xcb_env() -> XcbEnv<'static> {
     XcbEnv {
-        home_dir: tiny_std::env::var("HOME").ok(),
-        x_environment: tiny_std::env::var("XENVIRONMENT").ok(),
-        x_authority: tiny_std::env::var("XAUTHORITY").ok(),
-        display: tiny_std::env::var("DISPLAY").ok(),
-        x_cursor_size: tiny_std::env::var("XCURSOR_SIZE").ok(),
+        home_dir: tiny_std::env::var_unix(HOME).ok(),
+        x_environment: tiny_std::env::var_unix(XENVIRONMENT).ok(),
+        x_authority: tiny_std::env::var_unix(XAUTHORITY).ok(),
+        display: tiny_std::env::var_unix(DISPLAY).ok(),
+        x_cursor_size: tiny_std::env::var_unix(XCURSOR_SIZE).ok(),
     }
 }
 
@@ -260,11 +267,11 @@ fn instantiate_uring(
 }
 
 #[cfg(feature = "status-bar")]
-fn try_open_fd(file: &str) -> Result<RawFd> {
+fn try_open_fd(file: &UnixStr) -> Result<RawFd> {
     match rusl::unistd::open(file, rusl::platform::OpenFlags::O_RDONLY) {
         Ok(f) => Ok(f),
         Err(e) => {
-            unix_print::unix_eprintln!("Failed to open check file {file} {e}");
+            tiny_std::eprintln!("Failed to open check file {file:?} {e}");
             Err(e.into())
         }
     }

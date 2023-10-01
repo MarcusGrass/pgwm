@@ -2,8 +2,8 @@ use alloc::ffi::NulError;
 use alloc::string::{FromUtf8Error, String};
 use core::fmt::Formatter;
 
-use rusl::Error as RuslError;
-use tiny_std::error::Error as StdError;
+use tiny_std::Error as StdError;
+use tiny_std::RuslError;
 use xcb_rust_connection::{ConnectError, ConnectionError};
 
 use pgwm_utils::from_error;

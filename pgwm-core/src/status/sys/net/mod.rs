@@ -1,7 +1,8 @@
 use crate::error::Error;
 use crate::status::sys::{find_byte, find_in_haystack};
+use tiny_std::UnixStr;
 
-pub const NET_STAT_FILE: &str = "/proc/net/netstat\0";
+pub const NET_STAT_FILE: &UnixStr = UnixStr::from_str_checked("/proc/net/netstat\0");
 
 #[allow(unsafe_code)]
 pub fn read_net_stats() -> Result<Data, Error> {
