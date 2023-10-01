@@ -1,7 +1,8 @@
 use crate::error::Error;
 use crate::status::sys::{find_byte, find_in_haystack};
+use tiny_std::UnixStr;
 
-pub const MEM_LOAD_FILE: &str = "/proc/meminfo\0";
+pub const MEM_LOAD_FILE: &UnixStr = UnixStr::from_str_checked("/proc/meminfo\0");
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Data {

@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Changed
 
+## [v0.6.0] - 2023-10-01
+
+### Fixed
+
+### Added
+
+### Changed
+- Update tiny-std to `0.2.1` 
+- Remove makefile just use `cargo`
+- Remove old dockerfiles
+
 ## [v0.5.0]
 ### Fixed
 - Update all deps

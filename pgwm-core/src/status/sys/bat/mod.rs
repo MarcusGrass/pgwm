@@ -1,9 +1,10 @@
 use tiny_std::fs::OpenOptions;
 use tiny_std::io::Read;
+use tiny_std::UnixStr;
 
 use crate::error::Error;
 
-pub const BAT_FILE: &str = "/sys/class/power_supply/BAT0/capacity\0";
+pub const BAT_FILE: &UnixStr = UnixStr::from_str_checked("/sys/class/power_supply/BAT0/capacity\0");
 
 #[allow(unsafe_code)]
 #[inline]

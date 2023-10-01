@@ -22,7 +22,6 @@ pgwm-core = { workspace = true, default-features = false }
 pgwm-utils = { workspace = true, default-features = false }
 smallmap = { workspace = true, default-features = false }
 time = { workspace = true, optional = true, default-features = false }
-unix-print = { workspace = true }
 tiny-std = { workspace = true, features = ["alloc"], default-features = false }
 rusl = { workspace = true, default-features = false }
 

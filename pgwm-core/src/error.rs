@@ -1,6 +1,6 @@
 use core::fmt::{Debug, Formatter};
 
-use tiny_std::error::Error as StdError;
+use tiny_std::Error as StdError;
 
 use pgwm_utils::from_error;
 

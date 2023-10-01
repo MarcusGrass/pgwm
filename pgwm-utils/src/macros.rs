@@ -2,7 +2,7 @@
 #[cfg(feature = "debug")]
 macro_rules! debug {
     ($($arg:tt)*) => {{
-        $crate::unix_eprintln!("[{}:L#{}] {}", file!(), line!(), format_args!($($arg)*));
+        tiny_std::eprintln!("[{}:L#{}] {}", file!(), line!(), format_args!($($arg)*));
     }}
 }
 #[macro_export]

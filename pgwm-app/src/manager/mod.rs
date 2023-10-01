@@ -1,5 +1,4 @@
 use alloc::vec::Vec;
-use unix_print::unix_eprintln;
 use xcb_rust_protocol::cookie::FixedCookie;
 use xcb_rust_protocol::helpers::properties::WmHints;
 use xcb_rust_protocol::proto::xproto::{
@@ -188,11 +187,11 @@ impl<'a> Manager<'a> {
             }
             #[cfg_attr(feature = "perf-test", allow(unused_variables))]
             Action::Spawn(cmd, args) => {
-                pgwm_utils::debug!("Spawning {} with args {:?}", cmd, args);
+                pgwm_utils::debug!("Spawning {:?} with args {:?}", cmd, args);
                 #[cfg(not(feature = "perf-test"))]
                 {
                     tiny_std::process::Command::new(cmd)?
-                        .args(args)?
+                        .args(args.iter().copied())
                         .stdin(tiny_std::process::Stdio::Null)
                         .stdout(tiny_std::process::Stdio::Null)
                         .stderr(tiny_std::process::Stdio::Null)
@@ -1598,7 +1597,7 @@ impl<'a> Manager<'a> {
                     .get_class_names(event.window)?
                     .await_class_names(call_wrapper)?
                 {
-                    unix_eprintln!(
+                    tiny_std::eprintln!(
                         "Got new class names {class_names:?} for win {}",
                         event.window
                     );

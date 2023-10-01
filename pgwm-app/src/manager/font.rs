@@ -101,7 +101,7 @@ pub(crate) fn load_alloc_fonts<'a>(
                 .open(f_cfg.path)?;
             data.clear();
             let read_bytes = file.read_to_end(&mut data)?;
-            crate::debug!("Read {} bytes of font {}", read_bytes, f_cfg.path);
+            crate::debug!("Read {} bytes of font {:?}", read_bytes, f_cfg.path);
             let gs = call_wrapper.create_glyphset(vis_info)?;
 
             let mut ids = vec![];
@@ -115,7 +115,7 @@ pub(crate) fn load_alloc_fonts<'a>(
                         crate::debug!("Font load failed {_e}");
                         Error::FontLoad("Failed to load font")
                     })?;
-            crate::debug!("Loaded font at {}", f_cfg.path);
+            crate::debug!("Loaded font at {:?}", f_cfg.path);
             let mut data = vec![];
             let mut max_height = 0;
             // DlMalloc seems to keep our dropped vec on the heap after use, really annoying
