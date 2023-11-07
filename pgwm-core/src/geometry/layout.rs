@@ -67,7 +67,7 @@ impl Layout {
                     // Center modifier is the only one that can be expanded, and is expanded horizontally
                     let horisontal_win_modifiers: heapless::Vec<f32, 3> =
                         heapless::Vec::from_slice(&[1.0, center_leader_base_modifier, 1.0])
-                            .map_err(|_| crate::error::Error::HeaplessInstantiate)?;
+                            .map_err(|()| crate::error::Error::HeaplessInstantiate)?;
                     let horisontal_x_offset_and_widths = calculate_offset_and_lengths(
                         monitor_width,
                         pad_len,
@@ -171,7 +171,7 @@ fn calculate_normal_dimensions(
     } else {
         let horizontal_win_modifiers: heapless::Vec<f32, 2> =
             heapless::Vec::from_slice(&[left_leader_base_modifier, 1.0])
-                .map_err(|_| crate::error::Error::HeaplessInstantiate)?;
+                .map_err(|()| crate::error::Error::HeaplessInstantiate)?;
         let horisontal_offset_and_lengths = calculate_offset_and_lengths(
             monitor_width,
             pad_len,
