@@ -313,7 +313,7 @@ pub const STATUS_CHECKS: [crate::status::checker::Check; 4] = [
 #[cfg(feature = "status-bar")]
 #[allow(clippy::match_wild_err_arm)]
 pub const fn offset() -> time::UtcOffset {
-    let offset_res = time::UtcOffset::from_hms(2, 0, 0);
+    let offset_res = time::UtcOffset::from_hms(1, 0, 0);
     match offset_res {
         Ok(offset) => offset,
         Err(_err) => {
@@ -338,7 +338,7 @@ pub enum DefaultDraw {
 pub const USER_WORKSPACES: [UserWorkspace; 9] = [
     UserWorkspace::new(
         "\u{f121}",
-        &["jetbrains-clion", "jetbrains-idea", "lapce"],
+        &["jetbrains-rustrover", "jetbrains-clion", "jetbrains-idea", "lapce"],
         DefaultDraw::LeftLeader,
     ),
     UserWorkspace::new("\u{f120}", &[], DefaultDraw::LeftLeader),

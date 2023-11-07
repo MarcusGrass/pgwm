@@ -34,7 +34,7 @@ pub fn main_loop() -> i32 {
     debug!("Starting pgwm");
     loop {
         return match run_wm() {
-            Ok(_) => {
+            Ok(()) => {
                 debug!("Exiting WM");
                 0
             }

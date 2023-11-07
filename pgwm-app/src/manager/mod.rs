@@ -292,7 +292,6 @@ impl<'a> Manager<'a> {
                 }
             }
             Action::SendToWorkspace(num) => {
-                let num = num;
                 let target_window = focus_fallback_origin(origin, state);
                 if let Some(ws) = state.workspaces.find_ws_containing_window(target_window) {
                     if ws == num {

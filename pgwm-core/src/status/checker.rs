@@ -301,7 +301,7 @@ impl<'a> PackagedCheck<'a> {
 
 impl<'a> PartialOrd<Self> for PackagedCheck<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.next_time.partial_cmp(&other.next_time)
+        Some(self.cmp(other))
     }
 }
 
