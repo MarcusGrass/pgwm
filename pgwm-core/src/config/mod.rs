@@ -262,7 +262,13 @@ pub const BAR_SHORTCUTS: [&str; 2] = ["\u{f304}", "\u{f502}"];
 
 /// Status checks, put at the top-right of the tab bar.
 #[cfg(feature = "status-bar")]
-pub const STATUS_CHECKS: [crate::status::checker::Check; 4] = [
+pub const STATUS_CHECKS: [crate::status::checker::Check; 5] = [
+    crate::status::checker::Check {
+        check_type: crate::status::checker::CheckType::CpuTemp(
+            crate::status::checker::CpuTempFormat::new("\u{f2db}"),
+        ),
+        interval: 1000,
+    },
     crate::status::checker::Check {
         check_type: crate::status::checker::CheckType::Cpu(crate::status::checker::CpuFormat::new(
             "\u{f2db}", 1,
@@ -313,7 +319,7 @@ pub const STATUS_CHECKS: [crate::status::checker::Check; 4] = [
 #[cfg(feature = "status-bar")]
 #[allow(clippy::match_wild_err_arm)]
 pub const fn offset() -> time::UtcOffset {
-    let offset_res = time::UtcOffset::from_hms(1, 0, 0);
+    let offset_res = time::UtcOffset::from_hms(2, 0, 0);
     match offset_res {
         Ok(offset) => offset,
         Err(_err) => {
