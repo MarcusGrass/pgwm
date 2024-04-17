@@ -53,8 +53,11 @@ const MEM_TIMEOUT_USER_DATA: u64 = 7;
 const CPU_READ_USER_DATA: u64 = 8;
 #[cfg(feature = "status-bar")]
 const CPU_TIMEOUT_USER_DATA: u64 = 9;
+
 #[cfg(feature = "status-bar")]
-const DATE_TIMEOUT_USER_DATA: u64 = 10;
+const CPU_TEMP_TIMEOUT_USER_DATA: u64 = 10;
+#[cfg(feature = "status-bar")]
+const DATE_TIMEOUT_USER_DATA: u64 = 11;
 
 #[cfg(feature = "status-bar")]
 const NUM_CHECKS: usize = 6;
@@ -230,6 +233,8 @@ pub(crate) struct UringCounter {
     #[cfg(feature = "status-bar")]
     pending_cpu_read: ReadStatus,
     #[cfg(feature = "status-bar")]
+    pending_cpu_temp_read: ReadStatus,
+    #[cfg(feature = "status-bar")]
     pending_date_read: ReadStatus,
 }
 
@@ -244,6 +249,8 @@ pub(crate) enum UringReadEvent {
     Mem,
     #[cfg(feature = "status-bar")]
     Cpu,
+    #[cfg(feature = "status-bar")]
+    CpuTempTimeout,
     #[cfg(feature = "status-bar")]
     DateTimeout,
 }
@@ -472,6 +479,33 @@ impl UringWrapper {
         };
         self.finish_submit();
     }
+    #[inline]
+    #[cfg(feature = "status-bar")]
+    pub fn submit_cpu_temp_timeout(&mut self, execute_at: &Instant) -> Result<()> {
+        if self.counter.pending_cpu_temp_read != ReadStatus::Inactive {
+            crate::debug!(
+                "Tried to submit multiple cpu temp timeouts, status: {:?}",
+                self.counter.pending_cpu_temp_read
+            );
+            return Ok(());
+        } else if *execute_at >= Instant::now() {
+            unsafe {
+                let entry = IoUringSubmissionQueueEntry::new_timeout(
+                    execute_at.as_ref(),
+                    false,
+                    None,
+                    CPU_TEMP_TIMEOUT_USER_DATA,
+                    IoUringSQEFlags::empty(),
+                );
+                self.inner.get_next_sqe_slot().unwrap().write(entry);
+            };
+            self.counter.pending_cpu_temp_read = ReadStatus::Pending;
+            self.finish_submit(1)?;
+        } else {
+            self.counter.pending_cpu_temp_read = ReadStatus::Ready(0);
+        }
+        Ok(())
+    }
 
     #[inline]
     #[cfg(feature = "status-bar")]
@@ -534,6 +568,16 @@ impl UringWrapper {
 
     #[inline]
     #[cfg(feature = "status-bar")]
+    pub fn read_cpu_temp(&mut self) {
+        match self.counter.pending_cpu_temp_read {
+            ReadStatus::Ready(_ind) => {
+                self.counter.pending_cpu_temp_read = ReadStatus::Inactive;
+            }
+            _ => panic!("Cpu temp read not ready on read."),
+        }
+    }
+    #[inline]
+    #[cfg(feature = "status-bar")]
     pub fn read_date(&mut self) {
         match self.counter.pending_date_read {
             ReadStatus::Ready(_ind) => {
@@ -560,6 +604,9 @@ impl UringWrapper {
             }
             if matches!(self.counter.pending_cpu_read, ReadStatus::Ready(_)) {
                 let _ = ready.push(UringReadEvent::Cpu);
+            }
+            if matches!(self.counter.pending_cpu_temp_read, ReadStatus::Ready(_)) {
+                let _ = ready.push(UringReadEvent::CpuTempTimeout);
             }
             if matches!(self.counter.pending_date_read, ReadStatus::Ready(_)) {
                 let _ = ready.push(UringReadEvent::DateTimeout);
@@ -671,6 +718,11 @@ impl UringWrapper {
                         addr,
                         space,
                     );
+                }
+                #[cfg(feature = "status-bar")]
+                CPU_TEMP_TIMEOUT_USER_DATA => {
+                    self.counter.pending_cpu_temp_read = ReadStatus::Ready(0);
+                    return Ok(Some(UringReadEvent::CpuTempTimeout));
                 }
                 #[cfg(feature = "status-bar")]
                 DATE_TIMEOUT_USER_DATA => {
@@ -813,6 +865,8 @@ impl UringWrapper {
                 pending_mem_read: ReadStatus::Inactive,
                 #[cfg(feature = "status-bar")]
                 pending_cpu_read: ReadStatus::Inactive,
+                #[cfg(feature = "status-bar")]
+                pending_cpu_temp_read: ReadStatus::Inactive,
                 #[cfg(feature = "status-bar")]
                 pending_date_read: ReadStatus::Inactive,
             },

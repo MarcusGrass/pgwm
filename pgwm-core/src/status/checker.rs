@@ -9,7 +9,7 @@ use tiny_std::time::Instant;
 
 use crate::config::{_STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_CHECKS};
 use crate::format_heapless;
-use crate::status::cpu::LoadChecker;
+use crate::status::cpu::{read_temp, LoadChecker, RyzenTemp};
 use crate::status::net::{ThroughputChecker, ThroughputPerSec};
 use crate::status::sys::bat::parse_battery_percentage;
 use crate::status::sys::mem::{Data, parse_raw};
@@ -26,6 +26,7 @@ pub struct Check {
 pub enum CheckType {
     Battery(BatChecks),
     Cpu(CpuFormat),
+    CpuTemp(CpuTempFormat),
     Net(NetFormat),
     Mem(MemFormat),
     Date(DateFormat),
@@ -87,7 +88,7 @@ impl BatFormat {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct CpuFormat {
     icon: &'static str,
     decimals: usize,
@@ -127,6 +128,39 @@ impl CpuFormat {
             99.999_999_999,
             N = chars,
             D = self.decimals
+        )
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct CpuTempFormat {
+    icon: &'static str,
+}
+
+impl CpuTempFormat {
+    #[must_use]
+    pub const fn new(icon: &'static str) -> Self {
+        Self { icon }
+    }
+
+    fn format_temp(&self, temp: RyzenTemp) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
+        format_heapless!(
+            "{} {:3.1}c, {:3.1}c, {:3.1}c",
+            self.icon,
+            temp.tctl,
+            temp.die1,
+            temp.die2,
+        )
+    }
+
+    #[must_use]
+    pub fn max_length_content(&self) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
+        format_heapless!(
+            "{} {:3.1}c, {:3.1}c, {:3.1}c",
+            self.icon,
+            999.9,
+            999.9,
+            999.9
         )
     }
 }
@@ -328,6 +362,7 @@ pub enum NextCheck {
     NET = 2,
     MEM = 3,
     Date = 4,
+    CpuTemp = 5,
 }
 
 impl Collapse for NextCheck {
@@ -364,6 +399,7 @@ impl<'a> Checker<'a> {
                 .parse_load(content)
                 .ok()
                 .map(|cpu| fmt.format_cpu(cpu)),
+            CheckType::CpuTemp(fmt) => read_temp().ok().map(|rt| fmt.format_temp(rt)),
             CheckType::Net(fmt) => self
                 .net_checker
                 .parse_throughput(content)
@@ -398,6 +434,16 @@ impl<'a> Checker<'a> {
                 CheckType::Cpu(_) => {
                     checks_by_key.insert(
                         NextCheck::CPU,
+                        PackagedCheck {
+                            next_time: sync_start_time,
+                            check,
+                            position,
+                        },
+                    );
+                }
+                CheckType::CpuTemp(_) => {
+                    checks_by_key.insert(
+                        NextCheck::CpuTemp,
                         PackagedCheck {
                             next_time: sync_start_time,
                             check,
