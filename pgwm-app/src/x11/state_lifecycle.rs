@@ -641,7 +641,8 @@ fn create_status_section_geometry<'a>(
                     .0
             }
             CheckType::CpuTemp(fmt) => {
-                font_manager.text_geometry(&fmt.max_length_content(), STATUS_SECTION)
+                font_manager
+                    .text_geometry(&fmt.max_length_content(), STATUS_SECTION)
                     .0
             }
             CheckType::Net(fmt) => {

@@ -1,6 +1,6 @@
-use tiny_std::{unix_lit, UnixStr};
 use crate::error::Error;
 use crate::status::sys::cpu::Load;
+use tiny_std::{unix_lit, UnixStr};
 
 #[derive(Default)]
 pub struct LoadChecker {
@@ -64,9 +64,5 @@ pub fn read_temp() -> tiny_std::Result<RyzenTemp> {
             &_ => {}
         }
     }
-    Ok(RyzenTemp {
-        tctl,
-        die1,
-        die2,
-    })
+    Ok(RyzenTemp { tctl, die1, die2 })
 }

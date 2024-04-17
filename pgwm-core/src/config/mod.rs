@@ -264,9 +264,9 @@ pub const BAR_SHORTCUTS: [&str; 2] = ["\u{f304}", "\u{f502}"];
 #[cfg(feature = "status-bar")]
 pub const STATUS_CHECKS: [crate::status::checker::Check; 5] = [
     crate::status::checker::Check {
-        check_type: crate::status::checker::CheckType::CpuTemp(crate::status::checker::CpuTempFormat::new(
-            "\u{f2db}",
-        )),
+        check_type: crate::status::checker::CheckType::CpuTemp(
+            crate::status::checker::CpuTempFormat::new("\u{f2db}"),
+        ),
         interval: 1000,
     },
     crate::status::checker::Check {

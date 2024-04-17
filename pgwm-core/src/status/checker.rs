@@ -9,7 +9,7 @@ use tiny_std::time::Instant;
 
 use crate::config::{STATUS_CHECKS, _STATUS_BAR_CHECK_CONTENT_LIMIT};
 use crate::format_heapless;
-use crate::status::cpu::{LoadChecker, read_temp, RyzenTemp};
+use crate::status::cpu::{read_temp, LoadChecker, RyzenTemp};
 use crate::status::net::{ThroughputChecker, ThroughputPerSec};
 use crate::status::sys::bat::parse_battery_percentage;
 use crate::status::sys::mem::{parse_raw, Data};
@@ -140,7 +140,7 @@ pub struct CpuTempFormat {
 impl CpuTempFormat {
     #[must_use]
     pub const fn new(icon: &'static str) -> Self {
-        Self { icon}
+        Self { icon }
     }
 
     fn format_temp(&self, temp: RyzenTemp) -> String<_STATUS_BAR_CHECK_CONTENT_LIMIT> {
@@ -399,11 +399,7 @@ impl<'a> Checker<'a> {
                 .parse_load(content)
                 .ok()
                 .map(|cpu| fmt.format_cpu(cpu)),
-            CheckType::CpuTemp(fmt) => {
-                    read_temp()
-                    .ok()
-                    .map(|rt| fmt.format_temp(rt))
-            }
+            CheckType::CpuTemp(fmt) => read_temp().ok().map(|rt| fmt.format_temp(rt)),
             CheckType::Net(fmt) => self
                 .net_checker
                 .parse_throughput(content)
@@ -452,7 +448,7 @@ impl<'a> Checker<'a> {
                             next_time: sync_start_time,
                             check,
                             position,
-                        }
+                        },
                     );
                 }
                 CheckType::Net(_) => {

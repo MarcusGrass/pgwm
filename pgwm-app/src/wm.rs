@@ -232,14 +232,14 @@ fn instantiate_uring(
             pgwm_core::status::checker::CheckType::Cpu(_) => {
                 cpu_fd = Some(try_open_fd(pgwm_core::status::sys::cpu::CPU_LOAD_FILE)?);
             }
-            pgwm_core::status::checker::CheckType::CpuTemp(_) => {}
             pgwm_core::status::checker::CheckType::Net(_) => {
                 net_fd = Some(try_open_fd(pgwm_core::status::sys::net::NET_STAT_FILE)?);
             }
             pgwm_core::status::checker::CheckType::Mem(_) => {
                 mem_fd = Some(try_open_fd(pgwm_core::status::sys::mem::MEM_LOAD_FILE)?);
             }
-            pgwm_core::status::checker::CheckType::Date(_) => {}
+            pgwm_core::status::checker::CheckType::CpuTemp(_)
+            | pgwm_core::status::checker::CheckType::Date(_) => {}
         }
     }
 
@@ -401,6 +401,7 @@ fn handle_read_event(
                 call_wrapper.uring.submit_cpu_read(&next.next_check)?;
             }
         }
+        #[cfg(feature = "status-bar")]
         UringReadEvent::CpuTempTimeout => {
             crate::debug!("Got cpu temp event");
             if let Some(next) =
@@ -410,7 +411,9 @@ fn handle_read_event(
                 if let Some(content) = next.content {
                     manager.draw_status(call_wrapper, content, next.position, state)?;
                 }
-                call_wrapper.uring.submit_cpu_temp_timeout(&next.next_check)?;
+                call_wrapper
+                    .uring
+                    .submit_cpu_temp_timeout(&next.next_check)?;
             }
         }
         #[cfg(feature = "status-bar")]
