@@ -218,7 +218,7 @@ const fn default_orange() -> RGBA {
 
 const DEFAULT_FONT: FontCfg<'static> = FontCfg::new(
     UnixStr::from_str_checked(
-        "/usr/share/fonts/jetbrains-mono/JetBrains Mono Regular Nerd Font Complete Mono.ttf\0",
+        "/usr/share/fonts/jetbrains-mono/JetBrainsMonoNLNerdFont-Regular.ttf\0",
     ),
     "14.0",
 );
@@ -262,7 +262,13 @@ pub const BAR_SHORTCUTS: [&str; 2] = ["\u{f304}", "\u{f502}"];
 
 /// Status checks, put at the top-right of the tab bar.
 #[cfg(feature = "status-bar")]
-pub const STATUS_CHECKS: [crate::status::checker::Check; 4] = [
+pub const STATUS_CHECKS: [crate::status::checker::Check; 5] = [
+    crate::status::checker::Check {
+        check_type: crate::status::checker::CheckType::CpuTemp(crate::status::checker::CpuTempFormat::new(
+            "\u{f2db}",
+        )),
+        interval: 1000,
+    },
     crate::status::checker::Check {
         check_type: crate::status::checker::CheckType::Cpu(crate::status::checker::CpuFormat::new(
             "\u{f2db}", 1,
