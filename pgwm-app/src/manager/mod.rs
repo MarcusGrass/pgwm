@@ -1050,6 +1050,7 @@ impl<'a> Manager<'a> {
                 let data = event.data.0.as_iter_32();
 
                 // 1st and 2nd bytes are possible atoms to change
+                #[allow(clippy::unused_enumerate_index)]
                 for (_i, value) in data.take(3).enumerate() {
                     if let Some(resolved) = call_wrapper.resolve_atom(value) {
                         pgwm_utils::debug!("Resolved atom in position {_i} to {resolved:?}");
@@ -1366,7 +1367,7 @@ impl<'a> Manager<'a> {
         self.update_current_window_title_and_redraw(
             call_wrapper,
             mon_ind,
-            heapless::String::from("pgwm"),
+            heapless::String::try_from("pgwm").unwrap(),
             state,
         )?;
         pgwm_utils::debug!("Focused root on mon = {}", mon_ind);

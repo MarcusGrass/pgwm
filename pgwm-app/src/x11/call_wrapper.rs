@@ -1605,7 +1605,7 @@ impl NameCookie {
 
 fn utf8_heapless<const N: usize>(bytes: Vec<u8>) -> Result<Option<heapless::String<N>>> {
     let slice = &bytes[..N.min(bytes.len())];
-    Ok(core::str::from_utf8(slice).map(|s| Some(heapless::String::from(s)))?)
+    Ok(core::str::from_utf8(slice).map(|s| heapless::String::try_from(s).ok())?)
 }
 
 pub(crate) struct WmClassCookie {
@@ -1631,8 +1631,11 @@ fn extract_wm_class(
     if let Ok(raw_utf8) = &raw_utf8 {
         let complete_names = raw_utf8
             .split('\u{0}')
-            .filter(|s| !s.is_empty())
-            .map(heapless::String::from)
+            .filter_map(|s| {
+                (!s.is_empty())
+                    .then(|| heapless::String::try_from(s).ok())
+                    .flatten()
+            })
             // Avoiding another alloc here
             .collect::<heapless::Vec<heapless::String<_WM_CLASS_NAME_LIMIT>, 4>>();
         Some(complete_names)

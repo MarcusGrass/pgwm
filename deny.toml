@@ -1,3 +1,4 @@
+[graph]
 targets = [
     { triple = "x86_64-unknown-linux-gnu" },
     { triple = "x86_64-unknown-linux-musl" },
@@ -6,11 +7,6 @@ targets = [
 ]
 
 [advisories]
-vulnerability = "deny"
-unmaintained = "deny"
-unsound = "deny"
-yanked = "deny"
-notice = "deny"
 ignore = []
 
 [bans]
@@ -29,9 +25,6 @@ deny = [
     { name = "libc" },
 ]
 skip = [
-    # Clash in build deps between heapless and smallmap
-    { name = "semver", version = "0.9.0" },
-    { name = "rustc_version", version = "0.2.3" },
 ]
 
 [sources]
@@ -40,11 +33,7 @@ allow-git = [
 ]
 
 [licenses]
-unlicensed = "deny"
-allow-osi-fsf-free = "neither"
 confidence-threshold = 1.0
-# I'd like to know if they pop into my dependency graph
-copyleft = "deny"
 allow = [
     "Apache-2.0",
     "MIT",

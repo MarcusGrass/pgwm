@@ -249,7 +249,7 @@ fn do_create_state<'a>(
             hosted_workspace: i,
             last_focus: None,
             show_bar: WM_SHOW_BAR_INITIALLY,
-            window_title_display: heapless::String::from("pgwm"),
+            window_title_display: heapless::String::try_from("pgwm").unwrap(),
         };
         monitors.push(new_mon);
     }

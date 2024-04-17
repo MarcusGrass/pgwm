@@ -65,7 +65,7 @@ impl BarGeometry {
                     workspace.position.start + workspace.position.length,
                     title_width,
                 ),
-                display: heapless::String::from("pgwm"),
+                display: heapless::String::try_from("pgwm").unwrap(),
                 last_draw_width: title_width, // Set last draw to full with so initial draw, paints the entire section
             },
             workspace,

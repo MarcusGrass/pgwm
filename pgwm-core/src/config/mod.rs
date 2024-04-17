@@ -338,7 +338,12 @@ pub enum DefaultDraw {
 pub const USER_WORKSPACES: [UserWorkspace; 9] = [
     UserWorkspace::new(
         "\u{f121}",
-        &["jetbrains-rustrover", "jetbrains-clion", "jetbrains-idea", "lapce"],
+        &[
+            "jetbrains-rustrover",
+            "jetbrains-clion",
+            "jetbrains-idea",
+            "lapce",
+        ],
         DefaultDraw::LeftLeader,
     ),
     UserWorkspace::new("\u{f120}", &[], DefaultDraw::LeftLeader),
