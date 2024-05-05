@@ -1,6 +1,6 @@
 use alloc::vec;
 use alloc::vec::Vec;
-use rusl::platform::{AddressFamily, SocketAddress, SocketFlags, SocketOptions, SocketType};
+use rusl::platform::{AddressFamily, SocketAddressUnix, SocketFlags, SocketOptions, SocketType};
 use rusl::process::{CatchSignal, SaSignalaction};
 use rusl::string::unix_str::UnixStr;
 use smallmap::Map;
@@ -60,8 +60,8 @@ pub(crate) fn run_wm() -> Result<()> {
     )?;
 
     //let socket_fd = tiny_std::net::UnixStream::connect(path, true)?;
-    let addr = SocketAddress::try_from_unix(&path)?;
-    rusl::network::connect(socket_fd, &addr)?;
+    let addr = SocketAddressUnix::try_from_unix(&path)?;
+    rusl::network::connect_unix(socket_fd, &addr)?;
 
     let mut uring_wrapper = instantiate_uring(
         xcb_socket_in_buffer,
