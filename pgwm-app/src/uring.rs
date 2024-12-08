@@ -634,13 +634,22 @@ impl UringWrapper {
             if let Some(next) = self.handle_next_completion()? {
                 return Ok(next);
             }
-            crate::debug!("Blocking for next completion");
-            io_uring_enter(
+            match io_uring_enter(
                 self.inner.fd,
                 0,
                 1,
                 IoUringEnterFlags::IORING_ENTER_GETEVENTS,
-            )?;
+            ) {
+                Ok(_) => {}
+                Err(e) => {
+                    if let Some(e) = e.code {
+                        if e == Errno::EINTR {
+                            continue;
+                        }
+                    }
+                    return Err(e.into());
+                }
+            };
         }
     }
 
