@@ -19,6 +19,7 @@
 extern crate alloc;
 
 use pgwm_utils::debug;
+use tiny_std::{eprintln, println};
 
 use crate::error::Error;
 use crate::wm::run_wm;
@@ -36,7 +37,7 @@ pub fn main_loop() -> i32 {
     loop {
         return match run_wm() {
             Ok(()) => {
-                debug!("Exiting WM");
+                println!("Exiting WM");
                 0
             }
             Err(e) => {
@@ -44,7 +45,7 @@ pub fn main_loop() -> i32 {
                     debug!("Restarting WM");
                     continue;
                 }
-                debug!("Fatal error {e}");
+                eprintln!("Fatal error {e}");
                 1
             }
         };
