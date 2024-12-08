@@ -289,7 +289,7 @@ struct PackagedCheck<'a> {
     position: usize,
 }
 
-impl<'a> PackagedCheck<'a> {
+impl PackagedCheck<'_> {
     fn update_check_time(&mut self) {
         // Using this instead of SystemTime now avoids de-syncs between checks and unnecessary system calls
         self.next_time = self
@@ -299,13 +299,13 @@ impl<'a> PackagedCheck<'a> {
     }
 }
 
-impl<'a> PartialOrd<Self> for PackagedCheck<'a> {
+impl PartialOrd<Self> for PackagedCheck<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Ord for PackagedCheck<'a> {
+impl Ord for PackagedCheck<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.next_time.cmp(&other.next_time)
     }
