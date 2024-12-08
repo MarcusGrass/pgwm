@@ -2,7 +2,7 @@ use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
-
+use rusl::error::Errno;
 use rusl::io_uring::{
     io_uring_enter, io_uring_register_buffers, io_uring_register_files, setup_io_uring,
 };
@@ -145,25 +145,18 @@ impl KernelSharedStreamReadBuffer {
     /// Get the section of the buffer that the kernel has written data into.
     #[inline]
     pub fn user_readable(&self) -> &[u8] {
-        crate::debug!(
-            "Got user readable section {}..{}",
-            self.user_consumed,
-            self.kernel_committed
-        );
         &self.bytes[self.user_consumed..self.kernel_committed]
     }
 
     /// Get the section of the buffer available for the kernel to write into.
     #[inline]
     pub fn kernel_writeable(&mut self) -> &mut [u8] {
-        crate::debug!("Got kernel writeable section {}..", self.kernel_committed);
         &mut self.bytes[self.kernel_committed..]
     }
 
     /// Mark number read bytes (from the `user_readable` section).
     #[inline]
     pub fn advance_read(&mut self, bytes: usize) {
-        crate::debug!("Advanced user read to {}", self.user_consumed + bytes);
         self.user_consumed += bytes;
         self.has_unchecked_data = false;
     }
@@ -172,7 +165,6 @@ impl KernelSharedStreamReadBuffer {
     #[inline]
     pub unsafe fn advance_written(&mut self, bytes: usize) {
         self.kernel_committed += bytes;
-        crate::debug!("Advanced kernel written to {}", self.kernel_committed);
         self.has_unchecked_data = true;
     }
 
@@ -188,10 +180,6 @@ impl KernelSharedStreamReadBuffer {
                 .copy_within(self.user_consumed..self.kernel_committed, 0);
             self.user_consumed = 0;
             self.kernel_committed = rem;
-            crate::debug!(
-                "Shifted back read to 0, kernel committed to {}",
-                self.kernel_committed
-            );
         }
     }
 
@@ -264,7 +252,6 @@ macro_rules! impl_submit_check {
         #[inline]
         #[cfg(feature = "status-bar")]
         pub fn $fn_name(&mut self, execute_at: &Instant) -> Result<()> {
-            crate::debug!("Submitted read for {}", stringify!($fn_name));
             if self.counter.$counter_name != ReadStatus::Inactive {
                 crate::debug!(
                     "Tried to submit multiple reads for {}, status: {:?}",
@@ -272,11 +259,9 @@ macro_rules! impl_submit_check {
                     self.counter.$counter_name
                 );
             } else if *execute_at >= Instant::now() {
-                crate::debug!("Submitted timeout for {}", stringify!($fn_name));
                 self.submit_indexed_timeout($timeout_user_data, execute_at)?;
                 self.counter.$counter_name = ReadStatus::Pending;
             } else {
-                crate::debug!("Submitting immediate read for {}", stringify!($fn_name));
                 let addr = self.$buf.as_ptr() as u64;
                 let space = self.$buf.len();
                 self.submit_indexed_read($fd_index, $buf_index, $user_data, addr, space)?;
@@ -351,10 +336,6 @@ impl UringWrapper {
         }
         let addr = self.sock_read_buffer.kernel_writeable().as_mut_ptr();
         let space = self.sock_read_buffer.kernel_writeable().len();
-        crate::debug!(
-            "Submitting sock read from {}",
-            self.sock_read_buffer.kernel_committed
-        );
         unsafe {
             let entry = IoUringSubmissionQueueEntry::new_readv_fixed(
                 SOCK_FD_INDEX as Fd,
@@ -439,7 +420,6 @@ impl UringWrapper {
         addr: u64,
         space: usize,
     ) -> Result<()> {
-        crate::debug!("Submitting indexed read for user_data {user_data}");
         unsafe {
             let entry = IoUringSubmissionQueueEntry::new_readv_fixed(
                 fd_ind,
@@ -679,7 +659,6 @@ impl UringWrapper {
                 }
                 return Ok(());
             }
-            crate::debug!("Blocking for next write completion");
             io_uring_enter(
                 self.inner.fd,
                 0,

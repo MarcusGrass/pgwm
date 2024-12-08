@@ -306,15 +306,11 @@ fn loop_with_status(
     crate::debug!("Starting wm loop");
     // Extremely hot place in the code, should bench the checker
     loop {
-        crate::debug!("Checking cached");
         for evt in call_wrapper.uring.check_ready_cached() {
             handle_read_event(evt, call_wrapper, checker, manager, state)?;
         }
-        crate::debug!("Checked cached, awaiting next completion");
         let next = call_wrapper.uring.await_next_completion()?;
-        crate::debug!("Got next completion");
         handle_read_event(next, call_wrapper, checker, manager, state)?;
-        crate::debug!("Handled next completion");
         Manager::destroy_marked(call_wrapper, state)?;
         #[cfg(feature = "debug")]
         call_wrapper
@@ -323,7 +319,6 @@ fn loop_with_status(
 
         // Need to flush to prevent busting the out buffer
         call_wrapper.uring.await_write_completions()?;
-        crate::debug!("Loop done {:?}", call_wrapper.uring.counter);
     }
 }
 
@@ -337,7 +332,6 @@ fn handle_read_event(
 ) -> Result<()> {
     match next {
         UringReadEvent::SockIn => {
-            crate::debug!("Got sock in");
             for event in xcb_rust_connection::connection::try_drain(
                 &mut call_wrapper.uring,
                 &mut call_wrapper.xcb_state,
