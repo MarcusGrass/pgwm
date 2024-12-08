@@ -218,7 +218,7 @@ const fn default_orange() -> RGBA {
 
 const DEFAULT_FONT: FontCfg<'static> = FontCfg::new(
     UnixStr::from_str_checked(
-        "/usr/share/fonts/jetbrains-mono/JetBrains Mono Regular Nerd Font Complete Mono.ttf\0",
+        "/usr/share/fonts/jetbrains-mono/JetBrainsMonoNerdFontMono-Regular.ttf\0",
     ),
     "14.0",
 );
