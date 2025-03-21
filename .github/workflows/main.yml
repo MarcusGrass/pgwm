@@ -7,26 +7,17 @@ on:
   pull_request: {}
 
 jobs:
-  clippy:
+  full-check:
     runs-on: ubuntu-latest
-    container: marcusgrass/pgwm-check:latest
     steps:
       - uses: actions/checkout@v3
-      - name: Run clippy on all feature permutations
-        run: cargo hack clippy -p pgwm-app --feature-powerset -- -D warnings
-  deny:
-    runs-on: ubuntu-latest
-    container: marcusgrass/pgwm-check:latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run cargo deny
-        run: cargo deny --all-features --locked check
-  test:
-    runs-on: ubuntu-latest
-    container: marcusgrass/pgwm-check:latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run tests on core with all feature permutations
-        run: cargo hack test -p pgwm-core --feature-powerset
-      - name: Run tests on project with default features
-        run: cargo test --all-features -p pgwm-core
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: "clippy,rustfmt"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: "cargo-hack,cargo-deny"
+      - name: Run wm-check
+        shell: bash
+        run: ./.local/wm_check.sh
+
