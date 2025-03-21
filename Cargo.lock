@@ -24,6 +24,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
+name = "core_maths"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77745e017f5edba1a9c1d854f6f3a52dac8a12dd5af5d2f54aecf61e43d80d30"
+dependencies = [
+ "libm",
+]
+
+[[package]]
 name = "deranged"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -35,9 +44,9 @@ dependencies = [
 [[package]]
 name = "fontdue"
 version = "0.7.3"
-source = "git+https://github.com/MarcusGrass/fontdue?rev=e32ae994890caccce9e4a7f7228a2f00f05e0238#e32ae994890caccce9e4a7f7228a2f00f05e0238"
+source = "git+https://github.com/MarcusGrass/fontdue?rev=234f5f798e50bb6f4cc8f10ee9515f21936d68e6#234f5f798e50bb6f4cc8f10ee9515f21936d68e6"
 dependencies = [
- "hashbrown 0.14.3",
+ "hashbrown",
  "ttf-parser",
 ]
 
@@ -49,12 +58,6 @@ checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
 dependencies = [
  "byteorder",
 ]
-
-[[package]]
-name = "hashbrown"
-version = "0.14.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
 
 [[package]]
 name = "hashbrown"
@@ -71,6 +74,12 @@ dependencies = [
  "hash32",
  "stable_deref_trait",
 ]
+
+[[package]]
+name = "libm"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8355be11b20d696c8f18f6cc018c4e372165b1fa8126cef092399c9951984ffa"
 
 [[package]]
 name = "linux-rust-bindings"
@@ -106,7 +115,7 @@ name = "pgwm-app"
 version = "0.1.0"
 dependencies = [
  "fontdue",
- "hashbrown 0.15.2",
+ "hashbrown",
  "heapless",
  "pgwm-core",
  "pgwm-utils",
@@ -236,9 +245,12 @@ dependencies = [
 
 [[package]]
 name = "ttf-parser"
-version = "0.19.2"
+version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49d64318d8311fc2668e48b63969f4343e0a85c4a109aa8460d6672e364b8bd1"
+checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
+dependencies = [
+ "core_maths",
+]
 
 [[package]]
 name = "x11-keysyms"

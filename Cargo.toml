@@ -8,7 +8,7 @@ pgwm-core = { path = "pgwm-core", default-features = false }
 pgwm-utils = { path = "pgwm-utils", default-features = false }
 
 # Managed
-fontdue = { git = "https://github.com/MarcusGrass/fontdue", rev = "e32ae994890caccce9e4a7f7228a2f00f05e0238", default-features = false }
+fontdue = { git = "https://github.com/MarcusGrass/fontdue", rev = "234f5f798e50bb6f4cc8f10ee9515f21936d68e6", default-features = false }
 
 # Owned
 # rusl = { git = "https://github.com/MarcusGrass/tiny-std", rev = "71e91bbde834286a9dd3a565678975252d6ed80d", default-features = false }

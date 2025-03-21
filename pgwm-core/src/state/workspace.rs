@@ -85,7 +85,7 @@ impl Workspaces {
     }
 
     pub fn update_size_modifier(&mut self, window: Window, resize: f32) -> bool {
-        self.win_to_ws.get(&window).map_or(false, |ws_ind| {
+        self.win_to_ws.get(&window).is_some_and(|ws_ind| {
             let ws = &mut self.spaces[*ws_ind];
             ws.resize_children(window, resize)
         })
@@ -353,7 +353,7 @@ impl Workspaces {
     pub fn tab_focus_window(&mut self, window: Window) -> bool {
         self.win_to_ws
             .get(&window)
-            .map_or(false, |ind| self.spaces[*ind].tab_focus_window(window))
+            .is_some_and(|ind| self.spaces[*ind].tab_focus_window(window))
     }
 
     #[must_use]
