@@ -469,7 +469,21 @@ impl UringWrapper {
         // with something like `flush_new` but that has some negatives if we've added
         // more than one submission
         self.inner.flush_submission_queue();
-        io_uring_enter(self.inner.fd, submit_count, 0, IoUringEnterFlags::empty())?;
+        self.enter_until_not_interrupted(submit_count, 0, IoUringEnterFlags::empty())?;
+        Ok(())
+    }
+
+    fn enter_until_not_interrupted(
+        &mut self,
+        submit_count: u32,
+        min_complete: u32,
+        flags: IoUringEnterFlags,
+    ) -> Result<()> {
+        while let Err(e) = io_uring_enter(self.inner.fd, submit_count, min_complete, flags) {
+            if e.code != Some(Errno::EINTR) {
+                return Err(e.into());
+            }
+        }
         Ok(())
     }
 
@@ -634,22 +648,7 @@ impl UringWrapper {
             if let Some(next) = self.handle_next_completion()? {
                 return Ok(next);
             }
-            match io_uring_enter(
-                self.inner.fd,
-                0,
-                1,
-                IoUringEnterFlags::IORING_ENTER_GETEVENTS,
-            ) {
-                Ok(_) => {}
-                Err(e) => {
-                    if let Some(e) = e.code {
-                        if e == Errno::EINTR {
-                            continue;
-                        }
-                    }
-                    return Err(e.into());
-                }
-            };
+            self.enter_until_not_interrupted(0, 1, IoUringEnterFlags::IORING_ENTER_GETEVENTS)?;
         }
     }
 
@@ -668,8 +667,7 @@ impl UringWrapper {
                 }
                 return Ok(());
             }
-            io_uring_enter(
-                self.inner.fd,
+            self.enter_until_not_interrupted(
                 0,
                 self.counter.pending_sock_writes as u32,
                 IoUringEnterFlags::IORING_ENTER_GETEVENTS,
@@ -793,8 +791,7 @@ impl SocketIo for UringWrapper {
 
 impl Drop for UringWrapper {
     fn drop(&mut self) {
-        io_uring_enter(
-            self.inner.fd,
+        self.enter_until_not_interrupted(
             0,
             0,
             IoUringEnterFlags::IORING_ENTER_SQ_WAKEUP | IoUringEnterFlags::IORING_ENTER_SQ_WAIT,

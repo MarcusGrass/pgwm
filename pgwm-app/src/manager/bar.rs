@@ -233,13 +233,13 @@ impl<'a> BarManager<'a> {
                 .bar_geometry
                 .status
                 .update_and_get_section_line(content.clone(), content_ind);
-            let src_y = state.monitors[mon_ind].dimensions.y;
+            let dims = Dimensions::new(pos.length, STATUS_BAR_HEIGHT, pos.start, 0);
             self.font_drawer.draw(
                 call_wrapper,
                 &state.monitors[mon_ind].bar_win,
                 &content,
                 pgwm_core::config::STATUS_SECTION,
-                Dimensions::new(pos.length, STATUS_BAR_HEIGHT, pos.start, src_y),
+                dims,
                 pos.length,
                 0,
                 0,
@@ -298,13 +298,14 @@ impl<'a> BarManager<'a> {
         let bg = state.colors.shortcut_background();
         let text = state.colors.shortcut_text();
         for shortcut in &mon.bar_geometry.shortcuts.components {
+            let dims = Dimensions::new(shortcut.position.length, STATUS_BAR_HEIGHT, offset, 0);
             let name = &shortcut.text;
             self.font_drawer.draw(
                 call_wrapper,
                 &mon.bar_win,
                 name,
                 SHORTCUT_SECTION,
-                Dimensions::new(shortcut.position.length, STATUS_BAR_HEIGHT, offset, 0),
+                dims,
                 shortcut.position.length,
                 shortcut.write_offset,
                 0,

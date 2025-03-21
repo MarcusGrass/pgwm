@@ -445,7 +445,7 @@ pub const MOUSE_MAPPINGS: [MouseMapping; 16] = [
         mods: ModMask(0u16),
         button: ButtonIndexEnum::ONE,
         action: Action::Spawn(
-            UnixStr::from_str_checked("/usr/bin/xterm\0"),
+            UnixStr::from_str_checked("/home/gramar/.local/bin/alacritty\0"),
             &[
                 UnixStr::from_str_checked("-e\0"),
                 UnixStr::from_str_checked("htop\0"),
@@ -469,7 +469,7 @@ pub const MOUSE_MAPPINGS: [MouseMapping; 16] = [
         mods: ModMask(0u16),
         button: ButtonIndexEnum::ONE,
         action: Action::Spawn(
-            UnixStr::from_str_checked("/usr/bin/xterm\0"),
+            UnixStr::from_str_checked("/home/gramar/.local/bin/alacritty\0"),
             &[
                 UnixStr::from_str_checked("-e\0"),
                 // Using bash to access '~' as home
@@ -621,7 +621,10 @@ pub const KEYBOARD_MAPPINGS: [KeyboardMapping; 41] = [
     KeyboardMapping::new(
         ModMask(MOD_KEY.0 | ModMask::SHIFT.0),
         XK_Return,
-        Action::Spawn(UnixStr::from_str_checked("/usr/bin/xterm\0"), &[]),
+        Action::Spawn(
+            UnixStr::from_str_checked("/home/gramar/.local/bin/alacritty\0"),
+            &[],
+        ),
     ),
     KeyboardMapping::new(
         MOD_KEY,
