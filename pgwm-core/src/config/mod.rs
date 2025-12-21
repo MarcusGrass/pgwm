@@ -319,7 +319,7 @@ pub const STATUS_CHECKS: [crate::status::checker::Check; 5] = [
 #[cfg(feature = "status-bar")]
 #[allow(clippy::match_wild_err_arm)]
 pub const fn offset() -> time::UtcOffset {
-    let offset_res = time::UtcOffset::from_hms(2, 0, 0);
+    let offset_res = time::UtcOffset::from_hms(1, 0, 0);
     match offset_res {
         Ok(offset) => offset,
         Err(_err) => {
