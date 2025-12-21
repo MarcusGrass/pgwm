@@ -44,7 +44,7 @@ pub struct RyzenTemp {
     pub die2: f32,
 }
 pub fn read_temp() -> tiny_std::Result<RyzenTemp> {
-    const BASE: &UnixStr = unix_lit!("/sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon1");
+    const BASE: &UnixStr = unix_lit!("/sys/devices/pci0000:00/0000:00:18.3/hwmon/hwmon4");
     let mut tctl = 0.0;
     let mut die1 = 0.0;
     let mut die2 = 0.0;
