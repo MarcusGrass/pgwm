@@ -206,6 +206,7 @@ pub(crate) struct UringWrapper {
     mem_buf: Vec<u8>,
     #[cfg(feature = "status-bar")]
     cpu_buf: Vec<u8>,
+    to_submit: u32,
 }
 
 #[derive(Debug)]
@@ -323,7 +324,7 @@ impl UringWrapper {
         }
         self.sock_write_buffer.mark_flushed();
         self.counter.pending_sock_writes += 1;
-        self.finish_submit(1)
+        self.finish_submit()
     }
 
     /// Same as `submit_socket_write` but a read operation
@@ -345,10 +346,13 @@ impl UringWrapper {
                 SOCK_READ_USER_DATA,
                 IoUringSQEFlags::IOSQE_FIXED_FILE,
             );
-            self.inner.get_next_sqe_slot().unwrap().write(entry);
+            self.inner
+                .get_next_sqe_slot()
+                .ok_or_else(|| Error::Uring("Failed to get next SQE slot reading".to_string()))?
+                .write(entry);
         };
         self.counter.pending_sock_read = ReadStatus::Pending;
-        self.finish_submit(1)?;
+        self.finish_submit()?;
         Ok(())
     }
 
@@ -404,9 +408,14 @@ impl UringWrapper {
                 timeout_user_data,
                 IoUringSQEFlags::empty(),
             );
-            self.inner.get_next_sqe_slot().unwrap().write(timeout);
+            self.inner
+                .get_next_sqe_slot()
+                .ok_or_else(|| {
+                    Error::Uring("Failed to get next SQE slot indexed timeout".to_string())
+                })?
+                .write(timeout);
         }
-        self.finish_submit(1)?;
+        self.finish_submit()?;
         Ok(())
     }
 
@@ -429,9 +438,14 @@ impl UringWrapper {
                 user_data,
                 IoUringSQEFlags::IOSQE_FIXED_FILE,
             );
-            self.inner.get_next_sqe_slot().unwrap().write(entry);
+            self.inner
+                .get_next_sqe_slot()
+                .ok_or_else(|| {
+                    Error::Uring("Failed to get next SQE slot indexed read".to_string())
+                })?
+                .write(entry);
         };
-        self.finish_submit(1)?;
+        self.finish_submit()?;
         Ok(())
     }
 
@@ -453,10 +467,15 @@ impl UringWrapper {
                     DATE_TIMEOUT_USER_DATA,
                     IoUringSQEFlags::empty(),
                 );
-                self.inner.get_next_sqe_slot().unwrap().write(entry);
+                self.inner
+                    .get_next_sqe_slot()
+                    .ok_or_else(|| {
+                        Error::Uring("Failed to get next SQE slot submit date".to_string())
+                    })?
+                    .write(entry);
             };
             self.counter.pending_date_read = ReadStatus::Pending;
-            self.finish_submit(1)?;
+            self.finish_submit()?;
         } else {
             self.counter.pending_date_read = ReadStatus::Ready(0);
         }
@@ -464,27 +483,34 @@ impl UringWrapper {
     }
 
     #[inline]
-    fn finish_submit(&mut self, submit_count: u32) -> Result<()> {
+    fn finish_submit(&mut self) -> Result<()> {
         // Flush queue, could optimize this a bit on the tiny-std side
         // with something like `flush_new` but that has some negatives if we've added
         // more than one submission
         self.inner.flush_submission_queue();
-        self.enter_until_not_interrupted(submit_count, 0, IoUringEnterFlags::empty())?;
+        self.to_submit += 1;
         Ok(())
     }
 
     fn enter_until_not_interrupted(
         &mut self,
-        submit_count: u32,
         min_complete: u32,
         flags: IoUringEnterFlags,
     ) -> Result<()> {
-        while let Err(e) = io_uring_enter(self.inner.fd, submit_count, min_complete, flags) {
-            if e.code != Some(Errno::EINTR) {
-                return Err(e.into());
+        loop {
+            match io_uring_enter(self.inner.fd, self.to_submit, min_complete, flags) {
+                Ok(submitted) => {
+                    self.to_submit = self.to_submit.saturating_sub(submitted as u32);
+                    if self.to_submit == 0 {
+                        return Ok(());
+                    }
+                }
+                Err(e) if e.code == Some(Errno::EINTR) => {
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
             }
         }
-        Ok(())
     }
 
     impl_read_check!(read_bat, pending_bat_read, bat_buf);
@@ -503,7 +529,9 @@ impl UringWrapper {
         }
     }
 
-    pub(crate) fn check_ready_cached(&mut self) -> heapless::Vec<UringReadEvent, NUM_CHECKS> {
+    pub(crate) fn check_ready_cached(
+        &mut self,
+    ) -> heapless::Vec<UringReadEvent, { NUM_CHECKS + 1 }> {
         let mut ready = heapless::Vec::new();
         #[cfg(feature = "status-bar")]
         {
@@ -648,7 +676,7 @@ impl UringWrapper {
             if let Some(next) = self.handle_next_completion()? {
                 return Ok(next);
             }
-            self.enter_until_not_interrupted(0, 1, IoUringEnterFlags::IORING_ENTER_GETEVENTS)?;
+            self.enter_until_not_interrupted(1, IoUringEnterFlags::IORING_ENTER_GETEVENTS)?;
         }
     }
 
@@ -668,7 +696,6 @@ impl UringWrapper {
                 return Ok(());
             }
             self.enter_until_not_interrupted(
-                0,
                 self.counter.pending_sock_writes as u32,
                 IoUringEnterFlags::IORING_ENTER_GETEVENTS,
             )?;
@@ -746,6 +773,7 @@ impl UringWrapper {
             mem_buf,
             #[cfg(feature = "status-bar")]
             cpu_buf,
+            to_submit: 0,
         })
     }
 }
@@ -792,7 +820,6 @@ impl SocketIo for UringWrapper {
 impl Drop for UringWrapper {
     fn drop(&mut self) {
         self.enter_until_not_interrupted(
-            0,
             0,
             IoUringEnterFlags::IORING_ENTER_SQ_WAKEUP | IoUringEnterFlags::IORING_ENTER_SQ_WAIT,
         )
