@@ -1,21 +1,20 @@
+use crate::error::{Error, Result};
 use alloc::borrow::ToOwned;
 use alloc::format;
-use alloc::string::ToString;
 use alloc::vec::Vec;
+use core::time::Duration;
 use rusl::error::Errno;
 use rusl::io_uring::{
     io_uring_enter, io_uring_register_buffers, io_uring_register_files, setup_io_uring,
 };
 use rusl::platform::{
-    Fd, IoSliceMut, IoUring, IoUringEnterFlags, IoUringParamFlags, IoUringSQEFlags,
-    IoUringSubmissionQueueEntry, NonNegativeI32,
+    Fd, IoSliceMut, IoUring, IoUringBorrowedSqe, IoUringEnterFlags, IoUringParamFlags,
+    IoUringSQEFlags, IoUringSubmissionQueueEntry, NonNegativeI32,
 };
 #[cfg(feature = "status-bar")]
 use tiny_std::time::Instant;
 use tiny_std::unix::fd::RawFd;
 use xcb_rust_protocol::con::SocketIo;
-
-use crate::error::{Error, Result};
 
 const SOCK_FD_INDEX: NonNegativeI32 = NonNegativeI32::comptime_checked_new(0);
 #[cfg(feature = "status-bar")]
@@ -64,12 +63,18 @@ const NUM_CHECKS: usize = 6;
 #[cfg(not(feature = "status-bar"))]
 const NUM_CHECKS: usize = 1;
 
+/// There seems to be a limit at around 300 for the amount of messages you can push through at
+/// once over the socket to x11 causing an exhausting bug where some messages are not recorded
+/// by the server, causing a sequence mismatch between client and server with no other errors.
+/// I'll guess that the limit is 256 and that this capacity should be set conservatively below that.
+const URING_CAPACITY: u32 = 128;
+
 /// A write stream buffer shared with the kernel logically consisting of three sections
 /// 0 -> `user_provided` -> `kernel_committed` -> end.
-/// The first section, 0 -> `kernel_committed` are "already written" or currently writing.  
-/// This area is subject to data-races, since the kernel may be in the process of reading from it.  
+/// The first section, 0 -> `kernel_committed` are "already written" or currently writing.
+/// This area is subject to data-races, since the kernel may be in the process of reading from it.
 /// The second section `kernel_committed` -> `user_provided`, are pending writes, not yet pushed
-/// to the kernel, it's safe to edit.  
+/// to the kernel, it's safe to edit.
 /// The last section, `user_provided` -> end, is available space to write new data.
 #[derive(Debug)]
 pub struct KernelSharedStreamWriteBuffer {
@@ -105,7 +110,7 @@ impl KernelSharedStreamWriteBuffer {
     /// Reset offsets, will not manipulate the underlying data
     /// # Safety
     /// If called before waiting until the kernel has processed all data up until `kernel_committed`
-    /// inconsistency between user- and kernel-space handling of the buffer will occur.  
+    /// inconsistency between user- and kernel-space handling of the buffer will occur.
     /// Will cause UB if the buffer is cleared before kernel processing and new data is written
     /// into the buffer, since data that the kernel may be currently reading will be overwritten.
     #[inline]
@@ -124,8 +129,8 @@ impl KernelSharedStreamWriteBuffer {
     }
 }
 
-/// A read buffer shared with the kernel consisting logically of three areas:  
-/// 0 -> `user_consumed`, bytes marked as read by the user.  
+/// A read buffer shared with the kernel consisting logically of three areas:
+/// 0 -> `user_consumed`, bytes marked as read by the user.
 /// `user_consumed` -> `kernel_committed`, bytes not marked as read, but safe to read.
 /// `kernel_committed` -> end, bytes that the kernel may be currently writing to.
 /// Inverse to the `KernelSharedStreamWriteBuffer` the last area is subject to data-races with the
@@ -168,7 +173,7 @@ impl KernelSharedStreamReadBuffer {
         self.has_unchecked_data = true;
     }
 
-    /// Reset this buffer's offsets, shifting back unread bytes to the beginning of the buffer.  
+    /// Reset this buffer's offsets, shifting back unread bytes to the beginning of the buffer.
     /// # Safety
     /// As with `KernelSharedStreamWriteBuffer::clear` this is only safe if the kernel is not
     /// currently writing into the buffer, which would cause a data-race.
@@ -291,7 +296,39 @@ macro_rules! impl_read_check {
 impl UringWrapper {
     /// Async submit a write by writing a new SQE into the kernel shared memory surface.
     /// No IO overhead if using `SQPoll`, but does include a `release` ordered memory write
-    pub fn submit_socket_write(&mut self) -> Result<()> {
+    pub fn submit_socket_write<E, F: FnOnce(&mut [u8]) -> core::result::Result<usize, E>>(
+        &mut self,
+        write_op: F,
+    ) -> Result<Option<E>> {
+        // Check for a slot before starting to commit to the buffer, otherwise there may be bugs
+        // where bytes flushed desyncs from sqe/cqe count and other bookkeeping.
+        let slot = if let Some(slot) = self.inner.get_next_sqe_slot() {
+            slot
+        } else {
+            let loop_count = 0;
+            let start = Instant::now();
+            loop {
+                if loop_count > 0 {
+                    tiny_std::eprintln!("[WARN] Failed to get next SQE slot for socket write, attempting to flush buffer count={loop_count}, elapsed={:.2} seconds", start.elapsed().unwrap_or_default().as_secs_f32());
+                }
+                self.await_write_completions()?;
+                let Some(slot) = self.inner.get_next_sqe_slot() else {
+                    tiny_std::thread::sleep(core::time::Duration::from_millis(10)).unwrap();
+                    continue;
+                };
+                if loop_count > 0 {
+                    tiny_std::eprintln!("[INFO] Successfully got next SQE slot for socket write after flushing count={loop_count}, elapsed={:.2} seconds", start.elapsed().unwrap_or_default().as_secs_f32());
+                }
+                break slot;
+            }
+        };
+        // A slot is acquired, now the buffer can be written to
+        let write_result = (write_op)(self.sock_write_buffer.user_writeable());
+        let consumed_bytes = match write_result {
+            Ok(b) => b,
+            Err(e) => return Ok(Some(e)),
+        };
+        self.sock_write_buffer.advance_written(consumed_bytes);
         let to_write = self.sock_write_buffer.kernel_readable().len();
         if to_write == 0 {
             return Err(Error::Uring(
@@ -315,16 +352,11 @@ impl UringWrapper {
                 IoUringSQEFlags::IOSQE_FIXED_FILE,
             )
         };
-        unsafe {
-            if let Some(slot) = self.inner.get_next_sqe_slot() {
-                slot.write(entry);
-            } else {
-                return Err(Error::Uring("Failed to get an empty sqe slot".to_string()));
-            }
-        }
+        slot.write(entry);
         self.sock_write_buffer.mark_flushed();
         self.counter.pending_sock_writes += 1;
-        self.finish_submit()
+        self.finish_submit()?;
+        Ok(None)
     }
 
     /// Same as `submit_socket_write` but a read operation
@@ -346,10 +378,7 @@ impl UringWrapper {
                 SOCK_READ_USER_DATA,
                 IoUringSQEFlags::IOSQE_FIXED_FILE,
             );
-            self.inner
-                .get_next_sqe_slot()
-                .ok_or_else(|| Error::Uring("Failed to get next SQE slot reading".to_string()))?
-                .write(entry);
+            self.await_and_use_next_sqe_slot("submit sock read", |sqe| sqe.write(entry));
         };
         self.counter.pending_sock_read = ReadStatus::Pending;
         self.finish_submit()?;
@@ -408,12 +437,7 @@ impl UringWrapper {
                 timeout_user_data,
                 IoUringSQEFlags::empty(),
             );
-            self.inner
-                .get_next_sqe_slot()
-                .ok_or_else(|| {
-                    Error::Uring("Failed to get next SQE slot indexed timeout".to_string())
-                })?
-                .write(timeout);
+            self.await_and_use_next_sqe_slot("submit indexed timeout", |sqe| sqe.write(timeout));
         }
         self.finish_submit()?;
         Ok(())
@@ -438,12 +462,7 @@ impl UringWrapper {
                 user_data,
                 IoUringSQEFlags::IOSQE_FIXED_FILE,
             );
-            self.inner
-                .get_next_sqe_slot()
-                .ok_or_else(|| {
-                    Error::Uring("Failed to get next SQE slot indexed read".to_string())
-                })?
-                .write(entry);
+            self.await_and_use_next_sqe_slot("submit indexed read", |sqe| sqe.write(entry));
         };
         self.finish_submit()?;
         Ok(())
@@ -467,12 +486,7 @@ impl UringWrapper {
                     DATE_TIMEOUT_USER_DATA,
                     IoUringSQEFlags::empty(),
                 );
-                self.inner
-                    .get_next_sqe_slot()
-                    .ok_or_else(|| {
-                        Error::Uring("Failed to get next SQE slot submit date".to_string())
-                    })?
-                    .write(entry);
+                self.await_and_use_next_sqe_slot("submit date", |sqe| sqe.write(entry));
             };
             self.counter.pending_date_read = ReadStatus::Pending;
             self.finish_submit()?;
@@ -688,7 +702,7 @@ impl UringWrapper {
             return Ok(());
         }
         loop {
-            self.handle_next_completion()?;
+            while self.handle_next_completion()?.is_some() {}
             if self.counter.pending_sock_writes == 0 {
                 unsafe {
                     self.sock_write_buffer.clear();
@@ -699,6 +713,40 @@ impl UringWrapper {
                 self.counter.pending_sock_writes as u32,
                 IoUringEnterFlags::IORING_ENTER_GETEVENTS,
             )?;
+        }
+    }
+
+    fn await_and_use_next_sqe_slot<F: FnOnce(IoUringBorrowedSqe)>(
+        &mut self,
+        label: &'static str,
+        func: F,
+    ) {
+        let start = Instant::now();
+        let mut loop_count = 0;
+        loop {
+            match self.inner.get_next_sqe_slot() {
+                Some(sqe) => {
+                    if loop_count > 0 {
+                        tiny_std::eprintln!(
+                            "[{label}] awaiting sqe slot took {loop_count} loops and {:.2} seconds",
+                            start.elapsed().unwrap_or_default().as_secs_f32()
+                        );
+                    }
+                    func(sqe);
+                    return;
+                }
+                None => {
+                    if loop_count == 0 && self.counter.pending_sock_writes > 0 {
+                        self.await_write_completions().unwrap();
+                    }
+                    loop_count += 1;
+                    let _ = tiny_std::thread::sleep(Duration::from_millis(10));
+                    if loop_count % 100 == 0 {
+                        tiny_std::eprintln!("[{label}] has awaited sqe slot in {loop_count} loops and {:.2} seconds", start.elapsed().unwrap_or_default().as_secs_f32());
+                    }
+                    continue;
+                }
+            }
         }
     }
 
@@ -715,7 +763,12 @@ impl UringWrapper {
         #[cfg(feature = "status-bar")] mem_fd: RawFd,
         #[cfg(feature = "status-bar")] cpu_fd: RawFd,
     ) -> Result<Self> {
-        let inner = setup_io_uring(512, IoUringParamFlags::IORING_SETUP_SINGLE_ISSUER, 0, 0)?;
+        let inner = setup_io_uring(
+            URING_CAPACITY,
+            IoUringParamFlags::IORING_SETUP_SINGLE_ISSUER,
+            0,
+            0,
+        )?;
         unsafe {
             io_uring_register_buffers(
                 inner.fd,
@@ -796,24 +849,43 @@ impl SocketIo for UringWrapper {
     }
 
     #[inline]
-    fn use_read_buffer<E, F: FnOnce(&[u8]) -> core::result::Result<usize, E>>(
+    fn use_read_buffer<
+        F: FnOnce(&[u8]) -> core::result::Result<usize, xcb_rust_protocol::Error>,
+    >(
         &mut self,
         read_op: F,
-    ) -> core::result::Result<(), E> {
+    ) -> core::result::Result<(), xcb_rust_protocol::Error> {
         let consumed_bytes = (read_op)(self.sock_read_buffer.user_readable())?;
         self.sock_read_buffer.advance_read(consumed_bytes);
         Ok(())
     }
 
     #[inline]
-    fn use_write_buffer<E, F: FnOnce(&mut [u8]) -> core::result::Result<usize, E>>(
+    fn use_write_buffer<
+        F: FnOnce(&mut [u8]) -> core::result::Result<usize, xcb_rust_protocol::Error>,
+    >(
         &mut self,
         write_op: F,
-    ) -> core::result::Result<(), E> {
-        let consumed_bytes = (write_op)(self.sock_write_buffer.user_writeable())?;
-        self.sock_write_buffer.advance_written(consumed_bytes);
-        self.submit_socket_write().unwrap();
-        Ok(())
+    ) -> core::result::Result<(), xcb_rust_protocol::Error> {
+        // This control flow is absurd, Ok(Some(e)) is an error, but whatever
+        match self.submit_socket_write(write_op) {
+            Ok(None) => Ok(()),
+            Ok(Some(err)) => Err(err),
+            Err(e) => {
+                tiny_std::eprintln!("failed to submit socket write: {e:?}");
+                Err(xcb_rust_protocol::Error::User(
+                    "failed to submit socket write when using write buffer",
+                ))
+            }
+        }
+    }
+
+    #[inline]
+    fn ensure_flushed(&mut self) -> core::result::Result<(), xcb_rust_protocol::Error> {
+        Ok(self.await_write_completions().map_err(|e| {
+            tiny_std::eprintln!("failed to await writes to socket ensuring flushed: {e:?}");
+            xcb_rust_protocol::Error::Connection("failed to await writes to socket")
+        })?)
     }
 }
 

@@ -13,12 +13,12 @@ fontdue = { git = "https://github.com/MarcusGrass/fontdue", rev = "234f5f798e50b
 # Owned
 # rusl = { git = "https://github.com/MarcusGrass/tiny-std", rev = "71e91bbde834286a9dd3a565678975252d6ed80d", default-features = false }
 # tiny-std = { git = "https://github.com/MarcusGrass/tiny-std", rev = "71e91bbde834286a9dd3a565678975252d6ed80d", default-features = false }
-rusl = { version = "0.4.1", default-features = false }
-tiny-std = { version = "0.3.1", default-features = false }
+rusl = { version = "0.5.0", default-features = false }
+tiny-std = { version = "0.3.2", default-features = false }
 # xcb-rust-connection = { git = "https://github.com/MarcusGrass/xcb-rust.git", rev = "0df48b0d4045144e8e9288b034a75f5983f5e2ab", default-features = false }
 # xcb-rust-protocol = { git = "https://github.com/MarcusGrass/xcb-rust.git", rev = "0df48b0d4045144e8e9288b034a75f5983f5e2ab", default-features = false }
-xcb-rust-connection = { version = "0.2.3", default-features = false }
-xcb-rust-protocol = { version = "0.2.4", default-features = false }
+xcb-rust-connection = { version = "0.2.4", default-features = false }
+xcb-rust-protocol = { version = "0.3.0", default-features = false }
 x11-keysyms = { version = "0.1.0", features = ["miscellany", "latin1"] }
 
 # External

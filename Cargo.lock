@@ -155,9 +155,9 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "rusl"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69cdb99ea68f65d5225f4e07ba2565f3d47c5df055baa1fd763a35387dc69370"
+checksum = "38aa30073959cd36f07d06f2428db411e9e951cd5efd439fe2ebe69d8c91915d"
 dependencies = [
  "linux-rust-bindings",
  "sc",
@@ -225,18 +225,18 @@ checksum = "cfda840d8557c12ecdde25485f7dc85152339a61b759f98d4f682e7cb5d75948"
 
 [[package]]
 name = "tiny-start"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04796e57eaf0c693abd1f47dd8386f4fc5c123df8c2caf801750793d52b38fc7"
+checksum = "c0f1d41aeed099ba9942ff1c8b30b40edd5427c6ec0dadcf49633769343fc920"
 dependencies = [
  "rusl",
 ]
 
 [[package]]
 name = "tiny-std"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1466c127e6c5769995e8414ecdbec80ff34e4691068dc8746c3aa01569db0a2"
+checksum = "c6a800fdc5d631ed908ce48fb4c60288792e9acc336869a509eeb69b03c05163"
 dependencies = [
  "rusl",
  "sc",
@@ -260,12 +260,11 @@ checksum = "c6462285b997685c657ff2b26c9b444ba84dadf7d38c08bc49ebf80f8a6d3c40"
 
 [[package]]
 name = "xcb-rust-connection"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e65d6a4991de508f93a69ddf1706ccafdba4feb1672344414cf6cdc90b2f52d"
+checksum = "ff02ff562b22ea31df7ae5320dcf4d80093db7db7cc7aaa625e50df23113a61a"
 dependencies = [
  "rusl",
- "sc",
  "smallmap",
  "tiny-std",
  "xcb-rust-protocol",
@@ -273,9 +272,9 @@ dependencies = [
 
 [[package]]
 name = "xcb-rust-protocol"
-version = "0.2.4"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc5b7f457b103c831f11ed36a15ec620db9ca5c35a4c74ae88a79065957edb13"
+checksum = "d136ed83547f9cbb3d169ea199492d5b41f3d2c59f8e9e298c7782912e0599fb"
 dependencies = [
  "tiny-std",
 ]
