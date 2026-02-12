@@ -294,7 +294,7 @@ fn loop_with_status(
                 call_wrapper.uring.submit_cpu_read(&when)?;
             }
             pgwm_core::status::checker::NextCheck::CpuTemp => {
-                call_wrapper.uring.submit_cpu_temp_timeout(&when)?;
+                call_wrapper.uring.submit_cpu_temp_timeout(&when);
             }
             pgwm_core::status::checker::NextCheck::NET => {
                 call_wrapper.uring.submit_net_read(&when)?;
@@ -407,7 +407,7 @@ fn handle_read_event(
                 }
                 call_wrapper
                     .uring
-                    .submit_cpu_temp_timeout(&next.next_check)?;
+                    .submit_cpu_temp_timeout(&next.next_check);
             }
         }
         #[cfg(feature = "status-bar")]

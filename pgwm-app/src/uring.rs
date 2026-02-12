@@ -481,14 +481,13 @@ impl UringWrapper {
     }
     #[inline]
     #[cfg(feature = "status-bar")]
-    pub fn submit_cpu_temp_timeout(&mut self, execute_at: &Instant) -> Result<()> {
+    pub fn submit_cpu_temp_timeout(&mut self, execute_at: &tiny_std::time::Instant) {
         if self.counter.pending_cpu_temp_read != ReadStatus::Inactive {
             crate::debug!(
                 "Tried to submit multiple cpu temp timeouts, status: {:?}",
                 self.counter.pending_cpu_temp_read
             );
-            return Ok(());
-        } else if *execute_at >= Instant::now() {
+        } else if *execute_at >= tiny_std::time::Instant::now() {
             unsafe {
                 let entry = IoUringSubmissionQueueEntry::new_timeout(
                     execute_at.as_ref(),
@@ -497,14 +496,13 @@ impl UringWrapper {
                     CPU_TEMP_TIMEOUT_USER_DATA,
                     IoUringSQEFlags::empty(),
                 );
-                self.inner.get_next_sqe_slot().unwrap().write(entry);
+                self.await_and_use_next_sqe_slot("submit cpu temp timeout", |sqe| sqe.write(entry));
             };
             self.counter.pending_cpu_temp_read = ReadStatus::Pending;
-            self.finish_submit(1)?;
+            self.finish_submit();
         } else {
             self.counter.pending_cpu_temp_read = ReadStatus::Ready(0);
         }
-        Ok(())
     }
 
     #[inline]
