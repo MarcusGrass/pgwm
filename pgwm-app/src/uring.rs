@@ -11,8 +11,6 @@ use rusl::platform::{
     Fd, IoSliceMut, IoUring, IoUringBorrowedSqe, IoUringEnterFlags, IoUringParamFlags,
     IoUringSQEFlags, IoUringSubmissionQueueEntry, NonNegativeI32,
 };
-#[cfg(feature = "status-bar")]
-use tiny_std::time::Instant;
 use tiny_std::unix::fd::RawFd;
 use xcb_rust_protocol::con::SocketIo;
 
@@ -257,20 +255,20 @@ macro_rules! impl_submit_check {
     ($fn_name: ident, $counter_name: ident, $buf: ident, $user_data: expr, $timeout_user_data: expr, $fd_index: expr, $buf_index: expr) => {
         #[inline]
         #[cfg(feature = "status-bar")]
-        pub fn $fn_name(&mut self, execute_at: &Instant) -> Result<()> {
+        pub fn $fn_name(&mut self, execute_at: &tiny_std::time::Instant) -> Result<()> {
             if self.counter.$counter_name != ReadStatus::Inactive {
                 crate::debug!(
                     "Tried to submit multiple reads for {}, status: {:?}",
                     stringify!($fn_name),
                     self.counter.$counter_name
                 );
-            } else if *execute_at >= Instant::now() {
-                self.submit_indexed_timeout($timeout_user_data, execute_at)?;
+            } else if *execute_at >= tiny_std::time::Instant::now() {
+                self.submit_indexed_timeout($timeout_user_data, execute_at);
                 self.counter.$counter_name = ReadStatus::Pending;
             } else {
                 let addr = self.$buf.as_ptr() as u64;
                 let space = self.$buf.len();
-                self.submit_indexed_read($fd_index, $buf_index, $user_data, addr, space)?;
+                self.submit_indexed_read($fd_index, $buf_index, $user_data, addr, space);
             }
             Ok(())
         }
@@ -306,7 +304,7 @@ impl UringWrapper {
             slot
         } else {
             let loop_count = 0;
-            let start = Instant::now();
+            let start = tiny_std::time::Instant::now();
             loop {
                 if loop_count > 0 {
                     tiny_std::eprintln!("[WARN] Failed to get next SQE slot for socket write, attempting to flush buffer count={loop_count}, elapsed={:.2} seconds", start.elapsed().unwrap_or_default().as_secs_f32());
@@ -355,7 +353,7 @@ impl UringWrapper {
         slot.write(entry);
         self.sock_write_buffer.mark_flushed();
         self.counter.pending_sock_writes += 1;
-        self.finish_submit()?;
+        self.finish_submit();
         Ok(None)
     }
 
@@ -381,7 +379,7 @@ impl UringWrapper {
             self.await_and_use_next_sqe_slot("submit sock read", |sqe| sqe.write(entry));
         };
         self.counter.pending_sock_read = ReadStatus::Pending;
-        self.finish_submit()?;
+        self.finish_submit();
         Ok(())
     }
 
@@ -427,8 +425,8 @@ impl UringWrapper {
     fn submit_indexed_timeout(
         &mut self,
         timeout_user_data: u64,
-        execute_at: &Instant,
-    ) -> Result<()> {
+        execute_at: &tiny_std::time::Instant,
+    ) {
         unsafe {
             let timeout = IoUringSubmissionQueueEntry::new_timeout(
                 execute_at.as_ref(),
@@ -439,8 +437,7 @@ impl UringWrapper {
             );
             self.await_and_use_next_sqe_slot("submit indexed timeout", |sqe| sqe.write(timeout));
         }
-        self.finish_submit()?;
-        Ok(())
+        self.finish_submit();
     }
 
     #[inline]
@@ -452,7 +449,7 @@ impl UringWrapper {
         user_data: u64,
         addr: u64,
         space: usize,
-    ) -> Result<()> {
+    ) {
         unsafe {
             let entry = IoUringSubmissionQueueEntry::new_readv_fixed(
                 fd_ind,
@@ -464,20 +461,18 @@ impl UringWrapper {
             );
             self.await_and_use_next_sqe_slot("submit indexed read", |sqe| sqe.write(entry));
         };
-        self.finish_submit()?;
-        Ok(())
+        self.finish_submit();
     }
 
     #[inline]
     #[cfg(feature = "status-bar")]
-    pub fn submit_date_timeout(&mut self, execute_at: &Instant) -> Result<()> {
+    pub fn submit_date_timeout(&mut self, execute_at: &tiny_std::time::Instant) {
         if self.counter.pending_date_read != ReadStatus::Inactive {
             crate::debug!(
                 "Tried to submit multiple date timeouts, status: {:?}",
                 self.counter.pending_date_read
             );
-            return Ok(());
-        } else if *execute_at >= Instant::now() {
+        } else if *execute_at >= tiny_std::time::Instant::now() {
             unsafe {
                 let entry = IoUringSubmissionQueueEntry::new_timeout(
                     execute_at.as_ref(),
@@ -489,21 +484,19 @@ impl UringWrapper {
                 self.await_and_use_next_sqe_slot("submit date", |sqe| sqe.write(entry));
             };
             self.counter.pending_date_read = ReadStatus::Pending;
-            self.finish_submit()?;
+            self.finish_submit();
         } else {
             self.counter.pending_date_read = ReadStatus::Ready(0);
         }
-        Ok(())
     }
 
     #[inline]
-    fn finish_submit(&mut self) -> Result<()> {
+    fn finish_submit(&mut self) {
         // Flush queue, could optimize this a bit on the tiny-std side
         // with something like `flush_new` but that has some negatives if we've added
         // more than one submission
         self.inner.flush_submission_queue();
         self.to_submit += 1;
-        Ok(())
     }
 
     fn enter_until_not_interrupted(
@@ -519,9 +512,7 @@ impl UringWrapper {
                         return Ok(());
                     }
                 }
-                Err(e) if e.code == Some(Errno::EINTR) => {
-                    continue;
-                }
+                Err(e) if e.code == Some(Errno::EINTR) => {}
                 Err(e) => return Err(e.into()),
             }
         }
@@ -610,7 +601,7 @@ impl UringWrapper {
                         BAT_READ_USER_DATA,
                         addr,
                         space,
-                    )?;
+                    );
                 }
                 #[cfg(feature = "status-bar")]
                 NET_READ_USER_DATA => {
@@ -630,7 +621,7 @@ impl UringWrapper {
                         NET_READ_USER_DATA,
                         addr,
                         space,
-                    )?;
+                    );
                 }
                 #[cfg(feature = "status-bar")]
                 MEM_READ_USER_DATA => {
@@ -650,7 +641,7 @@ impl UringWrapper {
                         MEM_READ_USER_DATA,
                         addr,
                         space,
-                    )?;
+                    );
                 }
                 #[cfg(feature = "status-bar")]
                 CPU_READ_USER_DATA => {
@@ -670,7 +661,7 @@ impl UringWrapper {
                         CPU_READ_USER_DATA,
                         addr,
                         space,
-                    )?;
+                    );
                 }
                 #[cfg(feature = "status-bar")]
                 DATE_TIMEOUT_USER_DATA => {
@@ -721,31 +712,26 @@ impl UringWrapper {
         label: &'static str,
         func: F,
     ) {
-        let start = Instant::now();
+        let start = tiny_std::time::Instant::now();
         let mut loop_count = 0;
         loop {
-            match self.inner.get_next_sqe_slot() {
-                Some(sqe) => {
-                    if loop_count > 0 {
-                        tiny_std::eprintln!(
-                            "[{label}] awaiting sqe slot took {loop_count} loops and {:.2} seconds",
-                            start.elapsed().unwrap_or_default().as_secs_f32()
-                        );
-                    }
-                    func(sqe);
-                    return;
+            if let Some(sqe) = self.inner.get_next_sqe_slot() {
+                if loop_count > 0 {
+                    tiny_std::eprintln!(
+                        "[{label}] awaiting sqe slot took {loop_count} loops and {:.2} seconds",
+                        start.elapsed().unwrap_or_default().as_secs_f32()
+                    );
                 }
-                None => {
-                    if loop_count == 0 && self.counter.pending_sock_writes > 0 {
-                        self.await_write_completions().unwrap();
-                    }
-                    loop_count += 1;
-                    let _ = tiny_std::thread::sleep(Duration::from_millis(10));
-                    if loop_count % 100 == 0 {
-                        tiny_std::eprintln!("[{label}] has awaited sqe slot in {loop_count} loops and {:.2} seconds", start.elapsed().unwrap_or_default().as_secs_f32());
-                    }
-                    continue;
-                }
+                func(sqe);
+                return;
+            }
+            if loop_count == 0 && self.counter.pending_sock_writes > 0 {
+                self.await_write_completions().unwrap();
+            }
+            loop_count += 1;
+            let _ = tiny_std::thread::sleep(Duration::from_millis(10));
+            if loop_count % 100 == 0 {
+                tiny_std::eprintln!("[{label}] has awaited sqe slot in {loop_count} loops and {:.2} seconds", start.elapsed().unwrap_or_default().as_secs_f32());
             }
         }
     }
@@ -882,10 +868,10 @@ impl SocketIo for UringWrapper {
 
     #[inline]
     fn ensure_flushed(&mut self) -> core::result::Result<(), xcb_rust_protocol::Error> {
-        Ok(self.await_write_completions().map_err(|e| {
+        self.await_write_completions().map_err(|e| {
             tiny_std::eprintln!("failed to await writes to socket ensuring flushed: {e:?}");
             xcb_rust_protocol::Error::Connection("failed to await writes to socket")
-        })?)
+        })
     }
 }
 

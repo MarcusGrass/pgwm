@@ -304,7 +304,7 @@ impl Workspaces {
                     if fs_window == window {
                         self.spaces[ind].draw_mode = last_draw_mode.to_draw_mode();
                     }
-                };
+                }
                 dr
             })
     }

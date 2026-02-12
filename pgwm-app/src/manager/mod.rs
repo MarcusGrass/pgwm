@@ -117,7 +117,6 @@ impl<'a> Manager<'a> {
                 } else {
                     transient_cookie.inner.forget(&mut call_wrapper.xcb_state);
                     prop_cookie.forget(call_wrapper);
-                    continue;
                 }
             } else {
                 wm_state.inner.forget(&mut call_wrapper.xcb_state);

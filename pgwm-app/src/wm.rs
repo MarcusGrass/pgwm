@@ -299,7 +299,7 @@ fn loop_with_status(
                 call_wrapper.uring.submit_mem_read(&when)?;
             }
             pgwm_core::status::checker::NextCheck::Date => {
-                call_wrapper.uring.submit_date_timeout(&when)?;
+                call_wrapper.uring.submit_date_timeout(&when);
             }
         }
     }
@@ -401,7 +401,7 @@ fn handle_read_event(
                 if let Some(content) = next.content {
                     manager.draw_status(call_wrapper, content, next.position, state)?;
                 }
-                call_wrapper.uring.submit_date_timeout(&next.next_check)?;
+                call_wrapper.uring.submit_date_timeout(&next.next_check);
             }
         }
     }

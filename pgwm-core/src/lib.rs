@@ -14,6 +14,7 @@
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::module_name_repetitions)]
+#![allow(clippy::struct_field_names)]
 // Debug log complaints
 #![allow(clippy::used_underscore_binding)]
 #![cfg_attr(not(test), no_std)]

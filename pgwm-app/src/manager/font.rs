@@ -353,7 +353,6 @@ impl<'a> LoadedFonts<'a> {
                         if height < info.height {
                             height = info.height;
                         }
-                        continue;
                     }
                 }
             }
