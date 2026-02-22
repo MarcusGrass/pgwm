@@ -11,31 +11,30 @@ pub fn read_net_stats() -> Result<Data, Error> {
 }
 
 pub fn parse_raw(raw_data: &[u8]) -> Result<Data, Error> {
-    if let Some(label_line_start) = find_in_haystack(raw_data, b"IpExt: ") {
-        if let Some(real_line_start) =
+    if let Some(label_line_start) = find_in_haystack(raw_data, b"IpExt: ")
+        && let Some(real_line_start) =
             find_in_haystack(&raw_data[label_line_start + 1..], b"IpExt: ")
-        {
-            let real_line_start = label_line_start + real_line_start;
-            let mut prev_ind = real_line_start;
-            let mut it = 0;
-            let mut bytes_in = 0;
-            while let Some(space_ind) = find_byte(b' ', &raw_data[prev_ind..]) {
-                prev_ind += if space_ind == 0 {
-                    1
-                } else {
-                    let target = &raw_data[prev_ind..prev_ind + space_ind];
-                    if it == 7 {
-                        bytes_in = atoi::atoi::<u64>(target).ok_or(Error::NetStatParseError)?;
-                    } else if it == 8 {
-                        return Ok(Data {
-                            bytes_in,
-                            bytes_out: atoi::atoi::<u64>(target).ok_or(Error::NetStatParseError)?,
-                        });
-                    }
-                    it += 1;
-                    space_ind
-                };
-            }
+    {
+        let real_line_start = label_line_start + real_line_start;
+        let mut prev_ind = real_line_start;
+        let mut it = 0;
+        let mut bytes_in = 0;
+        while let Some(space_ind) = find_byte(b' ', &raw_data[prev_ind..]) {
+            prev_ind += if space_ind == 0 {
+                1
+            } else {
+                let target = &raw_data[prev_ind..prev_ind + space_ind];
+                if it == 7 {
+                    bytes_in = atoi::atoi::<u64>(target).ok_or(Error::NetStatParseError)?;
+                } else if it == 8 {
+                    return Ok(Data {
+                        bytes_in,
+                        bytes_out: atoi::atoi::<u64>(target).ok_or(Error::NetStatParseError)?,
+                    });
+                }
+                it += 1;
+                space_ind
+            };
         }
     }
     Err(Error::NetStatParseError)

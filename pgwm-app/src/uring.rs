@@ -317,7 +317,10 @@ impl UringWrapper {
             let start = tiny_std::time::Instant::now();
             loop {
                 if loop_count > 0 {
-                    tiny_std::eprintln!("[WARN] Failed to get next SQE slot for socket write, attempting to flush buffer count={loop_count}, elapsed={:.2} seconds", start.elapsed().unwrap_or_default().as_secs_f32());
+                    tiny_std::eprintln!(
+                        "[WARN] Failed to get next SQE slot for socket write, attempting to flush buffer count={loop_count}, elapsed={:.2} seconds",
+                        start.elapsed().unwrap_or_default().as_secs_f32()
+                    );
                 }
                 self.await_write_completions()?;
                 let Some(slot) = self.inner.get_next_sqe_slot() else {
@@ -325,7 +328,10 @@ impl UringWrapper {
                     continue;
                 };
                 if loop_count > 0 {
-                    tiny_std::eprintln!("[INFO] Successfully got next SQE slot for socket write after flushing count={loop_count}, elapsed={:.2} seconds", start.elapsed().unwrap_or_default().as_secs_f32());
+                    tiny_std::eprintln!(
+                        "[INFO] Successfully got next SQE slot for socket write after flushing count={loop_count}, elapsed={:.2} seconds",
+                        start.elapsed().unwrap_or_default().as_secs_f32()
+                    );
                 }
                 break slot;
             }

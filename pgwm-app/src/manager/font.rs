@@ -2,15 +2,15 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use fontdue::{FontHasherBuilder, FontSettings};
-use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use smallmap::Map;
 use tiny_std::io::Read;
 use xcb_rust_protocol::proto::render::{Glyphinfo, Glyphset};
 
 use pgwm_core::colors::Color;
 use pgwm_core::config::{
-    FontCfg, CHAR_REMAP, CHAR_REMAP_FONTS, SHORTCUT_SECTION, TAB_BAR_SECTION,
+    CHAR_REMAP, CHAR_REMAP_FONTS, FontCfg, SHORTCUT_SECTION, TAB_BAR_SECTION,
     WINDOW_NAME_DISPLAY_SECTION, WORKSPACE_SECTION_FONTS,
 };
 use pgwm_core::geometry::Dimensions;

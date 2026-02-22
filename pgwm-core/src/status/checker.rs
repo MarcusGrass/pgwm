@@ -7,12 +7,12 @@ use heapless::String;
 use smallmap::{Collapse, Map};
 use tiny_std::time::Instant;
 
-use crate::config::{STATUS_CHECKS, _STATUS_BAR_CHECK_CONTENT_LIMIT};
+use crate::config::{_STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_CHECKS};
 use crate::format_heapless;
 use crate::status::cpu::LoadChecker;
 use crate::status::net::{ThroughputChecker, ThroughputPerSec};
 use crate::status::sys::bat::parse_battery_percentage;
-use crate::status::sys::mem::{parse_raw, Data};
+use crate::status::sys::mem::{Data, parse_raw};
 use crate::status::time::ClockFormatter;
 
 #[derive(Debug, Clone, Eq, PartialEq)]

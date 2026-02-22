@@ -1,14 +1,14 @@
 use xcb_rust_protocol::proto::xproto::Window;
 
 use pgwm_core::config::{
-    PAD_WHILE_TABBED, STATUS_BAR_HEIGHT, TAB_BAR_HEIGHT, TAB_BAR_SECTION, WS_WINDOW_LIMIT,
-    _WM_NAME_LIMIT,
+    _WM_NAME_LIMIT, PAD_WHILE_TABBED, STATUS_BAR_HEIGHT, TAB_BAR_HEIGHT, TAB_BAR_SECTION,
+    WS_WINDOW_LIMIT,
 };
 use pgwm_core::geometry::draw::{Mode, OldDrawMode};
-use pgwm_core::geometry::{layout::Layout, Dimensions};
+use pgwm_core::geometry::{Dimensions, layout::Layout};
 use pgwm_core::push_heapless;
-use pgwm_core::state::workspace::{ArrangeKind, ManagedWindow};
 use pgwm_core::state::State;
+use pgwm_core::state::workspace::{ArrangeKind, ManagedWindow};
 
 use crate::error::{Error, Result};
 use crate::manager::font::FontDrawer;

@@ -328,8 +328,8 @@ fn calculate_available_space(
 #[cfg(test)]
 mod tests {
     use crate::config::WS_WINDOW_LIMIT;
-    use crate::geometry::layout::Layout;
     use crate::geometry::Dimensions;
+    use crate::geometry::layout::Layout;
 
     const TEST_WIDTH: u32 = 1000;
     const TEST_HEIGHT: u32 = 1000;

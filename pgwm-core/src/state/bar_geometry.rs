@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 
-use crate::config::mouse_map::MouseTarget;
 use crate::config::_WM_NAME_LIMIT;
+use crate::config::mouse_map::MouseTarget;
 #[cfg(feature = "status-bar")]
 use crate::config::{
-    STATUS_CHECKS, _STATUS_BAR_CHECK_CONTENT_LIMIT, _STATUS_BAR_CHECK_SEP, _STATUS_BAR_FIRST_SEP,
-    _STATUS_BAR_TOTAL_LENGTH_LIMIT,
+    _STATUS_BAR_CHECK_CONTENT_LIMIT, _STATUS_BAR_CHECK_SEP, _STATUS_BAR_FIRST_SEP,
+    _STATUS_BAR_TOTAL_LENGTH_LIMIT, STATUS_CHECKS,
 };
 use crate::geometry::Line;
 

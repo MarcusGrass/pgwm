@@ -5,6 +5,7 @@ use rusl::process::{CatchSignal, SaSignalaction};
 use rusl::string::unix_str::UnixStr;
 use smallmap::Map;
 use tiny_std::unix::fd::RawFd;
+use xcb_rust_protocol::XcbEnv;
 use xcb_rust_protocol::con::XcbState;
 use xcb_rust_protocol::connection::render::query_pict_formats;
 use xcb_rust_protocol::proto::render::{PictTypeEnum, Pictformat, Pictforminfo};
@@ -15,17 +16,16 @@ use xcb_rust_protocol::proto::xproto::{
     Visualid,
 };
 use xcb_rust_protocol::util::FixedLengthFromBytes;
-use xcb_rust_protocol::XcbEnv;
 
 use pgwm_core::render::{RenderVisualInfo, VisualInfo};
 use pgwm_core::state::State;
 
 use crate::error::{Error, Result};
 use crate::manager;
+use crate::manager::Manager;
 use crate::manager::bar::BarManager;
 use crate::manager::draw::Drawer;
-use crate::manager::font::{load_alloc_fonts, FontDrawer, LoadedFonts};
-use crate::manager::Manager;
+use crate::manager::font::{FontDrawer, LoadedFonts, load_alloc_fonts};
 use crate::uring::{UringReadEvent, UringWrapper};
 use crate::x11::call_wrapper::CallWrapper;
 use crate::x11::colors::alloc_colors;

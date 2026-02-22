@@ -9,12 +9,12 @@ use xcb_rust_protocol::proto::xproto::Timestamp;
 use xcb_rust_protocol::proto::xproto::{Screen, Window};
 
 use crate::colors::Colors;
+use crate::config::Action;
 use crate::config::key_map::KeyBoardMappingKey;
 use crate::config::mouse_map::{MouseActionKey, MouseTarget};
-use crate::config::Action;
 use crate::error::Result;
-use crate::geometry::draw::Mode;
 use crate::geometry::Dimensions;
+use crate::geometry::draw::Mode;
 use crate::render::DoubleBufferedRenderPicture;
 use crate::state::bar_geometry::BarGeometry;
 use crate::{
@@ -102,10 +102,10 @@ impl State {
 
     #[must_use]
     pub fn find_monitor_and_ws_indices_of_window(&self, window: Window) -> Option<(usize, usize)> {
-        if let Some(ws_ind) = self.workspaces.find_ws_containing_window(window) {
-            if let Some(mon_ind) = self.find_monitor_hosting_workspace(ws_ind) {
-                return Some((mon_ind, ws_ind));
-            }
+        if let Some(ws_ind) = self.workspaces.find_ws_containing_window(window)
+            && let Some(mon_ind) = self.find_monitor_hosting_workspace(ws_ind)
+        {
+            return Some((mon_ind, ws_ind));
         }
         None
     }
@@ -147,27 +147,23 @@ impl State {
             if let Some(ws_ind_with_focus) = self
                 .workspaces
                 .find_ws_containing_window(currently_focused_window)
+                && ws_ind_with_focus == ws_ind
             {
-                if ws_ind_with_focus == ws_ind {
-                    return self
-                        .workspaces
-                        .get_managed_win(currently_focused_window)
-                        .map(|mw| mw.window);
-                }
+                return self
+                    .workspaces
+                    .get_managed_win(currently_focused_window)
+                    .map(|mw| mw.window);
             }
-        } else if self.monitors[mon_ind].hosted_workspace == ws_ind {
-            if let Some(focused_on_mon) = self.monitors[mon_ind].last_focus {
-                if let Some(ws_ind_with_focus) =
-                    self.workspaces.find_ws_containing_window(focused_on_mon)
-                {
-                    if ws_ind_with_focus == ws_ind {
-                        return self
-                            .workspaces
-                            .get_managed_win(focused_on_mon)
-                            .map(|mw| mw.window);
-                    }
-                }
-            }
+        } else if self.monitors[mon_ind].hosted_workspace == ws_ind
+            && let Some(focused_on_mon) = self.monitors[mon_ind].last_focus
+            && let Some(ws_ind_with_focus) =
+                self.workspaces.find_ws_containing_window(focused_on_mon)
+            && ws_ind_with_focus == ws_ind
+        {
+            return self
+                .workspaces
+                .get_managed_win(focused_on_mon)
+                .map(|mw| mw.window);
         }
         None
     }
@@ -295,8 +291,8 @@ mod tests {
     use alloc::vec;
 
     use smallmap::Map;
-    use xcb_rust_protocol::proto::xproto::{BackingStoreEnum, EventMask, Screen};
     use xcb_rust_protocol::CURRENT_TIME;
+    use xcb_rust_protocol::proto::xproto::{BackingStoreEnum, EventMask, Screen};
 
     use crate::colors::{Color, Colors};
     use crate::config::{COLORS, USER_WORKSPACES};

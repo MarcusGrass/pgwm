@@ -20,14 +20,14 @@ use pgwm_core::colors::Colors;
 use pgwm_core::config::key_map::{KeyBoardMappingKey, KeyboardMapping};
 use pgwm_core::config::mouse_map::MouseActionKey;
 use pgwm_core::config::workspaces::UserWorkspace;
+#[cfg(feature = "status-bar")]
+use pgwm_core::config::{_STATUS_BAR_CHECK_SEP, _STATUS_BAR_FIRST_SEP};
 use pgwm_core::config::{
-    Action, FontCfg, BAR_SHORTCUTS, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE, KEYBOARD_MAPPINGS,
+    Action, BAR_SHORTCUTS, BINARY_HEAP_LIMIT, DYING_WINDOW_CACHE, FontCfg, KEYBOARD_MAPPINGS,
     MOUSE_MAPPINGS, STATUS_BAR_HEIGHT, TAB_BAR_HEIGHT, USER_WORKSPACES, WINDOW_BORDER_WIDTH,
     WINDOW_PADDING, WM_SHOW_BAR_INITIALLY, WORKSPACE_BAR_WINDOW_NAME_PADDING,
     WORKSPACE_SECTION_FONTS,
 };
-#[cfg(feature = "status-bar")]
-use pgwm_core::config::{_STATUS_BAR_CHECK_SEP, _STATUS_BAR_FIRST_SEP};
 use pgwm_core::geometry::{Dimensions, Line};
 use pgwm_core::push_heapless;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderPicture, RenderVisualInfo};

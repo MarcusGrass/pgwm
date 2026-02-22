@@ -4,6 +4,7 @@ resolver = "2"
 
 [workspace.package]
 license = "GPL-3.0-only"
+edition = "2024"
 
 [workspace.dependencies]
 # Internal

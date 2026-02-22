@@ -9,16 +9,16 @@ use xcb_rust_protocol::proto::xproto::{
 };
 use xcb_rust_protocol::util::AsIter32;
 
-use pgwm_core::config::mouse_map::MouseTarget;
 #[cfg(feature = "status-bar")]
 use pgwm_core::config::_STATUS_BAR_CHECK_CONTENT_LIMIT;
+use pgwm_core::config::mouse_map::MouseTarget;
 use pgwm_core::config::{
-    Action, CLIENT_WINDOW_DESTROY_AFTER, CLIENT_WINDOW_KILL_AFTER, WS_WINDOW_LIMIT,
-    _WM_CLASS_NAME_LIMIT, _WM_NAME_LIMIT,
+    _WM_CLASS_NAME_LIMIT, _WM_NAME_LIMIT, Action, CLIENT_WINDOW_DESTROY_AFTER,
+    CLIENT_WINDOW_KILL_AFTER, WS_WINDOW_LIMIT,
 };
+use pgwm_core::geometry::Dimensions;
 use pgwm_core::geometry::draw::Mode;
 use pgwm_core::geometry::layout::Layout;
-use pgwm_core::geometry::Dimensions;
 use pgwm_core::push_heapless;
 use pgwm_core::state::properties::{Protocol, WindowProperties, WindowType, WmName, WmState};
 use pgwm_core::state::workspace::{
@@ -206,36 +206,36 @@ impl<'a> Manager<'a> {
             }
             Action::NextTilingMode => {
                 let window = focus_fallback_origin(origin, state);
-                if let Some(ws_ind) = state.workspaces.find_ws_containing_window(window) {
-                    if let Some(mon_ind) = state.find_monitor_hosting_workspace(ws_ind) {
-                        state.workspaces.cycle_tiling_mode(ws_ind);
-                        self.drawer.draw_on(call_wrapper, mon_ind, false, state)?;
-                        self.focus_mon(call_wrapper, mon_ind, state)?;
-                    }
+                if let Some(ws_ind) = state.workspaces.find_ws_containing_window(window)
+                    && let Some(mon_ind) = state.find_monitor_hosting_workspace(ws_ind)
+                {
+                    state.workspaces.cycle_tiling_mode(ws_ind);
+                    self.drawer.draw_on(call_wrapper, mon_ind, false, state)?;
+                    self.focus_mon(call_wrapper, mon_ind, state)?;
                 }
             }
             Action::CycleDrawMode => {
                 let window = focus_fallback_origin(origin, state);
-                if let Some(ws_ind) = state.workspaces.find_ws_containing_window(window) {
-                    if let Some(mon_ind) = state.find_monitor_hosting_workspace(ws_ind) {
-                        match state.workspaces.get_draw_mode(ws_ind) {
-                            Mode::Tiled(_) => {
-                                toggle_tabbed(mon_ind, ws_ind, state)?;
-                            }
-                            Mode::Tabbed(_) => {
-                                state
-                                    .workspaces
-                                    .set_draw_mode(ws_ind, Mode::Tiled(Layout::LeftLeader));
-                            }
-                            Mode::Fullscreen { last_draw_mode, .. } => {
-                                state
-                                    .workspaces
-                                    .set_draw_mode(ws_ind, last_draw_mode.to_draw_mode());
-                            }
+                if let Some(ws_ind) = state.workspaces.find_ws_containing_window(window)
+                    && let Some(mon_ind) = state.find_monitor_hosting_workspace(ws_ind)
+                {
+                    match state.workspaces.get_draw_mode(ws_ind) {
+                        Mode::Tiled(_) => {
+                            toggle_tabbed(mon_ind, ws_ind, state)?;
                         }
-                        self.drawer.draw_on(call_wrapper, mon_ind, false, state)?;
-                        self.focus_mon(call_wrapper, mon_ind, state)?;
+                        Mode::Tabbed(_) => {
+                            state
+                                .workspaces
+                                .set_draw_mode(ws_ind, Mode::Tiled(Layout::LeftLeader));
+                        }
+                        Mode::Fullscreen { last_draw_mode, .. } => {
+                            state
+                                .workspaces
+                                .set_draw_mode(ws_ind, last_draw_mode.to_draw_mode());
+                        }
                     }
+                    self.drawer.draw_on(call_wrapper, mon_ind, false, state)?;
+                    self.focus_mon(call_wrapper, mon_ind, state)?;
                 }
             }
             Action::ResizeWindow(diff) => {
@@ -325,29 +325,28 @@ impl<'a> Manager<'a> {
                 }
             }
             Action::UnFloat => {
-                if let Some(input_focus) = state.input_focus {
-                    if let Some(mon_ind) = state.find_monitor_index_of_window(input_focus) {
-                        if state.workspaces.un_float_window(input_focus).is_some() {
-                            pgwm_utils::debug!("Unfloating on mon {:?}", mon_ind);
-                            self.drawer.draw_on(call_wrapper, mon_ind, false, state)?;
-                            self.focus_window(call_wrapper, mon_ind, input_focus, state)?;
-                        }
-                    }
+                if let Some(input_focus) = state.input_focus
+                    && let Some(mon_ind) = state.find_monitor_index_of_window(input_focus)
+                    && state.workspaces.un_float_window(input_focus).is_some()
+                {
+                    pgwm_utils::debug!("Unfloating on mon {:?}", mon_ind);
+                    self.drawer.draw_on(call_wrapper, mon_ind, false, state)?;
+                    self.focus_window(call_wrapper, mon_ind, input_focus, state)?;
                 }
             }
             Action::FocusNextWindow => {
-                if let Some(cur) = state.input_focus {
-                    if let Some(next) = state.workspaces.next_window(cur) {
-                        pgwm_utils::debug!("Focusnext from {:?} to {:?}", cur, next);
-                        self.focus_window(call_wrapper, state.focused_mon, next.window, state)?;
-                    }
+                if let Some(cur) = state.input_focus
+                    && let Some(next) = state.workspaces.next_window(cur)
+                {
+                    pgwm_utils::debug!("Focusnext from {:?} to {:?}", cur, next);
+                    self.focus_window(call_wrapper, state.focused_mon, next.window, state)?;
                 }
             }
             Action::FocusPreviousWindow => {
-                if let Some(cur) = state.input_focus {
-                    if let Some(next) = state.workspaces.prev_window(cur) {
-                        self.focus_window(call_wrapper, state.focused_mon, next.window, state)?;
-                    }
+                if let Some(cur) = state.input_focus
+                    && let Some(next) = state.workspaces.prev_window(cur)
+                {
+                    self.focus_window(call_wrapper, state.focused_mon, next.window, state)?;
                 }
             }
             Action::FocusNextMonitor => {
@@ -988,13 +987,13 @@ impl<'a> Manager<'a> {
                 pgwm_utils::debug!("Updated focus to win: {}", window);
             }
             // No window targeted, check which monitor we're on
-        } else if event.event == state.screen.root && event.child.0 == xcb_rust_protocol::NONE {
-            if let Some(mon) = state.find_monitor_at((event.root_x, event.root_y)) {
-                if state.focused_mon != mon {
-                    self.focus_mon(call_wrapper, mon, state)?;
-                    pgwm_utils::debug!("Updated focus to mon: {mon}");
-                }
-            }
+        } else if event.event == state.screen.root
+            && event.child.0 == xcb_rust_protocol::NONE
+            && let Some(mon) = state.find_monitor_at((event.root_x, event.root_y))
+            && state.focused_mon != mon
+        {
+            self.focus_mon(call_wrapper, mon, state)?;
+            pgwm_utils::debug!("Updated focus to mon: {mon}");
         }
         Ok(())
     }
@@ -1254,11 +1253,11 @@ impl<'a> Manager<'a> {
                         self.bar_manager
                             .set_workspace_urgent(call_wrapper, mon_ind, ws_ind, state)
                     })?;
-                    if let Some(mw) = state.workspaces.get_managed_win_mut(win) {
-                        if !mw.properties.net_wm_state.demands_attention {
-                            mw.properties.net_wm_state.demands_attention = true;
-                            call_wrapper.set_net_wm_state(win, mw.properties.net_wm_state)?;
-                        }
+                    if let Some(mw) = state.workspaces.get_managed_win_mut(win)
+                        && !mw.properties.net_wm_state.demands_attention
+                    {
+                        mw.properties.net_wm_state.demands_attention = true;
+                        call_wrapper.set_net_wm_state(win, mw.properties.net_wm_state)?;
                     }
                     pgwm_utils::debug!("Client requested focus {win:?} and it was granted");
                 }
@@ -1278,50 +1277,46 @@ impl<'a> Manager<'a> {
         state: &mut State,
     ) -> Result<()> {
         Self::restore_normal_border(call_wrapper, window, state)?;
-        if let Some((ws_ind, changed)) = state.workspaces.set_wants_focus(window, false) {
-            if changed {
-                let skip = if let Some(mon_ind) = state.find_monitor_hosting_workspace(ws_ind) {
-                    if state.monitors[mon_ind]
-                        .last_focus
-                        .filter(|mw| *mw == window)
-                        .is_some()
-                    {
-                        self.bar_manager.set_workspace_focused(
-                            call_wrapper,
-                            mon_ind,
-                            ws_ind,
-                            state,
-                        )?;
-                        Some(mon_ind)
-                    } else {
-                        self.bar_manager.set_workspace_unfocused(
-                            call_wrapper,
-                            mon_ind,
-                            ws_ind,
-                            state,
-                        )?;
-
-                        Some(mon_ind)
-                    }
+        if let Some((ws_ind, changed)) = state.workspaces.set_wants_focus(window, false)
+            && changed
+        {
+            let skip = if let Some(mon_ind) = state.find_monitor_hosting_workspace(ws_ind) {
+                if state.monitors[mon_ind]
+                    .last_focus
+                    .filter(|mw| *mw == window)
+                    .is_some()
+                {
+                    self.bar_manager
+                        .set_workspace_focused(call_wrapper, mon_ind, ws_ind, state)?;
+                    Some(mon_ind)
                 } else {
-                    None
-                };
-                for mon_ind in 0..state.monitors.len() {
-                    if Some(mon_ind) != skip {
-                        self.bar_manager.set_workspace_unfocused(
-                            call_wrapper,
-                            mon_ind,
-                            ws_ind,
-                            state,
-                        )?;
-                    }
+                    self.bar_manager.set_workspace_unfocused(
+                        call_wrapper,
+                        mon_ind,
+                        ws_ind,
+                        state,
+                    )?;
+
+                    Some(mon_ind)
                 }
-                if let Some(mw) = state.workspaces.get_managed_win_mut(window) {
-                    if !mw.properties.net_wm_state.demands_attention {
-                        mw.properties.net_wm_state.demands_attention = false;
-                        call_wrapper.set_net_wm_state(window, mw.properties.net_wm_state)?;
-                    }
+            } else {
+                None
+            };
+            for mon_ind in 0..state.monitors.len() {
+                if Some(mon_ind) != skip {
+                    self.bar_manager.set_workspace_unfocused(
+                        call_wrapper,
+                        mon_ind,
+                        ws_ind,
+                        state,
+                    )?;
                 }
+            }
+            if let Some(mw) = state.workspaces.get_managed_win_mut(window)
+                && !mw.properties.net_wm_state.demands_attention
+            {
+                mw.properties.net_wm_state.demands_attention = false;
+                call_wrapper.set_net_wm_state(window, mw.properties.net_wm_state)?;
             }
         }
         Ok(())
@@ -1632,15 +1627,15 @@ impl<'a> Manager<'a> {
                     } else {
                         cookie.await_name(call_wrapper).ok().flatten()
                     };
-                if let Some(focused) = state.find_monitor_focusing_window(event.window) {
-                    if let Some(new_name) = update_title {
-                        self.update_current_window_title_and_redraw(
-                            call_wrapper,
-                            focused,
-                            new_name,
-                            state,
-                        )?;
-                    }
+                if let Some(focused) = state.find_monitor_focusing_window(event.window)
+                    && let Some(new_name) = update_title
+                {
+                    self.update_current_window_title_and_redraw(
+                        call_wrapper,
+                        focused,
+                        new_name,
+                        state,
+                    )?;
                 }
             }
             SupportedAtom::NetWmName => {
@@ -1657,15 +1652,15 @@ impl<'a> Manager<'a> {
                     } else {
                         cookie.await_name(call_wrapper).ok().flatten()
                     };
-                if let Some(focused) = state.find_monitor_focusing_window(event.window) {
-                    if let Some(new_name) = update_title {
-                        self.update_current_window_title_and_redraw(
-                            call_wrapper,
-                            focused,
-                            new_name,
-                            state,
-                        )?;
-                    }
+                if let Some(focused) = state.find_monitor_focusing_window(event.window)
+                    && let Some(new_name) = update_title
+                {
+                    self.update_current_window_title_and_redraw(
+                        call_wrapper,
+                        focused,
+                        new_name,
+                        state,
+                    )?;
                 }
             }
             SupportedAtom::WmHints => {
@@ -1804,24 +1799,24 @@ impl<'a> Manager<'a> {
     ) -> Result<()> {
         if let Some(mapped) = state.workspaces.find_ws_containing_window(win) {
             for class in class_names {
-                if let Some(ind) = state.workspaces.find_ws_for_window_class_name(class) {
-                    if mapped != ind {
-                        pgwm_utils::debug!("Remapping from {} to {} on prop change", mapped, ind);
-                        // We know it's present because of the above check
-                        let removed = self
-                            .remove_win_from_state_then_redraw_if_tiled(call_wrapper, win, state)?
-                            .into_option()
-                            .unwrap();
-                        let focus_style = removed.focus_style;
-                        call_wrapper.send_unmap(win, state)?;
-                        state.workspaces.add_child_to_ws(
-                            win,
-                            ind,
-                            ArrangeKind::NoFloat,
-                            focus_style,
-                            &removed.properties,
-                        )?;
-                    }
+                if let Some(ind) = state.workspaces.find_ws_for_window_class_name(class)
+                    && mapped != ind
+                {
+                    pgwm_utils::debug!("Remapping from {} to {} on prop change", mapped, ind);
+                    // We know it's present because of the above check
+                    let removed = self
+                        .remove_win_from_state_then_redraw_if_tiled(call_wrapper, win, state)?
+                        .into_option()
+                        .unwrap();
+                    let focus_style = removed.focus_style;
+                    call_wrapper.send_unmap(win, state)?;
+                    state.workspaces.add_child_to_ws(
+                        win,
+                        ind,
+                        ArrangeKind::NoFloat,
+                        focus_style,
+                        &removed.properties,
+                    )?;
                 }
             }
         }

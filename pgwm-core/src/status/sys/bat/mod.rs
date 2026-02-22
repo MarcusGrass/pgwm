@@ -1,6 +1,6 @@
+use tiny_std::UnixStr;
 use tiny_std::fs::OpenOptions;
 use tiny_std::io::Read;
-use tiny_std::UnixStr;
 
 use crate::error::Error;
 

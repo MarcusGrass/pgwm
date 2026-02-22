@@ -300,10 +300,9 @@ impl Workspaces {
                     window: fs_window,
                     last_draw_mode,
                 } = self.spaces[ind].draw_mode
+                    && fs_window == window
                 {
-                    if fs_window == window {
-                        self.spaces[ind].draw_mode = last_draw_mode.to_draw_mode();
-                    }
+                    self.spaces[ind].draw_mode = last_draw_mode.to_draw_mode();
                 }
                 dr
             })
@@ -666,11 +665,12 @@ impl Workspace {
     }
 
     fn tab_focus_window(&mut self, focus: Window) -> bool {
-        if matches!(self.draw_mode, Mode::Tabbed(_)) {
-            if let Some(ind) = self
+        if matches!(self.draw_mode, Mode::Tabbed(_))
+            && let Some(ind) = self
                 .children
                 .iter()
                 .position(|ch| ch.managed.window == focus)
+        {
             {
                 self.draw_mode = Mode::Tabbed(ind);
                 return true;
@@ -689,11 +689,7 @@ impl Workspace {
 #[inline]
 fn resize_safe(old: f32, diff: f32) -> f32 {
     let new = old + diff;
-    if new <= 0.0 {
-        old
-    } else {
-        new
-    }
+    if new <= 0.0 { old } else { new }
 }
 
 #[derive(Clone, Debug)]
@@ -837,15 +833,17 @@ mod tests {
         assert_eq!(1, workspaces.get_all_tiled_windows(0).len());
         assert!(workspaces.find_all_attached_managed(0).is_none());
 
-        assert!(workspaces
-            .add_attached(
-                0,
-                2,
-                ArrangeKind::FloatingInactive(0.0, 0.0),
-                FocusStyle::Passive,
-                &default_properties(),
-            )
-            .unwrap());
+        assert!(
+            workspaces
+                .add_attached(
+                    0,
+                    2,
+                    ArrangeKind::FloatingInactive(0.0, 0.0),
+                    FocusStyle::Passive,
+                    &default_properties(),
+                )
+                .unwrap()
+        );
         assert!(workspaces.get_managed_win(0).is_some());
         assert!(workspaces.get_managed_win(1).is_some());
         assert!(workspaces.get_managed_win(2).is_some());
@@ -1096,10 +1094,12 @@ mod tests {
         let mut workspaces = empty_workspaces();
         let base: Vec<bool> = vec![false; 9];
         assert_eq!(base, workspaces.get_wants_focus_workspaces());
-        assert!(workspaces
-            .set_wants_focus(0, true)
-            .filter(|(_, ch)| *ch)
-            .is_none());
+        assert!(
+            workspaces
+                .set_wants_focus(0, true)
+                .filter(|(_, ch)| *ch)
+                .is_none()
+        );
         assert_eq!(workspaces, empty_workspaces());
         workspaces
             .add_child_to_ws(
@@ -1110,10 +1110,12 @@ mod tests {
                 &default_properties(),
             )
             .unwrap();
-        assert!(workspaces
-            .set_wants_focus(0, true)
-            .filter(|(_, ch)| *ch)
-            .is_some());
+        assert!(
+            workspaces
+                .set_wants_focus(0, true)
+                .filter(|(_, ch)| *ch)
+                .is_some()
+        );
         let mut modified = base.clone();
         modified[0] = true;
         assert_eq!(modified, workspaces.get_wants_focus_workspaces());

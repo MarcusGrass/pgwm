@@ -2,7 +2,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use smallmap::Map;
-use xcb_rust_connection::connection::{change_property32, change_property8, XcbEventState};
+use xcb_rust_connection::connection::{XcbEventState, change_property8, change_property32};
 use xcb_rust_protocol::con::XcbState;
 use xcb_rust_protocol::connection::render::{
     add_glyphs, composite_glyphs16, create_glyph_set, create_picture, fill_rectangles,
@@ -16,7 +16,7 @@ use xcb_rust_protocol::cookie::{Cookie, FixedCookie, VoidCookie};
 use xcb_rust_protocol::helpers::properties::{
     WmHints, WmHintsCookie, WmSizeHints, WmSizeHintsCookie,
 };
-use xcb_rust_protocol::helpers::{new_client_message32, CanIterFormats, Iter32, XcbEnv};
+use xcb_rust_protocol::helpers::{CanIterFormats, Iter32, XcbEnv, new_client_message32};
 use xcb_rust_protocol::proto::render::{
     CreatePictureValueList, Glyphinfo, Glyphset, PictOpEnum, Picture, PolyEdgeEnum, PolyModeEnum,
     RepeatEnum,
@@ -31,17 +31,17 @@ use xcb_rust_protocol::proto::xproto::{
 use xcb_rust_protocol::{CURRENT_TIME, NONE};
 
 use pgwm_core::config::{
-    STATUS_BAR_HEIGHT, WINDOW_MANAGER_NAME, X11_CURSOR_NAME, _WINDOW_MANAGER_NAME_BUF_SIZE,
-    _WM_CLASS_NAME_LIMIT, _WM_NAME_LIMIT,
+    _WINDOW_MANAGER_NAME_BUF_SIZE, _WM_CLASS_NAME_LIMIT, _WM_NAME_LIMIT, STATUS_BAR_HEIGHT,
+    WINDOW_MANAGER_NAME, X11_CURSOR_NAME,
 };
 use pgwm_core::geometry::Dimensions;
 use pgwm_core::push_heapless;
 use pgwm_core::render::{DoubleBufferedRenderPicture, RenderVisualInfo};
+use pgwm_core::state::State;
 use pgwm_core::state::properties::{
     NetWmState, Protocol, WindowProperties, WindowType, WmName, WmState,
 };
 use pgwm_core::state::workspace::FocusStyle;
-use pgwm_core::state::State;
 
 use crate::error::Error::GlyphMismatch;
 use crate::error::{Error, Result};
@@ -1169,7 +1169,7 @@ impl CallWrapper {
             glyph_ids
         };
         buf.extend_from_slice(&[render.len() as u8, 0, 0, 0]); // Pad to 32bit
-                                                               //buf.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]); // Actually a delta x and y as u16s encoded as 2 u8s each <- lies
+        //buf.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]); // Actually a delta x and y as u16s encoded as 2 u8s each <- lies
         buf.extend_from_slice(&(x).to_ne_bytes()); // Dest x
         buf.extend_from_slice(&(y).to_ne_bytes()); // Dest y, why is it like this, why is the documentation lying to me?
         for glyph in render {
@@ -1247,28 +1247,27 @@ impl CallWrapper {
                     false,
                 )?
                 .reply(&mut self.uring, &mut self.xcb_state)
+                    && let Ok(utf8) = String::from_utf8(name.name)
                 {
-                    if let Ok(utf8) = String::from_utf8(name.name) {
-                        let post = match utf8.as_str() {
-                            "WM_CLIENT_LEADER" => self
-                                .get_leader(win)
+                    let post = match utf8.as_str() {
+                        "WM_CLIENT_LEADER" => self
+                            .get_leader(win)
+                            .ok()
+                            .and_then(|cc| cc.await_card(self).ok())
+                            .unwrap_or_default()
+                            .map(|win| win.to_string())
+                            .unwrap_or_default(),
+                        "WM_PROTOCOLS" => {
+                            let protocols = self
+                                .get_protocols(win)?
+                                .await_protocols(self)
                                 .ok()
-                                .and_then(|cc| cc.await_card(self).ok())
-                                .unwrap_or_default()
-                                .map(|win| win.to_string())
-                                .unwrap_or_default(),
-                            "WM_PROTOCOLS" => {
-                                let protocols = self
-                                    .get_protocols(win)?
-                                    .await_protocols(self)
-                                    .ok()
-                                    .unwrap_or_default();
-                                format!("{protocols:?}")
-                            }
-                            _ => String::new(),
-                        };
-                        let _ = base.write_fmt(format_args!("\n\t\t{utf8}: {post}"));
-                    }
+                                .unwrap_or_default();
+                            format!("{protocols:?}")
+                        }
+                        _ => String::new(),
+                    };
+                    let _ = base.write_fmt(format_args!("\n\t\t{utf8}: {post}"));
                 }
             }
         }

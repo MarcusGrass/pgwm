@@ -1,8 +1,8 @@
 use crate::colors::RGBA;
 use tiny_std::UnixStr;
 use x11_keysyms::{
-    XK_Print, XK_Return, XK_b, XK_c, XK_comma, XK_d, XK_f, XK_h, XK_j, XK_k, XK_l, XK_n, XK_period,
-    XK_q, XK_r, XK_space, XK_t, XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9,
+    XK_1, XK_2, XK_3, XK_4, XK_5, XK_6, XK_7, XK_8, XK_9, XK_Print, XK_Return, XK_b, XK_c,
+    XK_comma, XK_d, XK_f, XK_h, XK_j, XK_k, XK_l, XK_n, XK_period, XK_q, XK_r, XK_space, XK_t,
 };
 use xcb_rust_protocol::proto::xproto::{ButtonIndexEnum, ModMask};
 
