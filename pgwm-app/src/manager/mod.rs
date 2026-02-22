@@ -449,7 +449,6 @@ impl<'a> Manager<'a> {
         call_wrapper.set_base_client_properties(win)?;
         let dimensions_cookie = call_wrapper.get_dimensions(win)?;
         let properties = window_properties_cookie.await_properties(call_wrapper)?;
-        pgwm_utils::debug!("Managing window {:?}", win);
         let ws_ind = if let Some(ws_ind) =
             Self::map_window_class_to_workspace(call_wrapper, win, &state.workspaces)?
         {
@@ -586,9 +585,7 @@ impl<'a> Manager<'a> {
         dimensions: Dimensions,
         state: &mut State,
     ) -> Result<()> {
-        pgwm_utils::debug!("Managing floating {win} attached to {attached_to:?}");
         let attached_to = if attached_to == Some(state.screen.root) {
-            pgwm_utils::debug!("Parent was root, assigning floating to currently focused monitor");
             let mon_ind = state.focused_mon;
             let new_parent = if let Some(last_focus) = state.monitors[mon_ind].last_focus {
                 last_focus
@@ -598,7 +595,6 @@ impl<'a> Manager<'a> {
             {
                 first_tiled
             } else {
-                pgwm_utils::debug!("Promoting window");
                 let ws_ind = state.monitors[mon_ind].hosted_workspace;
                 self.manage_tiled(
                     call_wrapper,
@@ -611,21 +607,14 @@ impl<'a> Manager<'a> {
                 )?;
                 return Ok(());
             };
-            pgwm_utils::debug!("Assigned to new parent {new_parent}");
             Some(new_parent)
         } else {
             attached_to
         };
         let focus_style = Self::deduce_focus_style(&properties);
-        if let Some(attached_to) = attached_to {
+        let placement_dimensions = if let Some(attached_to) = attached_to {
             let parent_dimensions = call_wrapper.get_dimensions(attached_to)?;
-            pgwm_utils::debug!("Found attached {} to parent {}", win, attached_to);
             let parent_dimensions = parent_dimensions.await_dimensions(call_wrapper)?;
-            pgwm_utils::debug!(
-                "Attached geometry {:?}\nParent geometry {:?}",
-                dimensions,
-                parent_dimensions
-            );
             let dimensions = if (dimensions.x < parent_dimensions.x
                 || dimensions.x + (dimensions.width) < parent_dimensions.x)
                 || (dimensions.y > parent_dimensions.y
@@ -637,7 +626,6 @@ impl<'a> Manager<'a> {
                     (parent_dimensions.height - dimensions.height) as f32 / 2f32;
                 let x = parent_dimensions.x as i32 + parent_relative_x_offset as i32;
                 let y = parent_dimensions.y as i32 + parent_relative_y_offset as i32;
-                pgwm_utils::debug!("Remapping attached to ({x}, {y})");
                 call_wrapper.move_window(win, x, y, state)?;
 
                 Dimensions::new(dimensions.width, dimensions.height, x as i16, y as i16)
@@ -656,6 +644,7 @@ impl<'a> Manager<'a> {
                 focus_style,
                 &properties,
             )?;
+            dimensions
         } else {
             let (rel_x, rel_y) = calculate_relative_placement(
                 state.monitors[mon_ind].dimensions,
@@ -669,12 +658,19 @@ impl<'a> Manager<'a> {
                 focus_style,
                 &properties,
             )?;
-        }
+            let (abs_x, abs_y) =
+                Drawer::absolute_floating_x_y(state.monitors[mon_ind].dimensions, rel_x, rel_y);
+            Dimensions::new(
+                dimensions.width,
+                dimensions.height,
+                abs_x as i16,
+                abs_y as i16,
+            )
+        };
         call_wrapper.push_to_client_list(state.screen.root, win)?;
 
-        Drawer::draw_floating(call_wrapper, win, dimensions, state)?;
+        Drawer::draw_floating(call_wrapper, win, placement_dimensions, state)?;
         self.focus_window(call_wrapper, state.focused_mon, win, state)?;
-        crate::debug!("Drew window");
         Ok(())
     }
 
@@ -1396,7 +1392,6 @@ impl<'a> Manager<'a> {
         state: &mut State,
     ) -> Result<()> {
         if let Some(focus_candidate) = state.find_first_focus_candidate(mon_ind)? {
-            pgwm_utils::debug!("Found focus candidate {focus_candidate:?}");
             self.focus_window(call_wrapper, mon_ind, focus_candidate, state)
         } else {
             self.focus_root_on_mon(call_wrapper, mon_ind, state)
@@ -1475,7 +1470,6 @@ impl<'a> Manager<'a> {
         self.make_window_not_urgent(call_wrapper, win, state)?;
         Self::highlight_border(call_wrapper, win, state)?; // Highlighting the base window even if a top level transient is focused
         if let Some(old_focused_mon) = state.update_focused_mon(mon_ind) {
-            pgwm_utils::debug!("Switched focus from {} to {}", old_focused_mon, mon_ind);
             self.bar_manager.set_workspace_selected_not_focused(
                 call_wrapper,
                 old_focused_mon,
@@ -2207,8 +2201,10 @@ fn calculate_relative_placement(
     placement_x: i16,
     placement_y: i16,
 ) -> (f32, f32) {
-    let rel_x = (placement_x - container_dimensions.x) as f32 / container_dimensions.width as f32;
-    let rel_y = (placement_y - container_dimensions.y) as f32 / container_dimensions.height as f32;
+    let rel_x =
+        (placement_x - container_dimensions.x).max(0) as f32 / container_dimensions.width as f32;
+    let rel_y =
+        (placement_y - container_dimensions.y).max(0) as f32 / container_dimensions.height as f32;
     (rel_x, rel_y)
 }
 

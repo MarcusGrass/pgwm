@@ -35,7 +35,6 @@ impl<'a> Drawer<'a> {
         dimensions: Dimensions,
         state: &mut State,
     ) -> Result<()> {
-        pgwm_utils::debug!("Drawing floating {window} at {dimensions:?}");
         call_wrapper.configure_window(window, dimensions, state.window_border_width, state)?;
         call_wrapper.send_map(window, state)?;
         Ok(())
@@ -86,14 +85,24 @@ impl<'a> Drawer<'a> {
         for (win, arrange) in floating {
             if let ArrangeKind::FloatingInactive(rel_x, rel_y) = arrange {
                 let dimensions = state.monitors[mon_ind].dimensions;
-                let x = (dimensions.x as f32 + dimensions.width as f32 * rel_x) as i32;
-                let y = (dimensions.y as f32
-                    + STATUS_BAR_HEIGHT as f32
-                    + dimensions.height as f32 * rel_y) as i32;
+                let (x, y) = Self::absolute_floating_x_y(dimensions, rel_x, rel_y);
                 Self::move_floating(call_wrapper, win, x, y, state)?;
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn absolute_floating_x_y(
+        monitor_dimensions: Dimensions,
+        float_rel_x: f32,
+        float_rel_y: f32,
+    ) -> (i32, i32) {
+        let x =
+            (monitor_dimensions.x as f32 + monitor_dimensions.width as f32 * float_rel_x) as i32;
+        let y = (monitor_dimensions.y as f32
+            + STATUS_BAR_HEIGHT as f32
+            + monitor_dimensions.height as f32 * float_rel_y) as i32;
+        (x, y)
     }
 
     fn draw(
