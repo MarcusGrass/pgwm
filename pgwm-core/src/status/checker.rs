@@ -9,7 +9,7 @@ use tiny_std::time::Instant;
 
 use crate::config::{_STATUS_BAR_CHECK_CONTENT_LIMIT, STATUS_CHECKS};
 use crate::format_heapless;
-use crate::status::cpu::{read_temp, LoadChecker, RyzenTemp};
+use crate::status::cpu::{LoadChecker, RyzenTemp, read_temp};
 use crate::status::net::{ThroughputChecker, ThroughputPerSec};
 use crate::status::sys::bat::parse_battery_percentage;
 use crate::status::sys::mem::{Data, parse_raw};

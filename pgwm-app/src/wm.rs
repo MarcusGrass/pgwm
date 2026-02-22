@@ -405,9 +405,7 @@ fn handle_read_event(
                 if let Some(content) = next.content {
                     manager.draw_status(call_wrapper, content, next.position, state)?;
                 }
-                call_wrapper
-                    .uring
-                    .submit_cpu_temp_timeout(&next.next_check);
+                call_wrapper.uring.submit_cpu_temp_timeout(&next.next_check);
             }
         }
         #[cfg(feature = "status-bar")]

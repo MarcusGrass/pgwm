@@ -1,6 +1,6 @@
 use crate::error::Error;
 use crate::status::sys::cpu::Load;
-use tiny_std::{unix_lit, UnixStr};
+use tiny_std::{UnixStr, unix_lit};
 
 #[derive(Default)]
 pub struct LoadChecker {
