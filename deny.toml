@@ -40,10 +40,10 @@ allow = [
 ]
 exceptions = [
     { name = "linux-rust-bindings", allow = ["MPL-2.0"] },
-    { name = "pgwm", allow = ["GPL-3.0"] },
-    { name = "pgwm-app", allow = ["GPL-3.0"] },
-    { name = "pgwm-core", allow = ["GPL-3.0"] },
-    { name = "pgwm-utils", allow = ["GPL-3.0"] },
+    { name = "pgwm", allow = ["GPL-3.0-only"] },
+    { name = "pgwm-app", allow = ["GPL-3.0-only"] },
+    { name = "pgwm-core", allow = ["GPL-3.0-only"] },
+    { name = "pgwm-utils", allow = ["GPL-3.0-only"] },
     { name = "rusl", allow = ["MPL-2.0"] },
     { name = "tiny-start", allow = ["MPL-2.0"] },
     { name = "tiny-std", allow = ["MPL-2.0"] },

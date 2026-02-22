@@ -2,6 +2,9 @@
 members = ["pgwm", "pgwm-app", "pgwm-core", "pgwm-utils"]
 resolver = "2"
 
+[workspace.package]
+license = "GPL-3.0-only"
+
 [workspace.dependencies]
 # Internal
 pgwm-core = { path = "pgwm-core", default-features = false }
