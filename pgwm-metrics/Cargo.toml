@@ -1,0 +1,10 @@
+[package]
+name = "pgwm-metrics"
+version = "0.1.0"
+license.workspace = true
+edition.workspace = true
+
+[dependencies]
+heapless.workspace = true
+tiny-std = { workspace = true, features = ["threaded", "symbols"]}
+hashbrown.workspace = true

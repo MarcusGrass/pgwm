@@ -19,7 +19,7 @@ use xcb_rust_protocol::util::FixedLengthFromBytes;
 
 use pgwm_core::render::{RenderVisualInfo, VisualInfo};
 use pgwm_core::state::State;
-
+use pgwm_metrics::{init_queue, TimedMetricsGuard};
 use crate::error::{Error, Result};
 use crate::manager;
 use crate::manager::Manager;
@@ -38,6 +38,8 @@ const XCURSOR_SIZE: &UnixStr = UnixStr::from_str_checked("XCURSOR_SIZE\0");
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
+    init_queue();
+    let boot_timer = TimedMetricsGuard::new_unlabeled("boot");
     #[cfg(feature = "perf-test")]
     let dpy = Some(":4");
     #[cfg(not(feature = "perf-test"))]
@@ -135,6 +137,7 @@ pub(crate) fn run_wm() -> Result<()> {
     crate::debug!("Initialized manager state");
     manager.scan(&mut call_wrapper, &mut state)?;
     crate::debug!("Initialized, starting loop");
+    drop(boot_timer);
     loop {
         #[cfg(feature = "status-bar")]
         let loop_result = if should_check {
@@ -306,6 +309,7 @@ fn loop_with_status(
     crate::debug!("Starting wm loop");
     // Extremely hot place in the code, should bench the checker
     loop {
+        let _tg = TimedMetricsGuard::new_unlabeled("event_loop");
         for evt in call_wrapper.uring.check_ready_cached() {
             handle_read_event(evt, call_wrapper, checker, manager, state)?;
         }
@@ -475,6 +479,7 @@ fn handle_event<'a>(
 
     match response_type {
         xcb_rust_protocol::proto::xproto::KEY_PRESS_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "key_press")]);
             manager.handle_key_press(
                 call_wrapper,
                 KeyPressEvent::from_bytes(&raw).unwrap(),
@@ -482,6 +487,7 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::MAP_REQUEST_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "map_request")]);
             manager.handle_map_request(
                 call_wrapper,
                 MapRequestEvent::from_bytes(&raw).unwrap(),
@@ -489,10 +495,12 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::UNMAP_NOTIFY_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "unmap_notify")]);
             let evt = UnmapNotifyEvent::from_bytes(&raw).unwrap();
             manager.handle_unmap_notify(call_wrapper, evt, state)?;
         }
         xcb_rust_protocol::proto::xproto::DESTROY_NOTIFY_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "destroy_notify")]);
             manager.handle_destroy_notify(
                 call_wrapper,
                 DestroyNotifyEvent::from_bytes(&raw).unwrap(),
@@ -500,6 +508,7 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::CONFIGURE_NOTIFY_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "configure_notify")]);
             Manager::handle_configure_notify(
                 call_wrapper,
                 ConfigureNotifyEvent::from_bytes(&raw).unwrap(),
@@ -507,6 +516,7 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::CONFIGURE_REQUEST_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "configure_request")]);
             Manager::handle_configure_request(
                 call_wrapper,
                 ConfigureRequestEvent::from_bytes(&raw).unwrap(),
@@ -514,6 +524,7 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::BUTTON_PRESS_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "button_press")]);
             manager.handle_button_press(
                 call_wrapper,
                 ButtonPressEvent::from_bytes(&raw).unwrap(),
@@ -521,6 +532,7 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::BUTTON_RELEASE_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "button_release")]);
             manager.handle_button_release(
                 call_wrapper,
                 ButtonReleaseEvent::from_bytes(&raw).unwrap(),
@@ -528,6 +540,7 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::MOTION_NOTIFY_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "motion_notify")]);
             manager.handle_motion_notify(
                 call_wrapper,
                 MotionNotifyEvent::from_bytes(&raw).unwrap(),
@@ -535,10 +548,12 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::ENTER_NOTIFY_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "enter_notify")]);
             let evt = EnterNotifyEvent::from_bytes(&raw).unwrap();
             manager.handle_enter(call_wrapper, evt, state)?;
         }
         xcb_rust_protocol::proto::xproto::CLIENT_MESSAGE_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "client_message")]);
             manager.handle_client_message(
                 call_wrapper,
                 ClientMessageEvent::from_bytes(&raw).unwrap(),
@@ -546,6 +561,7 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::PROPERTY_NOTIFY_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "property_notify")]);
             manager.handle_property_notify(
                 call_wrapper,
                 PropertyNotifyEvent::from_bytes(&raw).unwrap(),
@@ -553,13 +569,16 @@ fn handle_event<'a>(
             )?;
         }
         xcb_rust_protocol::proto::xproto::VISIBILITY_NOTIFY_EVENT => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "visibility_notify")]);
             manager.handle_visibility_change(
                 call_wrapper,
                 VisibilityNotifyEvent::from_bytes(&raw).unwrap(),
                 state,
             )?;
         }
-        _ => {}
+        _ => {
+            let _g = TimedMetricsGuard::new_labeled("handle_event", &[("type", "unhandled")]);
+        }
     }
     Ok(())
 }

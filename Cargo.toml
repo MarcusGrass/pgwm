@@ -1,5 +1,5 @@
 [workspace]
-members = ["pgwm", "pgwm-app", "pgwm-core", "pgwm-utils"]
+members = ["pgwm", "pgwm-app", "pgwm-core", "pgwm-metrics", "pgwm-utils"]
 resolver = "2"
 
 [workspace.package]
@@ -10,6 +10,7 @@ edition = "2024"
 # Internal
 pgwm-core = { path = "pgwm-core", default-features = false }
 pgwm-utils = { path = "pgwm-utils", default-features = false }
+pgwm-metrics = { path = "pgwm-metrics" }
 
 # Managed
 fontdue = { git = "https://github.com/MarcusGrass/fontdue", rev = "234f5f798e50bb6f4cc8f10ee9515f21936d68e6", default-features = false }

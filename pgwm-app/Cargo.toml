@@ -19,6 +19,7 @@ hashbrown = { workspace = true, default-features = false }
 heapless = { workspace = true, default-features = false }
 fontdue = { workspace = true, default-features = false, features = ["simd"] }
 pgwm-core = { workspace = true, default-features = false }
+pgwm-metrics = { workspace = true }
 pgwm-utils = { workspace = true, default-features = false }
 smallmap = { workspace = true, default-features = false }
 time = { workspace = true, optional = true, default-features = false }

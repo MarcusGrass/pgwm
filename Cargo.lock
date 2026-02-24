@@ -118,6 +118,7 @@ dependencies = [
  "hashbrown",
  "heapless",
  "pgwm-core",
+ "pgwm-metrics",
  "pgwm-utils",
  "rusl",
  "smallmap",
@@ -141,6 +142,15 @@ dependencies = [
  "x11-keysyms",
  "xcb-rust-connection",
  "xcb-rust-protocol",
+]
+
+[[package]]
+name = "pgwm-metrics"
+version = "0.1.0"
+dependencies = [
+ "hashbrown",
+ "heapless",
+ "tiny-std",
 ]
 
 [[package]]
