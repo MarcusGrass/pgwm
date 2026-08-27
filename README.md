@@ -166,7 +166,10 @@ or
 ### Edit .xinitrc or other file specifying WM entrypoint
 If built with `./build_wm.sh` The binary ends up in target/x86_64-unknown-linux-gnu/release/pgwm or target/x86_64-unknown-linux-gnu/lto/pgwm
 Replace the (probably) last line of .xinitrc with
-`exec $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary.     
+`exec setsid -w $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary.     
+
+`setsid` is necessary for the WM not to freeze on `SIGTTIN`, which sometimes occurs. It took a long long while 
+debugging finding that out.
 
 # Changing configuration
 Configuration resides in [pgwm_core/src/config/mod.rs](pgwm-core/src/config/mod.rs) and consists of rust code.
