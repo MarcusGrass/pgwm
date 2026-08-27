@@ -612,8 +612,8 @@ impl UringWrapper {
         while let Some(cqe) = self.inner.get_next_cqe() {
             match cqe.0.user_data {
                 SOCK_READ_USER_DATA => {
-                    if cqe.0.res < 0 {
-                        return Err(Error::Uring(format!("Got error on cqe {cqe:?}")));
+                    if cqe.0.res <= 0 {
+                        return Err(Error::Uring(format!("Got unexpected cqe res {} on cqe={cqe:?}", cqe.0.res)));
                     }
                     unsafe {
                         self.sock_read_buffer.advance_written(cqe.0.res as usize);
