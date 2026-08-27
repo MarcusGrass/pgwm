@@ -296,7 +296,7 @@ fn loop_with_status(
                 call_wrapper.uring.submit_cpu_read(&when)?;
             }
             pgwm_core::status::checker::NextCheck::CpuTemp => {
-                call_wrapper.uring.submit_cpu_temp_timeout(&when);
+                call_wrapper.uring.submit_cpu_temp_timeout(&when)?;
             }
             pgwm_core::status::checker::NextCheck::NET => {
                 call_wrapper.uring.submit_net_read(&when)?;
@@ -407,7 +407,7 @@ fn handle_read_event(
                 if let Some(content) = next.content {
                     manager.draw_status(call_wrapper, content, next.position, state)?;
                 }
-                call_wrapper.uring.submit_cpu_temp_timeout(&next.next_check);
+                call_wrapper.uring.submit_cpu_temp_timeout(&next.next_check)?;
             }
         }
         #[cfg(feature = "status-bar")]
