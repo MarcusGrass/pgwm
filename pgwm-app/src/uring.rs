@@ -68,7 +68,7 @@ const NUM_CHECKS: usize = 1;
 const URING_CAPACITY: u32 = 128;
 
 /// A write stream buffer shared with the kernel logically consisting of three sections
-/// 0 -> `user_provided` -> `kernel_committed` -> end.
+/// 0 -> `kernel_committed` -> `user_provided` -> end.
 /// The first section, 0 -> `kernel_committed` are "already written" or currently writing.
 /// This area is subject to data-races, since the kernel may be in the process of reading from it.
 /// The second section `kernel_committed` -> `user_provided`, are pending writes, not yet pushed
@@ -79,6 +79,7 @@ pub struct KernelSharedStreamWriteBuffer {
     bytes: Vec<u8>,
     user_provided: usize,
     kernel_committed: usize,
+    kernel_write_start: usize,
 }
 
 impl KernelSharedStreamWriteBuffer {
@@ -102,7 +103,29 @@ impl KernelSharedStreamWriteBuffer {
     /// Mark that bytes have been flushed to the kernel
     #[inline]
     pub fn mark_flushed(&mut self) {
+        self.kernel_write_start = self.kernel_committed;
         self.kernel_committed = self.user_provided;
+    }
+
+    /// Mark the completed part of the last write and retain any bytes that were not written.
+    #[inline]
+    pub unsafe fn complete_write(&mut self, bytes_written: usize) -> Result<()> {
+        let submitted = self.kernel_committed - self.kernel_write_start;
+        if bytes_written > submitted {
+            return Err(Error::Uring(format!(
+                "Socket write completion exceeded submitted bytes: {bytes_written} > {submitted}"
+            )));
+        }
+        if bytes_written < submitted {
+            tiny_std::eprintln!("[WARN] short write, {submitted}/{bytes_written}");
+            self.bytes.copy_within(
+                self.kernel_write_start + bytes_written..self.user_provided,
+                self.kernel_write_start,
+            );
+            self.user_provided -= bytes_written;
+            self.kernel_committed = self.kernel_write_start;
+        }
+        Ok(())
     }
 
     #[inline]
@@ -120,6 +143,7 @@ impl KernelSharedStreamWriteBuffer {
     pub unsafe fn clear(&mut self) {
         self.kernel_committed = 0;
         self.user_provided = 0;
+        self.kernel_write_start = 0;
     }
 
     #[inline]
@@ -128,6 +152,7 @@ impl KernelSharedStreamWriteBuffer {
             bytes,
             user_provided: 0,
             kernel_committed: 0,
+            kernel_write_start: 0,
         }
     }
 }
@@ -268,12 +293,12 @@ macro_rules! impl_submit_check {
                     self.counter.$counter_name
                 );
             } else if *execute_at >= tiny_std::time::Instant::now() {
-                self.submit_indexed_timeout($timeout_user_data, execute_at);
+                self.submit_indexed_timeout($timeout_user_data, execute_at)?;
                 self.counter.$counter_name = ReadStatus::Pending;
             } else {
                 let addr = self.$buf.as_ptr() as u64;
                 let space = self.$buf.len();
-                self.submit_indexed_read($fd_index, $buf_index, $user_data, addr, space);
+                self.submit_indexed_read($fd_index, $buf_index, $user_data, addr, space)?;
             }
             Ok(())
         }
@@ -310,10 +335,14 @@ impl UringWrapper {
         if !self.sock_write_buffer.needs_flush() {
             return Ok(());
         }
+        // Keep the write range unambiguous so a short completion can be retried safely.
+        if self.counter.pending_sock_writes != 0 {
+            self.wait_for_socket_writes()?;
+        }
         let slot = if let Some(slot) = self.inner.get_next_sqe_slot() {
             slot
         } else {
-            let loop_count = 0;
+            let mut loop_count = 0;
             let start = tiny_std::time::Instant::now();
             loop {
                 if loop_count > 0 {
@@ -322,9 +351,14 @@ impl UringWrapper {
                         start.elapsed().unwrap_or_default().as_secs_f32()
                     );
                 }
-                self.await_write_completions()?;
+                self.wait_for_socket_writes()?;
                 let Some(slot) = self.inner.get_next_sqe_slot() else {
+                    self.enter_until_not_interrupted(
+                        1,
+                        IoUringEnterFlags::IORING_ENTER_GETEVENTS,
+                    )?;
                     tiny_std::thread::sleep(core::time::Duration::from_millis(10)).unwrap();
+                    loop_count += 1;
                     continue;
                 };
                 if loop_count > 0 {
@@ -385,7 +419,7 @@ impl UringWrapper {
                 SOCK_READ_USER_DATA,
                 IoUringSQEFlags::IOSQE_FIXED_FILE,
             );
-            self.await_and_use_next_sqe_slot("submit sock read", |sqe| sqe.write(entry));
+            self.await_and_use_next_sqe_slot("submit sock read", |sqe| sqe.write(entry))?;
         };
         self.counter.pending_sock_read = ReadStatus::Pending;
         self.finish_submit();
@@ -435,7 +469,7 @@ impl UringWrapper {
         &mut self,
         timeout_user_data: u64,
         execute_at: &tiny_std::time::Instant,
-    ) {
+    ) -> Result<()> {
         unsafe {
             let timeout = IoUringSubmissionQueueEntry::new_timeout(
                 execute_at.as_ref(),
@@ -444,9 +478,10 @@ impl UringWrapper {
                 timeout_user_data,
                 IoUringSQEFlags::empty(),
             );
-            self.await_and_use_next_sqe_slot("submit indexed timeout", |sqe| sqe.write(timeout));
+            self.await_and_use_next_sqe_slot("submit indexed timeout", |sqe| sqe.write(timeout))?;
         }
         self.finish_submit();
+        Ok(())
     }
 
     #[inline]
@@ -458,7 +493,7 @@ impl UringWrapper {
         user_data: u64,
         addr: u64,
         space: usize,
-    ) {
+    ) -> Result<()> {
         unsafe {
             let entry = IoUringSubmissionQueueEntry::new_readv_fixed(
                 fd_ind,
@@ -468,14 +503,15 @@ impl UringWrapper {
                 user_data,
                 IoUringSQEFlags::IOSQE_FIXED_FILE,
             );
-            self.await_and_use_next_sqe_slot("submit indexed read", |sqe| sqe.write(entry));
+            self.await_and_use_next_sqe_slot("submit indexed read", |sqe| sqe.write(entry))?;
         };
         self.finish_submit();
+        Ok(())
     }
 
     #[inline]
     #[cfg(feature = "status-bar")]
-    pub fn submit_date_timeout(&mut self, execute_at: &tiny_std::time::Instant) {
+    pub fn submit_date_timeout(&mut self, execute_at: &tiny_std::time::Instant) -> Result<()> {
         if self.counter.pending_date_read != ReadStatus::Inactive {
             crate::debug!(
                 "Tried to submit multiple date timeouts, status: {:?}",
@@ -490,13 +526,14 @@ impl UringWrapper {
                     DATE_TIMEOUT_USER_DATA,
                     IoUringSQEFlags::empty(),
                 );
-                self.await_and_use_next_sqe_slot("submit date", |sqe| sqe.write(entry));
+                self.await_and_use_next_sqe_slot("submit date", |sqe| sqe.write(entry))?;
             };
             self.counter.pending_date_read = ReadStatus::Pending;
             self.finish_submit();
         } else {
             self.counter.pending_date_read = ReadStatus::Ready(0);
         }
+        Ok(())
     }
 
     #[inline]
@@ -590,6 +627,9 @@ impl UringWrapper {
                     if cqe.0.res < 0 {
                         return Err(Error::Uring(format!("Got error on cqe {cqe:?}")));
                     }
+                    unsafe {
+                        self.sock_write_buffer.complete_write(cqe.0.res as usize)?;
+                    }
                     self.counter.pending_sock_writes -= 1;
                 }
                 #[cfg(feature = "status-bar")]
@@ -610,7 +650,7 @@ impl UringWrapper {
                         BAT_READ_USER_DATA,
                         addr,
                         space,
-                    );
+                    )?;
                 }
                 #[cfg(feature = "status-bar")]
                 NET_READ_USER_DATA => {
@@ -630,7 +670,7 @@ impl UringWrapper {
                         NET_READ_USER_DATA,
                         addr,
                         space,
-                    );
+                    )?;
                 }
                 #[cfg(feature = "status-bar")]
                 MEM_READ_USER_DATA => {
@@ -650,7 +690,7 @@ impl UringWrapper {
                         MEM_READ_USER_DATA,
                         addr,
                         space,
-                    );
+                    )?;
                 }
                 #[cfg(feature = "status-bar")]
                 CPU_READ_USER_DATA => {
@@ -670,7 +710,7 @@ impl UringWrapper {
                         CPU_READ_USER_DATA,
                         addr,
                         space,
-                    );
+                    )?;
                 }
                 #[cfg(feature = "status-bar")]
                 DATE_TIMEOUT_USER_DATA => {
@@ -722,7 +762,7 @@ impl UringWrapper {
         &mut self,
         label: &'static str,
         func: F,
-    ) {
+    ) -> Result<()> {
         let start = tiny_std::time::Instant::now();
         let mut loop_count = 0;
         loop {
@@ -734,10 +774,10 @@ impl UringWrapper {
                     );
                 }
                 func(sqe);
-                return;
+                return Ok(());
             }
-            if loop_count == 0 && self.counter.pending_sock_writes > 0 {
-                self.await_write_completions().unwrap();
+            if self.counter.pending_sock_writes > 0 {
+                self.wait_for_socket_writes()?;
             }
             loop_count += 1;
             let _ = tiny_std::thread::sleep(Duration::from_millis(10));
@@ -747,6 +787,19 @@ impl UringWrapper {
                     start.elapsed().unwrap_or_default().as_secs_f32()
                 );
             }
+        }
+    }
+
+    fn wait_for_socket_writes(&mut self) -> Result<()> {
+        loop {
+            while self.handle_next_completion()?.is_some() {}
+            if self.counter.pending_sock_writes == 0 {
+                return Ok(());
+            }
+            self.enter_until_not_interrupted(
+                self.counter.pending_sock_writes as u32,
+                IoUringEnterFlags::IORING_ENTER_GETEVENTS,
+            )?;
         }
     }
 

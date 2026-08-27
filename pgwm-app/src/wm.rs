@@ -38,6 +38,7 @@ const XCURSOR_SIZE: &UnixStr = UnixStr::from_str_checked("XCURSOR_SIZE\0");
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_wm() -> Result<()> {
+    tiny_std::eprintln!("[INFO] initializing WM");
     #[cfg(feature = "perf-test")]
     let dpy = Some(":4");
     #[cfg(not(feature = "perf-test"))]
@@ -135,6 +136,7 @@ pub(crate) fn run_wm() -> Result<()> {
     crate::debug!("Initialized manager state");
     manager.scan(&mut call_wrapper, &mut state)?;
     crate::debug!("Initialized, starting loop");
+    tiny_std::eprintln!("[INFO] WM initialized");
     loop {
         #[cfg(feature = "status-bar")]
         let loop_result = if should_check {
@@ -299,7 +301,7 @@ fn loop_with_status(
                 call_wrapper.uring.submit_mem_read(&when)?;
             }
             pgwm_core::status::checker::NextCheck::Date => {
-                call_wrapper.uring.submit_date_timeout(&when);
+                call_wrapper.uring.submit_date_timeout(&when)?;
             }
         }
     }
@@ -401,7 +403,7 @@ fn handle_read_event(
                 if let Some(content) = next.content {
                     manager.draw_status(call_wrapper, content, next.position, state)?;
                 }
-                call_wrapper.uring.submit_date_timeout(&next.next_check);
+                call_wrapper.uring.submit_date_timeout(&next.next_check)?;
             }
         }
     }
