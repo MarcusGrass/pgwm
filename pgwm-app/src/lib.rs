@@ -14,6 +14,7 @@
 // Debug log complaints
 #![allow(clippy::used_underscore_binding)]
 #![allow(clippy::struct_field_names)]
+#![allow(clippy::collapsible_match)]
 #![cfg_attr(not(test), no_std)]
 
 extern crate alloc;

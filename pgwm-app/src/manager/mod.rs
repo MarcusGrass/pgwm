@@ -976,8 +976,7 @@ impl<'a> Manager<'a> {
             && event.child.0 != xcb_rust_protocol::NONE
             && state
             .input_focus
-            .filter(|win| win == &event.child.0)
-            .is_none()
+            .is_none_or(|win| win == event.child.0)
         {
             if let Some(window) = state
                 .workspaces
@@ -1244,8 +1243,7 @@ impl<'a> Manager<'a> {
     ) -> Result<()> {
         if state
             .input_focus
-            .filter(|focused| focused != &win)
-            .is_some()
+            .is_some_and(|focused| focused != win)
         {
             if let Some((ws_ind, changed)) = state.workspaces.set_wants_focus(win, true) {
                 if changed {
@@ -1284,8 +1282,7 @@ impl<'a> Manager<'a> {
             let skip = if let Some(mon_ind) = state.find_monitor_hosting_workspace(ws_ind) {
                 if state.monitors[mon_ind]
                     .last_focus
-                    .filter(|mw| *mw == window)
-                    .is_some()
+                    .is_some_and(|mw| mw == window)
                 {
                     self.bar_manager
                         .set_workspace_focused(call_wrapper, mon_ind, ws_ind, state)?;
@@ -1508,8 +1505,7 @@ impl<'a> Manager<'a> {
             if state.focused_mon != mon_ind
                 || state.monitors[mon_ind]
                     .last_focus
-                    .filter(|mw| *mw == win)
-                    .is_none()
+                    .is_none_or(|mw| mw == win)
             {
                 pgwm_utils::debug!("Redrawing tab on focus change");
                 self.drawer.draw_on(call_wrapper, mon_ind, false, state)?;
@@ -2017,13 +2013,11 @@ impl<'a> Manager<'a> {
     ) -> Result<()> {
         if state
             .input_focus
-            .filter(|focus_window| focus_window == &win)
-            .is_some()
+            .is_some_and(|focus_window| focus_window == win)
             || state.focused_mon == mon_ind
                 && state.monitors[mon_ind]
                     .last_focus
-                    .filter(|mw| *mw == win)
-                    .is_some()
+                    .is_some_and(|mw| mw == win)
         {
             if let Some(parent) = refocus_parent {
                 self.focus_window(call_wrapper, mon_ind, parent, state)?;
@@ -2114,6 +2108,7 @@ fn focus_fallback_origin(origin: Window, state: &State) -> Window {
 
 // https://specifications.freedesktop.org/wm-spec/1.3/ar01s05.html
 // Using this as a guide
+#[expect(clippy::manual_option_zip)]
 fn float_status(properties: &WindowProperties, root: Window) -> WindowFloatDeduction {
     let parent = properties.transient_for.filter(|p| p != &root);
     let fixed_size = properties
@@ -2122,8 +2117,7 @@ fn float_status(properties: &WindowProperties, root: Window) -> WindowFloatDeduc
             sh.min_size
                 .and_then(|min| sh.max_size.map(|max| (min, max)))
         })
-        .filter(|((min_w, min_h), (max_w, max_h))| min_w == max_w || min_h == max_h)
-        .is_some();
+        .is_some_and(|((min_w, min_h), (max_w, max_h))| min_w == max_w || min_h == max_h);
 
     // Need to float because we can't tile it without breaking fixed size constraint
     // Although we don't really care about breaking min/max height/width
@@ -2178,8 +2172,7 @@ fn toggle_tabbed(mon_ind: usize, ws_ind: usize, state: &mut State) -> Result<boo
         return Ok(state
             .workspaces
             .switch_tab_focus_window(ws_ind, should_focus)?
-            .filter(|b| *b)
-            .is_some());
+            .is_some_and(|b| b));
     }
     Ok(false)
 }

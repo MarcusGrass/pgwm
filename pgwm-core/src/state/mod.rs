@@ -76,7 +76,7 @@ impl State {
     #[must_use]
     pub fn find_monitor_focusing_window(&self, window: Window) -> Option<usize> {
         for (i, mon) in self.monitors.iter().enumerate() {
-            if mon.last_focus.filter(|mw| *mw == window).is_some() {
+            if mon.last_focus.is_some_and(|mw| mw == window) {
                 return Some(i);
             }
         }

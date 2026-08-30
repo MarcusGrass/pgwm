@@ -7,7 +7,11 @@ targets = [
 ]
 
 [advisories]
-ignore = []
+ignore = [
+    # ttf-parser is unmaintained, pulled in through forked `fontdue`
+    # if a CVE drops for it I'll have to migrate it
+    "RUSTSEC-2026-0192",
+]
 
 [bans]
 multiple-versions = "deny"
