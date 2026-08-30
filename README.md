@@ -166,10 +166,21 @@ or
 ### Edit .xinitrc or other file specifying WM entrypoint
 If built with `./build_wm.sh` The binary ends up in target/x86_64-unknown-linux-gnu/release/pgwm or target/x86_64-unknown-linux-gnu/lto/pgwm
 Replace the (probably) last line of .xinitrc with
-`exec setsid -w $BINARY_LOCATION` $BINARY_LOCATION being the path to the pgwm binary.     
 
-`setsid` is necessary for the WM not to freeze on `SIGTTIN`, which sometimes occurs. It took a long long while 
-debugging finding that out.
+`exec $BINARY_LOCATION` Is the usual way to run it, $BINARY_LOCATION being the path to the pgwm binary.
+`exec setsid -w $BINARY_LOCATION` Can be necessary if misbehaving processes cause SIGTTIN to be sent 
+to the process group.
+
+#### Setsid havoc and freezing bug
+
+For a while I had been debugging freezes generally being caused by JetBrains IDE's. They are generally 
+misbehaving on Linux and continue to do so with various bugs. One of them, is trying to read from terminal 
+from a background job. This causes a SIGTTIN to be sent to the entire process group, effectively halting the WM 
+and causing a freeze.
+
+Running the WM with `setsid` is necessary for the WM not to freeze on `SIGTTIN`. But, that causes other issues, 
+such as `xinit` not knowing which program it should wait for, if any of the programs started in `.xinitrc` 
+exit, the WM gets torn down as well.
 
 # Changing configuration
 Configuration resides in [pgwm_core/src/config/mod.rs](pgwm-core/src/config/mod.rs) and consists of rust code.
