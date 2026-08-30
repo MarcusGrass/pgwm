@@ -194,6 +194,7 @@ impl<'a> Manager<'a> {
                         .stdin(tiny_std::process::Stdio::Null)
                         .stdout(tiny_std::process::Stdio::Null)
                         .stderr(tiny_std::process::Stdio::Null)
+                        .setsid(true)
                         .spawn()?;
                 }
             }
