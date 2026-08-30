@@ -353,10 +353,7 @@ impl UringWrapper {
                 }
                 self.wait_for_socket_writes()?;
                 let Some(slot) = self.inner.get_next_sqe_slot() else {
-                    self.enter_until_not_interrupted(
-                        1,
-                        IoUringEnterFlags::IORING_ENTER_GETEVENTS,
-                    )?;
+                    self.enter_until_not_interrupted(1, IoUringEnterFlags::IORING_ENTER_GETEVENTS)?;
                     tiny_std::thread::sleep(core::time::Duration::from_millis(10)).unwrap();
                     loop_count += 1;
                     continue;
@@ -613,7 +610,10 @@ impl UringWrapper {
             match cqe.0.user_data {
                 SOCK_READ_USER_DATA => {
                     if cqe.0.res <= 0 {
-                        return Err(Error::Uring(format!("Got unexpected cqe res {} on cqe={cqe:?}", cqe.0.res)));
+                        return Err(Error::Uring(format!(
+                            "Got unexpected cqe res {} on cqe={cqe:?}",
+                            cqe.0.res
+                        )));
                     }
                     unsafe {
                         self.sock_read_buffer.advance_written(cqe.0.res as usize);
