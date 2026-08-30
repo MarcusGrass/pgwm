@@ -529,7 +529,9 @@ impl UringWrapper {
                     CPU_TEMP_TIMEOUT_USER_DATA,
                     IoUringSQEFlags::empty(),
                 );
-                self.await_and_use_next_sqe_slot("submit cpu temp timeout", |sqe| sqe.write(entry))?;
+                self.await_and_use_next_sqe_slot("submit cpu temp timeout", |sqe| {
+                    sqe.write(entry)
+                })?;
             };
             self.counter.pending_cpu_temp_read = ReadStatus::Pending;
             self.finish_submit();
